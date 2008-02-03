@@ -48,6 +48,14 @@
 (define writeln
   (lambda (string) (display string) (newline)))
 
+; Emit a MOV instruction
+(define mov
+  (lambda (src dest)
+    (display "        mov ")
+    (display src)
+    (display ", ")
+    (writeln dest)))
+
 (define skeleton 
   (lambda ()
     (writeln "         .section .rodata")
@@ -56,12 +64,12 @@
     (writeln "        .text")
     (writeln "        .globl main")
     (writeln "main:")
-    (writeln "        mov $4, %eax            # __NR_write")
-    (writeln "        mov $1, %ebx            # fd 1: stdout")
-    (writeln "        mov $hello, %ecx        # const void *buf")
-    (writeln "        mov $13, %edx           # size_t count: length of string")
+    (mov "$4" "%eax")                   ; __NR_write
+    (mov "$1" "%ebx")                   ; fd 1: stdout
+    (mov "$hello" "%ecx")               ; const void *buf
+    (mov "$13" "%edx")                ; size_t count: length of string
     (writeln "        int $0x80")
-    (writeln "        mov $0, %eax            # return code")
+    (mov "$0" "%eax")                   ; return code
     (writeln "        ret")))
 
 (skeleton)
