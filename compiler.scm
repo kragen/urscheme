@@ -45,6 +45,13 @@
 ;;; - multiple-value returns
 ;;; - scheme-report-environment, null-environment
 
+;;; The strategy taken herein is to use the x86 as a stack machine.
+;;; %eax contains the top of stack; %esp points at a stack in memory
+;;; containing the rest of the stack items.  This eliminates any need
+;;; to allocate registers; for ordinary expressions, we just need to
+;;; convert the Lisp code to RPN and glue together the instruction
+;;; sequences that comprise them.
+
 (define writeln
   (lambda (string) (display string) (newline)))
 
@@ -56,6 +63,18 @@
     (display ", ")
     (writeln dest)))
 
+; Emit code which, given a byte count on top of stack and a string
+; pointer underneath it, outputs the string.
+(define write_2
+  (lambda ()
+    (mov "%eax" "%edx")                 ; byte count in arg 3
+    (writeln "        pop %ecx")        ; byte string in arg 2
+    (mov "$4" "%eax")                   ; __NR_write
+    (mov "$1" "%ebx")                   ; fd 1: stdout
+    (writeln "        int $0x80")))     ; return value is in %eax
+
+; XXX writeln -> asm
+
 (define skeleton 
   (lambda ()
     (writeln "         .section .rodata")
@@ -64,11 +83,10 @@
     (writeln "        .text")
     (writeln "        .globl main")
     (writeln "main:")
-    (mov "$4" "%eax")                   ; __NR_write
-    (mov "$1" "%ebx")                   ; fd 1: stdout
-    (mov "$hello" "%ecx")               ; const void *buf
-    (mov "$13" "%edx")                ; size_t count: length of string
-    (writeln "        int $0x80")
+    (writeln "        .globl main")
+    (writeln "        push $hello")
+    (mov "$13" "%eax")
+    (write_2)
     (mov "$0" "%eax")                   ; return code
     (writeln "        ret")))
 
