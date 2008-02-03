@@ -55,6 +55,15 @@
 (define writeln
   (lambda (string) (display string) (newline)))
 
+; Emit a line of assembly
+(define asm writeln)
+
+; Emit an indented instruction
+(define insn
+  (lambda (insn)
+    (display "        ")
+    (writeln insn)))
+
 ; Emit a MOV instruction
 (define mov
   (lambda (src dest)
@@ -68,38 +77,33 @@
 (define write_2
   (lambda ()
     (mov "%eax" "%edx")                 ; byte count in arg 3
-    (writeln "        pop %ecx")        ; byte string in arg 2
+    (insn "pop %ecx")                   ; byte string in arg 2
     (mov "$4" "%eax")                   ; __NR_write
     (mov "$1" "%ebx")                   ; fd 1: stdout
-    (writeln "        int $0x80")))     ; return value is in %eax
+    (insn "int $0x80")))                ; return value is in %eax
 
 ; Emit code to push a constant onto the abstract stack
 (define push_const
   (lambda (const)
-    (writeln "        push %eax")
+    (insn "push %eax")
     (mov const "%eax")))
     
 ; Emit code to discard top of stack.
-(define pop
-  (lambda ()
-    (writeln "        pop %eax")))
-
-; XXX writeln -> asm
+(define pop (lambda () (insn "pop %eax")))
 
 (define skeleton 
   (lambda ()
-    (writeln "         .section .rodata")
-    (writeln "hello:  ")
-    (writeln "        .ascii \"hello, world\\n\"")
-    (writeln "        .text")
-    (writeln "        .globl main")
-    (writeln "main:")
-    (writeln "        .globl main")
+    (insn ".section .rodata")
+    (asm "hello:  ")
+    (insn ".ascii \"hello, world\\n\"")
+    (insn ".text")
+    (insn ".globl main")
+    (asm "main:")
     (push_const "$hello")
     (push_const "$13")
     (write_2)
     (pop)
     (mov "$0" "%eax")                   ; return code
-    (writeln "        ret")))
+    (insn "ret")))
 
 (skeleton)
