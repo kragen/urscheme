@@ -73,6 +73,17 @@
     (mov "$1" "%ebx")                   ; fd 1: stdout
     (writeln "        int $0x80")))     ; return value is in %eax
 
+; Emit code to push a constant onto the abstract stack
+(define push_const
+  (lambda (const)
+    (writeln "        push %eax")
+    (mov const "%eax")))
+    
+; Emit code to discard top of stack.
+(define pop
+  (lambda ()
+    (writeln "        pop %eax")))
+
 ; XXX writeln -> asm
 
 (define skeleton 
@@ -84,9 +95,10 @@
     (writeln "        .globl main")
     (writeln "main:")
     (writeln "        .globl main")
-    (writeln "        push $hello")
-    (mov "$13" "%eax")
+    (push_const "$hello")
+    (push_const "$13")
     (write_2)
+    (pop)
     (mov "$0" "%eax")                   ; return code
     (writeln "        ret")))
 
