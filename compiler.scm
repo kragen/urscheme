@@ -1,73 +1,128 @@
 ;;; A compiler from a subset of R5RS Scheme to x86 assembly, written in itself.
-;;; Kragen Javier Sitaker, 2008
-;;; I think this is nearly the smallest subset of R5RS Scheme that
-;;; it's practical to write a Scheme compiler in.
+;; Kragen Javier Sitaker, 2008
+;; I think this is nearly the smallest subset of R5RS Scheme that
+;; it's practical to write a Scheme compiler in.
+
 
 ;;; Implementation planned:
-;;; - car, cdr, cons
-;;; - symbol?, null?, eq?, boolean?, pair?, string?, procedure?,
-;;;   integer?, char?
-;;; - if, lambda (with fixed numbers of arguments or with a single
-;;;   argument that gets bound to the argument list (lambda x y (...))
-;;;   and a single body expression)
-;;; - begin
-;;; - variables, with lexical scope and set!
-;;; - top-level define of a variable (not a function)
-;;; - read, for proper lists, symbols, strings, integers, and #t and #f
-;;; - eof-object?
-;;; - garbage collection
-;;; - strings, with string-set!, string-ref, string literals,
-;;;   string=?, string-length, and make-string with one argument
-;;; - which unfortunately requires characters
-;;; - very basic arithmetic: two-argument +, -, quotient, remainder,
-;;;   and = for integers, and decimal numeric constants
-;;; - recursive procedure calls
-;;; - display, for strings, and newline
+;; - car, cdr, cons
+;; - symbol?, null?, eq?, boolean?, pair?, string?, procedure?,
+;;   integer?, char?
+;; - if, lambda (with fixed numbers of arguments or with a single
+;;   argument that gets bound to the argument list (lambda x y (...))
+;;   and a single body expression)
+;; - begin
+;; - variables, with lexical scope and set!
+;; - top-level define of a variable (not a function)
+;; - read, for proper lists, symbols, strings, integers, and #t and #f
+;; - eof-object?
+;; - garbage collection
+;; - strings, with string-set!, string-ref, string literals,
+;;   string=?, string-length, and make-string with one argument
+;; - which unfortunately requires characters
+;; - very basic arithmetic: two-argument +, -, quotient, remainder,
+;;   and = for integers, and decimal numeric constants
+;; - recursive procedure calls
+;; - display, for strings, and newline
 
-;;; All of this would be a little simpler if strings were just lists
-;;; of small integers.
+;; All of this would be a little simpler if strings were just lists
+;; of small integers.
+
 
 ;;; Implemented:
-;;; - display, for strings
-;;; - string constants
+;; - display, for strings
+;; - string constants
+
 
 ;;; Not implemented:
-;;; - call/cc, dynamic-wind
-;;; - macros, quasiquote
-;;; - most of arithmetic
-;;; - vectors
-;;; - most of the language syntax: dotted pairs, ' ` , ,@
-;;; - write
-;;; - proper tail recursion
-;;; - cond, case, and, or, do, not
-;;; - let, let*, letrec
-;;; - delay, force
-;;; - internal definitions
-;;; - most of the library procedures for handling lists, characters
-;;; - eval, apply
-;;; - map, for-each
-;;; - multiple-value returns
-;;; - scheme-report-environment, null-environment
+;; - call/cc, dynamic-wind
+;; - macros, quasiquote
+;; - most of arithmetic
+;; - vectors
+;; - most of the language syntax: dotted pairs, ' ` , ,@
+;; - write
+;; - proper tail recursion
+;; - cond, case, and, or, do, not
+;; - let, let*, letrec
+;; - delay, force
+;; - internal definitions
+;; - most of the library procedures for handling lists, characters
+;; - eval, apply
+;; - map, for-each
+;; - multiple-value returns
+;; - scheme-report-environment, null-environment
 
-;;; The strategy taken herein is to use the x86 as a stack machine.
-;;; %eax contains the top of stack; %esp points at a stack in memory
-;;; containing the rest of the stack items.  This eliminates any need
-;;; to allocate registers; for ordinary expressions, we just need to
-;;; convert the Lisp code to RPN and glue together the instruction
-;;; sequences that comprise them.
 
-;;; Pointers are tagged in the low bits in more or less the usual way:
-;;; - low bits binary 00: an actual pointer, to an object with an
-;;;   embedded magic number; examine the magic number to see what it
-;;;   is.
-;;; - low bits binary 01: an integer, stored in the upper 30 bits.
-;;; So, type-testing consists of testing the type-tag, then possibly
-;;; testing the magic number.  In the usual case, we'll jump to an
-;;; error routine if the type test fails, which will exit the program.
-;;; I'll add more graceful exits later.
+;;; Design notes:
 
-;;; emit: output a line of assembly by concatenating the strings in an
-;;; arbitrarily nested list structure
+;; The strategy taken herein is to use the x86 as a stack machine.
+;; %eax contains the top of stack; %esp points at a stack in memory
+;; containing the rest of the stack items.  This eliminates any need
+;; to allocate registers; for ordinary expressions, we just need to
+;; convert the Lisp code to RPN and glue together the instruction
+;; sequences that comprise them.
+
+;; Pointers are tagged in the low bits in more or less the usual way:
+;; - low bits binary 00: an actual pointer, to an object with an
+;;   embedded magic number; examine the magic number to see what it
+;;   is.
+;; - low bits binary 01: an integer, stored in the upper 30 bits.
+;; So, type-testing consists of testing the type-tag, then possibly
+;; testing the magic number.  In the usual case, we'll jump to an
+;; error routine if the type test fails, which will exit the program.
+;; I'll add more graceful exits later.
+
+
+;;; Basic Lisp Stuff
+;; To build up the spartan language implemented by the compiler to a
+;; level where you can actually program in it.  Of course these mostly
+;; exist in standard Scheme, but I thought it would be easier to write
+;; them in Scheme rather than assembly in order to get the compiler to
+;; the point where it could bootstrap itself.
+
+(define lst (lambda args args))         ; identical to standard "list"
+
+;; string manipulation (part of Basic Lisp Stuff)
+(define string-concatenate-3
+  (lambda (length s2 buf idx)
+    (if (= idx (string-length buf)) buf
+        (begin
+          (string-set! buf idx (string-ref s2 (- idx length)))
+          (string-concatenate-3 length s2 buf (+ idx 1))))))
+(define string-concatenate-2
+  (lambda (s1 s2 buf idx)
+    (if (= idx (string-length s1)) 
+        (string-concatenate-3 (string-length s1) s2 buf idx)
+        (begin
+          (string-set! buf idx (string-ref s1 idx))
+          (string-concatenate-2 s1 s2 buf (+ idx 1))))))
+(define string-concatenate              ; string-append
+  (lambda (s1 s2)
+    (string-concatenate-2 s1 s2 (make-string (+ (string-length s1) 
+                                                (string-length s2)))
+                          0)))
+(define string-of-char-2
+  (lambda (buf char) (begin (string-set! buf 0 char) buf)))
+(define string-of-char
+  (lambda (char)
+    (string-of-char-2 (make-string 1) char)))
+(define string-digit
+  (lambda (digit) (string-of-char (string-ref "0123456789" digit))))
+;; Note that this strategy is O(N^2) in the number of digits.
+(define number-to-string-2
+  (lambda (num)
+    (if (= num 0) ""
+        (string-concatenate (number-to-string-2 (quotient num 10))
+                            (string-digit (remainder num 10))))))
+(define number-to-string                ; number->string
+  (lambda (num) (if (= num 0) "0" (number-to-string-2 num))))
+
+
+
+;;; Basic Assembly Language Emission
+
+;; emit: output a line of assembly by concatenating the strings in an
+;; arbitrarily nested list structure
 (define emit (lambda stuff (emit-inline stuff) (newline)))
 (define emit-inline
   (lambda (stuff)
@@ -77,41 +132,17 @@
                    (emit-inline (cdr stuff)))
             (display stuff)))))
 
-; Emit an indented instruction
+;; Emit an indented instruction
 (define insn (lambda insn (emit (cons "        " insn))))
 
-(define lst (lambda args args))         ; identical to standard "list"
-
-; Emit a MOV instruction
+;; Emit a MOV instruction
 (define mov (lambda (src dest) (insn "mov " src ", " dest)))
 
-; Emit code which, given a byte count on top of stack and a string
-; pointer underneath it, outputs the string.
-(define write_2
-  (lambda ()
-    (mov "%eax" "%edx")                 ; byte count in arg 3
-    (insn "pop %ecx")                   ; byte string in arg 2
-    (mov "$4" "%eax")                   ; __NR_write
-    (mov "$1" "%ebx")                   ; fd 1: stdout
-    (insn "int $0x80")))                ; return value is in %eax
-
-; Emit code to push a constant onto the abstract stack
-(define push_const
-  (lambda (const)
-    (insn "push %eax")
-    (mov const "%eax")))
-    
-; Emit code to discard top of stack.
-(define pop (lambda () (insn "pop %eax")))
-
-; Emit code to copy top of stack.
-(define dup (lambda () (insn "push %eax")))
-
-;;; Other stuff for basic asm emission.
+;; Other stuff for basic asm emission.
 (define rodata (lambda () (insn ".section .rodata")))
 (define text (lambda () (insn ".text")))
 (define label (lambda (label) (emit label ":")))
-(define ascii (lambda (string) (insn ".ascii \"" string "\"")))
+(define ascii (lambda (string) (insn ".ascii \"" string "\""))) ; XXX
 
 ;; define a .globl label
 (define global-label
@@ -120,11 +151,52 @@
       (insn ".globl " lbl)
       (label lbl))))
 
-;;; So, strings.  A string consists of the following, contiguous in memory:
-;;; - 4 bytes of a string magic number, 195801581 (0xbabb1ed)
-;;; - 4 bytes of string length "N";
-;;; - N bytes of string data.
+;; new-label: Allocate a new label (for a constant) and return it.
+(define constcounter 0)
+(define new-label
+  (lambda ()
+    (begin
+      (set! constcounter (+ constcounter 1))
+      (lst "k_" (number-to-string constcounter)))))
+
+
+;;; Stack Machine Primitives
+;; As explained earlier, there's an "abstract stack" that includes
+;; %eax as well as the x86 stack.
+
+;; push_const: Emit code to push a constant onto the abstract stack
+(define push_const
+  (lambda (const)
+    (insn "push %eax")
+    (mov const "%eax")))
+;; pop: Emit code to discard top of stack.
+(define pop (lambda () (insn "pop %eax")))
+
+;; dup: Emit code to copy top of stack.
+(define dup (lambda () (insn "push %eax")))
+
+
+;;; Strings (on the target)
+;; A string consists of the following, contiguous in memory:
+;; - 4 bytes of a string magic number, 195801581 (0xbabb1ed)
+;; - 4 bytes of string length "N";
+;; - N bytes of string data.
 (define string-magic "195801581") ; maybe later I'll add hex constants
+
+(define constant-string-2
+  (lambda (contents labelname)
+    (rodata)
+    (label labelname)
+    (insn ".int " string-magic)
+    (insn ".int "(number-to-string (string-length contents)))
+    (ascii contents)
+    (text)
+    labelname))
+;; constant-string: Emit code to represent a constant string.
+(define constant-string
+  (lambda (contents)
+    (constant-string-2 contents (new-label))))
+
 (define string-error-routine
   (lambda ()
     (string-error-routine-2 (constant-string "type error: not a string"))))
@@ -134,6 +206,7 @@
     (mov (lst "$" errlabel) "%eax")
     (insn "jmp report_error")))
 ;; Emit code to ensure that %eax is a string
+;; XXX maybe factor this out into an asm routine?
 (define ensure-string
   (lambda ()
     ;; ensure that it's not an unboxed int
@@ -154,72 +227,24 @@
     (insn "lea 8(%eax), %ebx")         ; string pointer
     (insn "push %ebx")
     (mov "4(%eax)" "%eax")))           ; string length
+
+;; Emit code which, given a byte count on top of stack and a string
+;; pointer underneath it, outputs the string.
+(define write_2
+  (lambda ()
+    (mov "%eax" "%edx")                 ; byte count in arg 3
+    (insn "pop %ecx")                   ; byte string in arg 2
+    (mov "$4" "%eax")                   ; __NR_write
+    (mov "$1" "%ebx")                   ; fd 1: stdout
+    (insn "int $0x80")))                ; return value is in %eax
+
 ;; Emit code to output a string.
 (define target-display
   (lambda ()
     (extract-string)
     (write_2)))
 
-;; Allocate a new label (for a constant) and return it.
-(define constcounter 0)
-(define new-label
-  (lambda ()
-    (begin
-      (set! constcounter (+ constcounter 1))
-      (lst "k_" (number-to-string constcounter)))))
-
-;; Emit code to represent a constant string.
-(define constant-string
-  (lambda (contents)
-    (constant-string-2 contents (new-label))))
-(define constant-string-2
-  (lambda (contents labelname)
-    (rodata)
-    (label labelname)
-    (insn ".int " string-magic)
-    (insn ".int "(number-to-string (string-length contents)))
-    (ascii contents)
-    (text)
-    labelname))
-
-;;; String manipulation functions for use in the compiler.
-;; Of course these mostly exist in standard Scheme, but I thought it
-;; would be easier to write them in Scheme rather than assembly in
-;; order to get the compiler to the point where it could bootstrap
-;; itself.
-(define number-to-string                ; number->string
-  (lambda (num) (if (= num 0) "0" (number-to-string-2 num))))
-(define number-to-string-2
-  (lambda (num)
-    (if (= num 0) ""
-        (string-concatenate (number-to-string-2 (quotient num 10))
-                            (string-digit (remainder num 10))))))
-(define string-digit
-  (lambda (digit) (string-of-char (string-ref "0123456789" digit))))
-(define string-of-char
-  (lambda (char)
-    (string-of-char-2 (make-string 1) char)))
-(define string-of-char-2
-  (lambda (buf char) (begin (string-set! buf 0 char) buf)))
-(define string-concatenate              ; string-append
-  (lambda (s1 s2)
-    (string-concatenate-2 s1 s2 (make-string (+ (string-length s1) 
-                                                (string-length s2)))
-                          0)))
-(define string-concatenate-2
-  (lambda (s1 s2 buf idx)
-    (if (= idx (string-length s1)) 
-        (string-concatenate-3 (string-length s1) s2 buf idx)
-        (begin
-          (string-set! buf idx (string-ref s1 idx))
-          (string-concatenate-2 s1 s2 buf (+ idx 1))))))
-(define string-concatenate-3
-  (lambda (length s2 buf idx)
-    (if (= idx (string-length buf)) buf
-        (begin
-          (string-set! buf idx (string-ref s2 (- idx length)))
-          (string-concatenate-3 length s2 buf (+ idx 1))))))
-
+;; Emit the code for the normal error-reporting routine
 (define report-error
   (lambda ()
     (label "report_error")
@@ -227,6 +252,8 @@
     (mov "$1" "%ebx")                   ; exit code of program
     (mov "$1" "%eax")                   ; __NR_exit
     (insn "int $0x80")))                ; make system call to exit
+
+;;; Main Program
 
 (define skeleton 
   (lambda (body)
