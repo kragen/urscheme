@@ -7,8 +7,9 @@
 ;;; - car, cdr, cons
 ;;; - symbol?, null?, eq?, boolean?, pair?, string?, procedure?,
 ;;;   integer?, char?
-;;; - if, lambda (with fixed numbers of arguments and a single body
-;;;   expression)
+;;; - if, lambda (with fixed numbers of arguments or with a single
+;;;   argument that gets bound to the argument list (lambda x y (...))
+;;;   and a single body expression)
 ;;; - begin
 ;;; - variables, with lexical scope and set!
 ;;; - top-level define of a variable (not a function)
@@ -61,25 +62,24 @@
 ;;; error routine if the type test fails, which will exit the program.
 ;;; I'll add more graceful exits later.
 
-(define writeln
-  (lambda (string) (display string) (newline)))
+;;; emit: output a line of assembly by concatenating the strings in an
+;;; arbitrarily nested list structure
+(define emit (lambda stuff (emit-inline stuff) (newline)))
+(define emit-inline
+  (lambda (stuff)
+    (if (null? stuff) #t
+        (if (pair? stuff) 
+            (begin (emit-inline (car stuff))
+                   (emit-inline (cdr stuff)))
+            (display stuff)))))
 
-; Emit a line of assembly
-(define asm writeln)
-
-; Emit an indent
-(define indent (lambda () (display "        ")))
 ; Emit an indented instruction
-(define insn (lambda (insn) (indent) (writeln insn)))
+(define insn (lambda insn (emit (cons "        " insn))))
+
+(define lst (lambda args args))         ; identical to standard "list"
 
 ; Emit a MOV instruction
-(define mov
-  (lambda (src dest)
-    (indent)
-    (display "mov ")
-    (display src)
-    (display ", ")
-    (writeln dest)))
+(define mov (lambda (src dest) (insn "mov " src ", " dest)))
 
 ; Emit code which, given a byte count on top of stack and a string
 ; pointer underneath it, outputs the string.
@@ -106,21 +106,15 @@
 ;;; Other stuff for basic asm emission.
 (define rodata (lambda () (insn ".section .rodata")))
 (define text (lambda () (insn ".text")))
-(define label (lambda (label) (display label) (asm ":")))
-(define ascii
-  (lambda (string)
-    (indent)
-    (display ".ascii \"")
-    (display string)
-    (display "\"")
-    (newline)))
+(define label (lambda (label) (emit label ":")))
+(define ascii (lambda (string) (insn ".ascii \"" string "\"")))
+
 ;; define a .globl label
 (define global-label
   (lambda (lbl)
-    (indent)
-    (display ".globl ")
-    (writeln lbl)
-    (label lbl)))
+    (begin
+      (insn ".globl " lbl)
+      (label lbl))))
 
 ;;; So, strings.  A string consists of the following, contiguous in memory:
 ;;; - 4 bytes of a string magic number, 195801581 (0xbabb1ed)
@@ -133,7 +127,7 @@
 (define string-error-routine-2
   (lambda (errlabel)
     (label "notstring")
-    (mov (string-concatenate "$" errlabel) "%eax")
+    (mov (lst "$" errlabel) "%eax")
     (insn "jmp report_error")))
 ;; Emit code to ensure that %eax is a string
 (define ensure-string
@@ -145,10 +139,7 @@
     ;; now fetch from it
     (dup)
     (mov "(%eax)" "%eax")
-    (indent)
-    (display "xor $")
-    (display string-magic)
-    (writeln ", %eax")
+    (insn "xor $" string-magic ", %eax")
     (insn "jnz notstring")
     (pop)))
 ;; Emit code to pull the string pointer and count out of a string
@@ -171,7 +162,7 @@
   (lambda ()
     (begin
       (set! constcounter (+ constcounter 1))
-      (string-concatenate "k_" (number-to-string constcounter)))))
+      (lst "k_" (number-to-string constcounter)))))
 
 ;; Emit code to represent a constant string.
 (define constant-string
@@ -181,12 +172,8 @@
   (lambda (contents labelname)
     (rodata)
     (label labelname)
-    (indent)
-    (display ".int ")
-    (writeln string-magic)
-    (indent)
-    (display ".int ")
-    (writeln (number-to-string (string-length contents)))
+    (insn ".int " string-magic)
+    (insn ".int "(number-to-string (string-length contents)))
     (ascii contents)
     (text)
     labelname))
@@ -255,7 +242,7 @@
 					    ; instead of 13
 (define my-body-2
   (lambda (textlabel)
-    (push_const (string-concatenate "$" textlabel))
+    (push_const (lst "$" textlabel))
     (target-display)))
 
 (skeleton my-body)
