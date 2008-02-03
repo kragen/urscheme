@@ -10,7 +10,7 @@
 ;;; - if, lambda (with fixed numbers of arguments and a single body
 ;;;   expression)
 ;;; - begin
-;;; - variables, with lexical scope
+;;; - variables, with lexical scope and set!
 ;;; - top-level define of a variable (not a function)
 ;;; - read, for proper lists, symbols, strings, integers, and #t and #f
 ;;; - eof-object?
@@ -34,7 +34,6 @@
 ;;; - most of the language syntax: dotted pairs, ' ` , ,@
 ;;; - write
 ;;; - proper tail recursion
-;;; - set!
 ;;; - cond, case, and, or, do, not
 ;;; - let, let*, letrec
 ;;; - delay, force
@@ -130,12 +129,11 @@
 (define string-magic "195801581") ; maybe later I'll add hex constants
 (define string-error-routine
   (lambda ()
-    (rodata)
-    (label "notstringmsg")
-    (ascii "type error: not a string")
-    (text)
+    (string-error-routine-2 (constant-string "type error: not a string"))))
+(define string-error-routine-2
+  (lambda (errlabel)
     (label "notstring")
-    (mov "$notstringmsg" "%eax")
+    (mov (string-concatenate "$" errlabel) "%eax")
     (insn "jmp report_error")))
 ;; Emit code to ensure that %eax is a string
 (define ensure-string
@@ -167,11 +165,22 @@
     (extract-string)
     (write_2)))
 
+;; Allocate a new label (for a constant) and return it.
+(define constcounter 0)
+(define new-label
+  (lambda ()
+    (begin
+      (set! constcounter (+ constcounter 1))
+      (string-concatenate "k_" (number-to-string constcounter)))))
+
 ;; Emit code to represent a constant string.
 (define constant-string
   (lambda (contents)
+    (constant-string-2 contents (new-label))))
+(define constant-string-2
+  (lambda (contents labelname)
     (rodata)
-    (label "thestring")                 ; XXX
+    (label labelname)
     (indent)
     (display ".int ")
     (writeln string-magic)
@@ -179,7 +188,8 @@
     (display ".int ")
     (writeln (number-to-string (string-length contents)))
     (ascii contents)
-    (text)))
+    (text)
+    labelname))
 
 ;;; String manipulation functions for use in the compiler.
 ;; Of course these mostly exist in standard Scheme, but I thought it
@@ -222,23 +232,30 @@
 (define report-error
   (lambda ()
     (label "report_error")
-    (push_const "$15")
-    (write_2)
+    (target-display)                    ; print out whatever is in %eax
     (mov "$1" "%ebx")                   ; exit code of program
     (mov "$1" "%eax")                   ; __NR_exit
     (insn "int $0x80")))                ; make system call to exit
 
 (define skeleton 
-  (lambda ()
+  (lambda (body)
     (string-error-routine)
     (report-error)
-    (constant-string "hello, world\\n") ; note: this gets miscounted
-					; as 14 chars instead of 13
     (global-label "main")
-    (push_const "$thestring")
-    (target-display)
+    (body)
     (pop)
     (mov "$0" "%eax")                   ; return code
     (insn "ret")))
 
-(skeleton)
+(define my-body
+  (lambda ()
+    (my-body-2 
+     (constant-string "hello, world\\n")))) ; note: this gets
+					    ; miscounted as 14 chars
+					    ; instead of 13
+(define my-body-2
+  (lambda (textlabel)
+    (push_const (string-concatenate "$" textlabel))
+    (target-display)))
+
+(skeleton my-body)
