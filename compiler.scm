@@ -3,7 +3,7 @@
 ;;; I think this is nearly the smallest subset of R5RS Scheme that
 ;;; it's practical to write a Scheme compiler in.
 
-;;; Implemented:
+;;; Implementation planned:
 ;;; - car, cdr, cons
 ;;; - symbol?, null?, eq?, boolean?, pair?, string?, procedure?,
 ;;;   integer?, char?
@@ -26,6 +26,10 @@
 
 ;;; All of this would be a little simpler if strings were just lists
 ;;; of small integers.
+
+;;; Implemented:
+;;; - display, for strings
+;;; - string constants
 
 ;;; Not implemented:
 ;;; - call/cc, dynamic-wind
