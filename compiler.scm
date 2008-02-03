@@ -47,7 +47,7 @@
 
 (define skeleton 
   (lambda ()
-    (display "	.section .rodata")
+    (writeln "         .section .rodata")
     (newline)
     (display "hello:  ")
     (newline)
@@ -55,7 +55,7 @@
     (newline)
     (display "        .text")
     (newline)
-    (display "	.globl main")
+    (display "        .globl main")
     (newline)
     (display "main:")
     (newline)
@@ -69,7 +69,7 @@
     (newline)
     (display "        int $0x80")
     (newline)
-    (display "	mov $0, %eax            # return code")
+    (display "        mov $0, %eax            # return code")
     (newline)
     (display "        ret")
     (newline)))
