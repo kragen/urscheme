@@ -45,3 +45,33 @@
 ;;; - multiple-value returns
 ;;; - scheme-report-environment, null-environment
 
+(define skeleton 
+  (lambda ()
+    (display "	.section .rodata")
+    (newline)
+    (display "hello:  ")
+    (newline)
+    (display "        .ascii \"hello, world\\n\"")
+    (newline)
+    (display "        .text")
+    (newline)
+    (display "	.globl main")
+    (newline)
+    (display "main:")
+    (newline)
+    (display "        mov $4, %eax            # __NR_write")
+    (newline)
+    (display "        mov $1, %ebx            # fd 1: stdout")
+    (newline)
+    (display "        mov $hello, %ecx        # const void *buf")
+    (newline)
+    (display "        mov $13, %edx           # size_t count: length of string")
+    (newline)
+    (display "        int $0x80")
+    (newline)
+    (display "	mov $0, %eax            # return code")
+    (newline)
+    (display "        ret")
+    (newline)))
+
+(skeleton)
