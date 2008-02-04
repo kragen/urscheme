@@ -211,6 +211,13 @@
 
 (define ascii (lambda (string) (insn ".ascii " (asm-represent-string string))))
 
+;; emit a prologue for a datum to be assembled into .rodata
+(define rodatum
+  (lambda (labelname)
+    (rodata)
+    (insn ".align 4")                   ; so pointers end in 00!
+    (label labelname)))
+
 
 ;;; Stack Machine Primitives
 ;; As explained earlier, there's an "abstract stack" that includes
@@ -237,9 +244,7 @@
 
 (define constant-string-2
   (lambda (contents labelname)
-    (rodata)
-    (insn ".align 4")                   ; so pointers end in 00!
-    (label labelname)
+    (rodatum labelname)
     (insn ".int " string-magic)
     (insn ".int "(number-to-string (string-length contents)))
     (ascii contents)
@@ -293,10 +298,16 @@
     (insn "int $0x80")))                ; return value is in %eax
 
 ;; Emit code to output a string.
-(define target-display
+(define target-display (lambda () (extract-string) (write_2)))
+;; Emit code to output a newline.
+(define target-newline
   (lambda ()
-    (extract-string)
-    (write_2)))
+    (push_const "$newline_string")
+    (target-display)))
+(define newline-string-code
+  (lambda ()
+    (rodatum "newline_string")
+    (constant-string "\n")))
 
 ;; Emit the code for the normal error-reporting routine
 (define report-error
@@ -316,7 +327,8 @@
 (define compile-var
   (lambda (var)
     (if (eq? var 'display) (target-display)
-        (error var))))
+        (if (eq? var 'newline) (target-newline)
+            (error var)))))
 (define compile-expr
   (lambda (expr)
     (if (pair? expr) (begin (compile-args (cdr expr))
@@ -336,13 +348,13 @@
     (begin (compile-expr expr)
            (pop))))
 
-
 ;;; Main Program
 
 (define compile-program
   (lambda (body)
     (string-error-routine)
     (report-error)
+    (newline-string-code)
     (global-label "main")
     (body)
     (mov "$0" "%eax")                   ; return code
@@ -351,7 +363,9 @@
 (define my-body
   (lambda ()
     (begin
-      (compile-toplevel '(display "hello, world\n"))
-      (compile-toplevel '(display "goodbye, world\n")))))
+      (compile-toplevel '(display "hello, world"))
+      (compile-toplevel '(newline))
+      (compile-toplevel '(display "goodbye, world\n"))
+      (compile-toplevel '(newline)))))
 
 (compile-program my-body)
