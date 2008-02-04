@@ -239,10 +239,10 @@
 
 ;;; Strings (on the target)
 ;; A string consists of the following, contiguous in memory:
-;; - 4 bytes of a string magic number, 195801581 (0xbabb1ed)
+;; - 4 bytes of a string magic number 0xbabb1e
 ;; - 4 bytes of string length "N";
 ;; - N bytes of string data.
-(define string-magic "195801581") ; maybe later I'll add hex constants
+(define string-magic "0xbabb1e")
 
 (define constant-string-2
   (lambda (contents labelname)
