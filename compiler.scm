@@ -25,6 +25,7 @@
 ;;   and = for integers, and decimal numeric constants
 ;; - recursive procedure calls
 ;; - display, for strings, and newline
+;; - error
 
 ;; All of this would be a little simpler if strings were just lists
 ;; of small integers.
@@ -33,7 +34,8 @@
 ;;; Implemented:
 ;; - display, for strings
 ;; - string constants
-
+;; - newline
+;; - begin
 
 ;;; Not implemented:
 ;; - call/cc, dynamic-wind
@@ -329,10 +331,28 @@
     (if (eq? var 'display) (target-display)
         (if (eq? var 'newline) (target-newline)
             (error var)))))
+;; compile an expression, discarding result, e.g. for toplevel
+;; expressions
+(define compile-discarding
+  (lambda (expr)
+    (begin (compile-expr expr)
+           (pop))))
+(define compile-begin
+  (lambda (rands)
+    (if (null? rands) (push_const "$31")
+        (if (null? (cdr rands)) (compile-expr (car rands))
+            (begin (compile-discarding (car rands))
+                   (compile-begin (cdr rands)))))))
+(define compile-ration
+  (lambda (rator rands)
+    (if (eq? rator 'begin) (compile-begin rands)
+        (begin (compile-args rands)
+               (compile-expr rator)))))
+(define compile-pair
+  (lambda (expr) (compile-ration (car expr) (cdr expr))))
 (define compile-expr
   (lambda (expr)
-    (if (pair? expr) (begin (compile-args (cdr expr))
-                            (compile-expr (car expr)))
+    (if (pair? expr) (compile-pair expr)
         (if (symbol? expr) (compile-var expr)
             (if (string? expr) (compile-literal-string expr)
                 (error expr))))))
@@ -342,11 +362,6 @@
         (begin
           (compile-expr (car args))
           (+ 1 (compile-args (cdr args)))))))
-;; compile a toplevel expression, discarding result
-(define compile-toplevel
-  (lambda (expr)
-    (begin (compile-expr expr)
-           (pop))))
 
 ;;; Main Program
 
@@ -363,9 +378,9 @@
 (define my-body
   (lambda ()
     (begin
-      (compile-toplevel '(display "hello, world"))
-      (compile-toplevel '(newline))
-      (compile-toplevel '(display "goodbye, world\n"))
-      (compile-toplevel '(newline)))))
+      (compile-discarding '(begin (display "hello, world")
+                                  (newline)
+                                  (display "goodbye, world")))
+      (compile-discarding '(newline)))))
 
 (compile-program my-body)
