@@ -19,7 +19,8 @@
 ;; - begin
 ;; - variables, with lexical scope and set!
 ;; - top-level define of a variable (not a function)
-;; - read, for proper lists, symbols, strings, integers, and #t and #f
+;; - read, for proper lists, symbols, strings, integers, #t and #f,
+;;   and '
 ;; - eof-object?
 ;; - garbage collection
 ;; - strings, with string-set!, string-ref, string literals,
@@ -43,12 +44,24 @@
 ;; - if
 ;; - recursive procedure calls
 
+;;; Next up, after some simplifications:
+;; - um, probably variables.  Which will involve a revamp of the
+;;   stupid "environment" structure we have now, but will make it
+;;   possible to implement
+;; - lambdas without a parent context pointer, which covers most of
+;;   this program at this point, actually; and
+;; - global variables.  Allocate a place in .data for each one.
+;; At that point, it will become possible to evaluate "define"
+;; expressions, which means you can write programs that do something
+;; interesting and are also readable.
+;; - basic arithmetic.
+
 ;;; Not implemented:
 ;; - call/cc, dynamic-wind
 ;; - macros, quasiquote
 ;; - most of arithmetic
 ;; - vectors
-;; - most of the language syntax: dotted pairs, ' ` , ,@
+;; - most of the language syntax: dotted pairs, ` , ,@
 ;; - write
 ;; - proper tail recursion
 ;; - cond, case, and, or, do, not
@@ -189,13 +202,15 @@
 ;; For example:
 (define mov (2arg "mov"))   (define test (2arg "test"))
 (define cmpl (2arg "cmpl")) (define lea (2arg "lea"))
+(define add (2arg "add"))   (define sub (2arg "sub"))
 
 ;; Emit a one-argument instruction
 (define 1arg (lambda (mnemonic) (lambda (rand) (insn mnemonic " " rand))))
 (define asm-push (1arg "push")) (define asm-pop (1arg "pop"))
 (define jmp (1arg "jmp"))       (define jnz (1arg "jnz"))
 (define je (1arg "je"))         (define call (1arg "call"))
-(define int (1arg "int"))
+(define int (1arg "int"))       (define inc (1arg "inc"))
+(define dec (1arg "dec"))
 
 ;; Currently only using a single zero-argument instruction:
 (define ret (lambda () (insn "ret")))
@@ -267,7 +282,7 @@
 (define rodatum
   (lambda (labelname)
     (rodata)
-    (insn ".align 4")                   ; so pointers end in 00!
+    (insn ".align 4")       ; align pointers so they end in binary 00!
     (label labelname)))
 
 
@@ -457,7 +472,12 @@
                           (lambda () (begin
                                        (get-procedure-arg 0)
                                        (target-display))))
-      (built-in-procedure "newline" 0 target-newline))))
+      (built-in-procedure "newline" 0 target-newline)
+      (built-in-procedure "target_eq" 2 
+                          (lambda () (begin
+                                       (get-procedure-arg 0)
+                                       (get-procedure-arg 1)
+                                       (target-eq?)))))))
 (define apply-built-in-by-label
   (lambda (label nargs)
     (lambda ()
@@ -481,7 +501,7 @@
     (compile-literal-string-2 (constant-string contents))))
 
 
-;;; Booleans
+;;; Booleans and other misc. types
 (define enum-tag 2)
 (define tagshift quadruple)
 (define nil-value (+ enum-tag (tagshift 256)))
@@ -492,7 +512,35 @@
     (cmpl (const (number-to-string false-value)) tos)
     (pop)
     (je label)))
+(define integer-tag 1)
+(define tagged-integer
+  (lambda (int) (+ integer-tag (tagshift int))))
+(define integer-add
+  (lambda ()
+    ;; XXX add type checking!
+    (asm-pop ebx)
+    (add ebx tos)
+    (dec tos)))
+(define integer-sub
+  (lambda ()
+    ;; XXX add type checking!
+    (sub tos (indirect esp))
+    (pop)
+    (inc tos)))
 
+;; Emit code to push a boolean in place of the top two stack items.
+;; It will be #t if they are equal, #f if they are not.
+(define target-eq?
+  (lambda ()
+    ((lambda (label1 label2)
+      (asm-pop ebx)
+      (cmpl ebx tos)
+      (je label1)
+      (mov (const (number-to-string false-value)) tos)
+      (jmp label2)
+      (label label1)
+      (mov (const (number-to-string true-value)) tos)
+      (label label2)) (new-label) (new-label))))
 
 ;;; Compilation
 (define compile-var-2
@@ -505,6 +553,8 @@
   (lambda (b) (push-const (number-to-string (if b 
                                                 true-value
                                                 false-value)))))
+(define compile-literal-integer
+  (lambda (int) (push-const (number-to-string (tagged-integer int)))))
 ;; compile an expression, discarding result, e.g. for toplevel
 ;; expressions
 (define compile-discarding
@@ -547,7 +597,8 @@
         (if (symbol? expr) (compile-var expr env)
             (if (string? expr) (compile-literal-string expr)
                 (if (boolean? expr) (compile-literal-boolean expr)
-                    (error expr)))))))
+                    (if (integer? expr) (compile-literal-integer expr)
+                    (error expr))))))))
 (define compile-args
   (lambda (args env)
     (if (null? args) 0
@@ -560,21 +611,38 @@
 
 (define basic-env 
   (lst (cons 'display display-by-label)
-       (cons 'newline newline-by-label)))
+       (cons 'newline newline-by-label)
+       (cons 'arg0 (lambda () (get-procedure-arg 0)))
+       (cons 'fibonacci (apply-built-in-by-label "fibonacci" 1))
+       (cons '= (apply-built-in-by-label "target_eq" 2))
+       (cons 'eq? (apply-built-in-by-label "target_eq" 2))
+       (cons '+ integer-add)
+       (cons '- integer-sub)))
+
+(define fibonacci-procedure
+  (lambda ()
+    (built-in-procedure "fibonacci" 1 (lambda ()
+        (compile-expr '(if (= arg0 0) (begin (display "*") 1 )
+                           (if (= arg0 1) (begin (display "+") 1)
+                               (+ (fibonacci (- arg0 1))
+                                  (fibonacci (- arg0 2)))))
+                        basic-env)))))
 
 (define compile-program
   (lambda (body)
-    (string-error-routine)
-    (not-procedure-routine)
-    (argument-count-wrong)
-    (report-error)
-    (newline-string-code)
-    (ensure-string-code)
-    (some-basic-procedures)
-    (global-label "main")
-    (body)
-    (mov (const 0) eax)                 ; return code
-    (ret)))
+    (begin
+      (string-error-routine)
+      (not-procedure-routine)
+      (argument-count-wrong)
+      (report-error)
+      (newline-string-code)
+      (ensure-string-code)
+      (some-basic-procedures)
+      (fibonacci-procedure)
+      (global-label "main")
+      (body)
+      (mov (const 0) eax)         ; return code of main() goes in %eax
+      (ret))))
 
 (define my-body
   (lambda ()
@@ -583,6 +651,7 @@
                                   (display ", world")
                                   (newline)
                                   (display "indeed")) basic-env)
-      (compile-discarding '(newline) basic-env))))
+      (compile-discarding '(newline) basic-env)
+      (compile-discarding '(fibonacci 7) basic-env))))
 
 (compile-program my-body)
