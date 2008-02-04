@@ -93,6 +93,11 @@
 (define lst (lambda args args))         ; identical to standard "list"
 (define list-length                     ; identical to standard "length"
   (lambda (list) (if (null? list) 0 (+ 1 (list-length (cdr list))))))
+(define lookup                          ; identical to standard "assq"
+  (lambda (obj alist)
+    (if (null? alist) #f
+        (if (eq? obj (car (car alist))) (car alist)
+            (lookup obj (cdr alist))))))
 
 ;; string manipulation (part of Basic Lisp Stuff)
 (define string-concatenate-3
@@ -344,11 +349,12 @@
 (define jump-always (lambda (label) (insn "jmp " label)))
 
 ;;; Compilation
+(define compile-var-2
+  (lambda (lookupval var)
+    (if lookupval ((cdr lookupval)) (error var))))
 (define compile-var
-  (lambda (var)
-    (if (eq? var 'display) (target-display)
-        (if (eq? var 'newline) (target-newline)
-            (error var)))))
+  (lambda (var env)
+    (compile-var-2 (lookup var env) var)))
 (define compile-literal-boolean
   (lambda (b) (push-const (lst "$" (number-to-string (if b 
                                                          true-value
@@ -356,55 +362,59 @@
 ;; compile an expression, discarding result, e.g. for toplevel
 ;; expressions
 (define compile-discarding
-  (lambda (expr)
-    (begin (compile-expr expr)
+  (lambda (expr env)
+    (begin (compile-expr expr env)
            (pop))))
 (define compile-begin
-  (lambda (rands)
+  (lambda (rands env)
     (if (null? rands) (push-const "$31") ; XXX do something reasonable
-        (if (null? (cdr rands)) (compile-expr (car rands))
-            (begin (compile-discarding (car rands))
-                   (compile-begin (cdr rands)))))))
+        (if (null? (cdr rands)) (compile-expr (car rands) env)
+            (begin (compile-discarding (car rands) env)
+                   (compile-begin (cdr rands) env))))))
 (define compile-if-2
-  (lambda (cond then else lab1 lab2)
+  (lambda (cond then else lab1 lab2 env)
     (begin
-      (compile-expr cond)
+      (compile-expr cond env)
       (jump-if-false lab1)
-      (compile-expr then)
+      (compile-expr then env)
       (jump-always lab2)
       (label lab1)
-      (compile-expr else)
+      (compile-expr else env)
       (label lab2))))
 (define compile-if
-  (lambda (rands)
+  (lambda (rands env)
     (if (= (list-length rands) 3)
         (compile-if-2 (car rands) (car (cdr rands)) (car (cdr (cdr rands)))
-                      (new-label) (new-label))
+                      (new-label) (new-label) env)
         (error "if arguments length != 3"))))
 (define compile-ration
-  (lambda (rator rands)
-    (if (eq? rator 'begin) (compile-begin rands)
-        (if (eq? rator 'if) (compile-if rands)
-            (begin (compile-args rands)
-                   (compile-expr rator))))))
+  (lambda (rator rands env)
+    (if (eq? rator 'begin) (compile-begin rands env)
+        (if (eq? rator 'if) (compile-if rands env)
+            (begin (compile-args rands env)
+                   (compile-expr rator env))))))
 (define compile-pair
-  (lambda (expr) (compile-ration (car expr) (cdr expr))))
+  (lambda (expr env) (compile-ration (car expr) (cdr expr) env)))
 (define compile-expr
-  (lambda (expr)
-    (if (pair? expr) (compile-pair expr)
-        (if (symbol? expr) (compile-var expr)
+  (lambda (expr env)
+    (if (pair? expr) (compile-pair expr env)
+        (if (symbol? expr) (compile-var expr env)
             (if (string? expr) (compile-literal-string expr)
                 (if (boolean? expr) (compile-literal-boolean expr)
                     (error expr)))))))
 (define compile-args
-  (lambda (args)
+  (lambda (args env)
     (if (null? args) 0
         (begin
-          (compile-expr (car args))
-          (+ 1 (compile-args (cdr args)))))))
+          (compile-expr (car args) env)
+          (+ 1 (compile-args (cdr args) env))))))
 
 
 ;;; Main Program
+
+(define basic-env 
+  (lst (cons 'display target-display)
+       (cons 'newline target-newline)))
 
 (define compile-program
   (lambda (body)
@@ -423,7 +433,7 @@
       (compile-discarding '(begin (display (if #t "hello" "goodbye"))
                                   (display ", world")
                                   (newline)
-                                  (display "indeed")))
-      (compile-discarding '(newline)))))
+                                  (display "indeed")) basic-env)
+      (compile-discarding '(newline) basic-env))))
 
 (compile-program my-body)
