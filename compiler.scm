@@ -300,6 +300,7 @@
     (insn "int $0x80")))                ; return value is in %eax
 
 ;; Emit code to output a string.
+;; XXX this needs to have a reasonable return value, and it doesn't!
 (define target-display (lambda () (extract-string) (write_2)))
 ;; Emit code to output a newline.
 (define target-newline
@@ -339,7 +340,7 @@
            (pop))))
 (define compile-begin
   (lambda (rands)
-    (if (null? rands) (push_const "$31")
+    (if (null? rands) (push_const "$31") ; XXX do something reasonable
         (if (null? (cdr rands)) (compile-expr (car rands))
             (begin (compile-discarding (car rands))
                    (compile-begin (cdr rands)))))))
