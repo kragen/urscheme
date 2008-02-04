@@ -183,9 +183,36 @@
 
 ;; Emit an indented instruction
 (define insn (lambda insn (emit (cons "        " insn))))
+(define comment (lambda (comment) (insn "# " comment)))
 
-;; Emit a MOV instruction
-(define mov (lambda (src dest) (insn "mov " src ", " dest)))
+;; Emit a two-argument instruction
+(define 2arg 
+  (lambda (mnemonic) (lambda (src dest) (insn mnemonic " " src ", " dest))))
+;; For example:
+(define mov (2arg "mov"))   (define test (2arg "test"))
+(define cmpl (2arg "cmpl")) (define lea (2arg "lea"))
+
+;; Emit a one-argument instruction
+(define 1arg (lambda (mnemonic) (lambda (rand) (insn mnemonic " " rand))))
+(define push (1arg "push")) (define pop-asm (1arg "pop"))
+(define jmp (1arg "jmp"))   (define jnz (1arg "jnz"))
+(define je (1arg "je"))     (define call (1arg "call"))
+(define int (1arg "int"))
+
+;; Currently only using a single zero-argument instruction:
+(define ret (lambda () (insn "ret")))
+
+;; Registers:
+(define eax "%eax")  (define ebx "%ebx")  
+(define ecx "%ecx")  (define edx "%edx")
+
+(define const (lambda (x) (lst "$" x)))
+(define indirect (lambda (x) (lst "(" x ")")))
+
+(define syscall (lambda () (int (const "0x80"))))
+
+(define offset 
+  (lambda (x offset) (lst (number-to-string offset) (indirect x))))
 
 ;; Other stuff for basic asm emission.
 (define rodata (lambda () (insn ".section .rodata")))
@@ -195,9 +222,7 @@
 ;; define a .globl label
 (define global-label
   (lambda (lbl)
-    (begin
-      (insn ".globl " lbl)
-      (label lbl))))
+    (begin (insn ".globl " lbl) (label lbl))))
 
 ;; new-label: Allocate a new label (e.g. for a constant) and return it.
 (define constcounter 0)
@@ -246,16 +271,15 @@
 ;; As explained earlier, there's an "abstract stack" that includes
 ;; %eax as well as the x86 stack.
 
+(define tos eax)
+
 ;; push-const: Emit code to push a constant onto the abstract stack
-(define push-const
-  (lambda (const)
-    (insn "push %eax")
-    (mov const "%eax")))
+(define push-const (lambda (val) (push tos) (mov (const val) tos)))
 ;; pop: Emit code to discard top of stack.
-(define pop (lambda () (insn "pop %eax")))
+(define pop (lambda () (pop-asm tos)))
 
 ;; dup: Emit code to copy top of stack.
-(define dup (lambda () (insn "push %eax")))
+(define dup (lambda () (push tos)))
 
 
 ;;; Strings (on the target)
@@ -269,7 +293,7 @@
   (lambda (contents labelname)
     (rodatum labelname)
     (insn ".int " string-magic)
-    (insn ".int "(number-to-string (string-length contents)))
+    (insn ".int " (number-to-string (string-length contents)))
     (ascii contents)
     (text)
     labelname))
@@ -284,40 +308,40 @@
 (define string-error-routine-2
   (lambda (errlabel)
     (label "notstring")
-    (mov (lst "$" errlabel) "%eax")
-    (insn "jmp report_error")))
+    (mov (const errlabel) tos)
+    (jmp "report_error")))
 
 (define ensure-string-code
   (lambda ()
     (label "ensure_string")
-    (insn "# ensures that %eax is a string")
-    (insn "# first, ensure that it's a pointer, not something unboxed")
-    (insn "test $3, %eax")              ; test low two bits
-    (insn "jnz notstring")
-    (insn "# now, test its magic number")
-    (insn "cmpl $" string-magic ", (%eax)")
-    (insn "jnz notstring")
-    (insn "ret")))
+    (comment "ensures that %eax is a string")
+    (comment "first, ensure that it's a pointer, not something unboxed")
+    (test (const "3") tos)              ; test low two bits
+    (jnz "notstring")
+    (comment "now, test its magic number")
+    (cmpl (const string-magic) (indirect tos))
+    (jnz "notstring")
+    (ret)))
 ;; Emit code to ensure that %eax is a string
-(define ensure-string (lambda () (insn "call ensure_string")))
+(define ensure-string (lambda () (call "ensure_string")))
 ;; Emit code to pull the string pointer and count out of a string
 ;; being pointed to and push them on the abstract stack
 (define extract-string
   (lambda ()
     (ensure-string)
-    (insn "lea 8(%eax), %ebx")         ; string pointer
-    (insn "push %ebx")
-    (mov "4(%eax)" "%eax")))           ; string length
+    (lea (offset tos 8) ebx)            ; string pointer
+    (push ebx)
+    (mov (offset tos 4) tos)))          ; string length
 
 ;; Emit code which, given a byte count on top of stack and a string
 ;; pointer underneath it, outputs the string.
 (define write_2
   (lambda ()
-    (mov "%eax" "%edx")                 ; byte count in arg 3
-    (insn "pop %ecx")                   ; byte string in arg 2
-    (mov "$4" "%eax")                   ; __NR_write
-    (mov "$1" "%ebx")                   ; fd 1: stdout
-    (insn "int $0x80")))                ; return value is in %eax
+    (mov tos edx)                       ; byte count in arg 3
+    (pop-asm ecx)                       ; byte string in arg 2
+    (mov (const "4") eax)               ; __NR_write
+    (mov (const "1") ebx)               ; fd 1: stdout
+    (syscall)))                         ; return value is in %eax
 
 ;; Emit code to output a string.
 ;; XXX this needs to have a reasonable return value, and it doesn't!
@@ -325,7 +349,7 @@
 ;; Emit code to output a newline.
 (define target-newline
   (lambda ()
-    (push-const "$newline_string")
+    (push-const "newline_string")
     (target-display)))
 (define newline-string-code
   (lambda ()
@@ -337,11 +361,11 @@
   (lambda ()
     (label "report_error")
     (target-display)                    ; print out whatever is in %eax
-    (mov "$1" "%ebx")                   ; exit code of program
-    (mov "$1" "%eax")                   ; __NR_exit
-    (insn "int $0x80")))                ; make system call to exit
+    (mov (const "1") ebx)               ; exit code of program
+    (mov (const "1") eax)               ; __NR_exit
+    (syscall)))                         ; make system call to exit
 
-(define compile-literal-string-2 (lambda (label) (push-const (lst "$" label))))
+(define compile-literal-string-2 (lambda (label) (push-const label)))
 (define compile-literal-string
   (lambda (contents)
     (compile-literal-string-2 (constant-string contents))))
@@ -356,10 +380,9 @@
 (define false-value (+ enum-tag (tagshift 258)))
 (define jump-if-false
   (lambda (label)
-    (insn "cmp $" false-value ", %eax")
+    (cmpl (const (number-to-string false-value)) tos)
     (pop)
-    (insn "je " label)))
-(define jump-always (lambda (label) (insn "jmp " label)))
+    (je label)))
 
 ;;; Compilation
 (define compile-var-2
@@ -369,9 +392,9 @@
   (lambda (var env)
     (compile-var-2 (lookup var env) var)))
 (define compile-literal-boolean
-  (lambda (b) (push-const (lst "$" (number-to-string (if b 
-                                                         true-value
-                                                         false-value))))))
+  (lambda (b) (push-const (number-to-string (if b 
+                                                true-value
+                                                false-value)))))
 ;; compile an expression, discarding result, e.g. for toplevel
 ;; expressions
 (define compile-discarding
@@ -380,7 +403,7 @@
            (pop))))
 (define compile-begin
   (lambda (rands env)
-    (if (null? rands) (push-const "$31") ; XXX do something reasonable
+    (if (null? rands) (push-const "31") ; XXX do something reasonable
         (if (null? (cdr rands)) (compile-expr (car rands) env)
             (begin (compile-discarding (car rands) env)
                    (compile-begin (cdr rands) env))))))
@@ -390,7 +413,7 @@
       (compile-expr cond env)
       (jump-if-false lab1)
       (compile-expr then env)
-      (jump-always lab2)
+      (jmp lab2)
       (label lab1)
       (compile-expr else env)
       (label lab2))))
@@ -437,8 +460,8 @@
     (ensure-string-code)
     (global-label "main")
     (body)
-    (mov "$0" "%eax")                   ; return code
-    (insn "ret")))
+    (mov (const 0) eax)                 ; return code
+    (ret)))
 
 (define my-body
   (lambda ()
