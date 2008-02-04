@@ -271,16 +271,11 @@
     (label "ensure_string")
     (insn "# ensures that %eax is a string")
     (insn "# first, ensure that it's a pointer, not something unboxed")
-    (mov "%eax" "%ebx")
-    (insn "and $3, %ebx")               ; is there a way to do this
-					; without a register?
+    (insn "test $3, %eax")              ; test low two bits
     (insn "jnz notstring")
-    (insn "# now, fetch its magic number")
-    (dup)
-    (mov "(%eax)" "%eax")
-    (insn "xor $" string-magic ", %eax") ; can we use a memory operand?
+    (insn "# now, test its magic number")
+    (insn "cmpl $" string-magic ", (%eax)")
     (insn "jnz notstring")
-    (pop)
     (insn "ret")))
 ;; Emit code to ensure that %eax is a string
 (define ensure-string (lambda () (insn "call ensure_string")))
