@@ -1,4 +1,5 @@
-scheme = guile -s
+#scheme = guile -s
+scheme = mzscheme -r
 all: test
 test: a.out
 	./a.out
