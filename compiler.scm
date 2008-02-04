@@ -36,6 +36,7 @@
 ;; - newline
 ;; - begin
 ;; - booleans
+;; - if
 
 ;;; Not implemented:
 ;; - call/cc, dynamic-wind
@@ -90,6 +91,8 @@
 ;; the point where it could bootstrap itself.
 
 (define lst (lambda args args))         ; identical to standard "list"
+(define list-length                     ; identical to standard "length"
+  (lambda (list) (if (null? list) 0 (+ 1 (list-length (cdr list))))))
 
 ;; string manipulation (part of Basic Lisp Stuff)
 (define string-concatenate-3
@@ -178,7 +181,7 @@
       (insn ".globl " lbl)
       (label lbl))))
 
-;; new-label: Allocate a new label (for a constant) and return it.
+;; new-label: Allocate a new label (e.g. for a constant) and return it.
 (define constcounter 0)
 (define new-label
   (lambda ()
@@ -333,6 +336,12 @@
 (define nil-value (+ enum-tag (tagshift 256)))
 (define true-value (+ enum-tag (tagshift 257)))
 (define false-value (+ enum-tag (tagshift 258)))
+(define jump-if-false
+  (lambda (label)
+    (insn "cmp $" false-value ", %eax")
+    (pop)
+    (insn "je " label)))
+(define jump-always (lambda (label) (insn "jmp " label)))
 
 ;;; Compilation
 (define compile-var
@@ -356,11 +365,28 @@
         (if (null? (cdr rands)) (compile-expr (car rands))
             (begin (compile-discarding (car rands))
                    (compile-begin (cdr rands)))))))
+(define compile-if-2
+  (lambda (cond then else lab1 lab2)
+    (begin
+      (compile-expr cond)
+      (jump-if-false lab1)
+      (compile-expr then)
+      (jump-always lab2)
+      (label lab1)
+      (compile-expr else)
+      (label lab2))))
+(define compile-if
+  (lambda (rands)
+    (if (= (list-length rands) 3)
+        (compile-if-2 (car rands) (car (cdr rands)) (car (cdr (cdr rands)))
+                      (new-label) (new-label))
+        (error "if arguments length != 3"))))
 (define compile-ration
   (lambda (rator rands)
     (if (eq? rator 'begin) (compile-begin rands)
-        (begin (compile-args rands)
-               (compile-expr rator)))))
+        (if (eq? rator 'if) (compile-if rands)
+            (begin (compile-args rands)
+                   (compile-expr rator))))))
 (define compile-pair
   (lambda (expr) (compile-ration (car expr) (cdr expr))))
 (define compile-expr
@@ -394,10 +420,10 @@
 (define my-body
   (lambda ()
     (begin
-      (compile-discarding '(begin (display "hello, world")
+      (compile-discarding '(begin (display (if #t "hello" "goodbye"))
+                                  (display ", world")
                                   (newline)
-                                  #t #f
-                                  (display "goodbye, world")))
+                                  (display "indeed")))
       (compile-discarding '(newline)))))
 
 (compile-program my-body)
