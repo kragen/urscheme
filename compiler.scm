@@ -192,9 +192,9 @@
 
 ;; Emit a one-argument instruction
 (define 1arg (lambda (mnemonic) (lambda (rand) (insn mnemonic " " rand))))
-(define push (1arg "push")) (define pop-asm (1arg "pop"))
-(define jmp (1arg "jmp"))   (define jnz (1arg "jnz"))
-(define je (1arg "je"))     (define call (1arg "call"))
+(define asm-push (1arg "push")) (define asm-pop (1arg "pop"))
+(define jmp (1arg "jmp"))       (define jnz (1arg "jnz"))
+(define je (1arg "je"))         (define call (1arg "call"))
 (define int (1arg "int"))
 
 ;; Currently only using a single zero-argument instruction:
@@ -278,12 +278,12 @@
 (define tos eax)
 
 ;; push-const: Emit code to push a constant onto the abstract stack
-(define push-const (lambda (val) (push tos) (mov (const val) tos)))
+(define push-const (lambda (val) (asm-push tos) (mov (const val) tos)))
 ;; pop: Emit code to discard top of stack.
-(define pop (lambda () (pop-asm tos)))
+(define pop (lambda () (asm-pop tos)))
 
 ;; dup: Emit code to copy top of stack.
-(define dup (lambda () (push tos)))
+(define dup (lambda () (asm-push tos)))
 
 ;;; Procedure calls.
 ;; Procedure values are 8 bytes:
@@ -319,15 +319,15 @@
       (cmpl (const (number-to-string nargs)) tos)
       (jnz "argument_count_wrong")
       (lea (offset (index-register esp tos 4) 4) ebx) ; desired %esp on return
-      (push ebx)                        ; push restored %esp on stack
+      (asm-push ebx)                    ; push restored %esp on stack
       (mov ebp tos)                     ; save old %ebp --- in %eax!
       (lea (offset esp 8) ebp))))       ; 8 bytes to skip saved %ebx and %eip
 (define compile-procedure-epilogue
   (lambda ()
     (begin
-      (pop-asm ebp) ; return val in %eax has pushed saved %ebp onto stack
-      (pop-asm ebx)                     ; value to restore %esp to
-      (pop-asm edx)                     ; saved return address
+      (asm-pop ebp) ; return val in %eax has pushed saved %ebp onto stack
+      (asm-pop ebx)                     ; value to restore %esp to
+      (asm-pop edx)                     ; saved return address
       (mov ebx esp)
       (jmp (absolute edx)))))           ; return via indirect jump
 
@@ -372,7 +372,7 @@
 ;; Emit code to fetch the Nth argument of the innermost procedure.
 (define get-procedure-arg
   (lambda (n)
-    (push tos)
+    (asm-push tos)
     (mov (offset ebp (quadruple n)) tos)))
 
 ;;; Strings (on the target)
@@ -423,7 +423,7 @@
   (lambda ()
     (ensure-string)
     (lea (offset tos 8) ebx)            ; string pointer
-    (push ebx)
+    (asm-push ebx)
     (mov (offset tos 4) tos)))          ; string length
 
 ;; Emit code which, given a byte count on top of stack and a string
@@ -431,7 +431,7 @@
 (define write_2
   (lambda ()
     (mov tos edx)                       ; byte count in arg 3
-    (pop-asm ecx)                       ; byte string in arg 2
+    (asm-pop ecx)                       ; byte string in arg 2
     (mov (const "4") eax)               ; __NR_write
     (mov (const "1") ebx)               ; fd 1: stdout
     (syscall)))                         ; return value is in %eax
