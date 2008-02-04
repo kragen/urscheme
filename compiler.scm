@@ -311,9 +311,29 @@
   (lambda (contents)
     (compile-literal-string-2 (constant-string contents))))
 
+;;; Compilation
+(define compile-var
+  (lambda (var)
+    (if (eq? var 'display) (target-display)
+        (error var))))
+(define compile-expr
+  (lambda (expr)
+    (if (pair? expr) (begin (compile-args (cdr expr))
+                            (compile-expr (car expr)))
+        (if (symbol? expr) (compile-var expr)
+            (if (string? expr) (compile-literal-string expr)
+                (error expr))))))
+(define compile-args
+  (lambda (args)
+    (if (null? args) 0
+        (begin
+          (compile-expr (car args))
+          (+ 1 (compile-args (cdr args)))))))
+
+
 ;;; Main Program
 
-(define skeleton 
+(define compile-program
   (lambda (body)
     (string-error-routine)
     (report-error)
@@ -325,7 +345,8 @@
 
 (define my-body
   (lambda ()
-    (compile-literal-string "hello, world\n")
-    (target-display)))
+    (begin
+      (compile-expr '(display "hello, world\n")))))
 
-(skeleton my-body)
+
+(compile-program my-body)
