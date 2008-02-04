@@ -1,7 +1,9 @@
 ;;; A compiler from a subset of R5RS Scheme to x86 assembly, written in itself.
 ;; Kragen Javier Sitaker, 2008
-;; I think this is nearly the smallest subset of R5RS Scheme that
-;; it's practical to write a Scheme compiler in.
+
+;; I think this is nearly the smallest subset of R5RS Scheme that it's
+;; practical to write a Scheme compiler in, and I've tried to keep
+;; this implementation of it as simple as I can stand.
 
 
 ;;; Implementation planned:
@@ -82,6 +84,17 @@
 ;; error routine if the type test fails, which will exit the program.
 ;; I'll add more graceful exits later.
 
+;; The calling convention for subroutines is troubling me.  Avoiding
+;; register allocation means, I think, that they need to store their
+;; arguments in memory.  Perhaps a "local context pointer" register
+;; (%ebp? That's what it's for...) can point to the current local
+;; variable context, and local variable references can be compiled
+;; into indices into that context.  To eventually permit tail-calls
+;; (as well as to avoid extra unnecessary code) callees should clean
+;; up their own stack frames.  How should closures work?  The caller
+;; could load a parent context pointer into some other register or
+;; memory location, but maybe something better would be to use one of
+;; the indirect-threading or direct-threading strategies from Forth.
 
 ;;; Basic Lisp Stuff
 ;; To build up the spartan language implemented by the compiler to a
