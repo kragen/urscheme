@@ -264,12 +264,13 @@
   (lambda ()
     ;; ensure that it's not an unboxed int
     (mov "%eax" "%ebx")
-    (insn "and $3, %ebx")
+    (insn "and $3, %ebx")               ; is there a way to do this
+					; without a register?
     (insn "jnz notstring")
     ;; now fetch from it
     (dup)
     (mov "(%eax)" "%eax")
-    (insn "xor $" string-magic ", %eax")
+    (insn "xor $" string-magic ", %eax") ; can we use a memory operand?
     (insn "jnz notstring")
     (pop)))
 ;; Emit code to pull the string pointer and count out of a string
