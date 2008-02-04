@@ -8,6 +8,7 @@
 ;; - car, cdr, cons
 ;; - symbol?, null?, eq?, boolean?, pair?, string?, procedure?,
 ;;   integer?, char?
+;; - eq? works for both chars and symbols
 ;; - if, lambda (with fixed numbers of arguments or with a single
 ;;   argument that gets bound to the argument list (lambda x y (...))
 ;;   and a single body expression)
@@ -66,7 +67,13 @@
 ;; - low bits binary 00: an actual pointer, to an object with an
 ;;   embedded magic number; examine the magic number to see what it
 ;;   is.
-;; - low bits binary 01: an integer, stored in the upper 30 bits.
+;; - low bits binary 01: a signed integer, stored in the upper 30 bits.
+;; - low bits binary 10: one of a small number of unique objects.  The
+;;   first 256 are the chars; following these we have the empty list,
+;;   #t, and #f, in that order.  This means that eq? works to compare
+;;   chars in this implementation, but that isn't guaranteed by R5RS,
+;;   so we can't depend on that property inside the compiler, since we
+;;   want to be able to run it on other R5RS Schemes.
 ;; So, type-testing consists of testing the type-tag, then possibly
 ;; testing the magic number.  In the usual case, we'll jump to an
 ;; error routine if the type test fails, which will exit the program.
@@ -117,7 +124,26 @@
 (define number-to-string                ; number->string
   (lambda (num) (if (= num 0) "0" (number-to-string-2 num))))
 
+;; Boy, it sure causes a lot of hassle that Scheme has different types
+;; for strings and chars.
 
+(define char-eqv?                       ; identical to standard char=?
+  (lambda (a b) (string=? (string-of-char a) (string-of-char b))))
+(define string-sub-2
+  (lambda (buf string start idx)
+    (if (= idx (string-length buf)) buf
+        (begin (string-set! buf idx (string-ref string (+ start idx)))
+               (string-sub-2 buf string start (+ idx 1))))))
+(define string-sub                      ; identical to standard substring
+  (lambda (string start end)
+    (string-sub-2 (make-string (- end start)) string start 0)))
+(define string-idx-2
+  (lambda (string char idx)
+    (if (= idx (string-length string)) #f
+        (if (char-eqv? (string-ref string idx) char) idx
+            (string-idx-2 string char (+ idx 1))))))
+(define string-idx                      ; returns #f or index into string
+  (lambda (string char) (string-idx-2 string char 0)))
 
 ;;; Basic Assembly Language Emission
 
@@ -142,7 +168,7 @@
 (define rodata (lambda () (insn ".section .rodata")))
 (define text (lambda () (insn ".text")))
 (define label (lambda (label) (emit label ":")))
-(define ascii (lambda (string) (insn ".ascii \"" string "\""))) ; XXX
+(define ascii (lambda (string) (insn ".ascii " (asm-represent-string string))))
 
 ;; define a .globl label
 (define global-label
@@ -158,6 +184,32 @@
     (begin
       (set! constcounter (+ constcounter 1))
       (lst "k_" (number-to-string constcounter)))))
+
+;; stuff to output a Lisp string safely for assembly language
+(define dangerous "\\\n\"")
+(define escapes "\\n\"")
+(define backslash (string-ref "\\" 0))  ; I don't have reader syntax for characters
+(define backslashify-3
+  (lambda (string buf idx idxo backslashed)
+    (if backslashed (begin (string-set! buf idxo backslash)
+                           (string-set! buf (+ idxo 1) (string-ref escapes backslashed))
+                           (backslashify-2 string buf (+ idx 1) (+ idxo 2)))
+        (begin (string-set! buf idxo (string-ref string idx))
+               (backslashify-2 string buf (+ idx 1) (+ idxo 1))))))
+(define backslashify-2
+  (lambda (string buf idx idxo)
+    (if (= idx (string-length string)) (string-sub buf 0 idxo)
+        (backslashify-3 string buf idx idxo 
+                        (string-idx dangerous (string-ref string idx))))))
+(define backslashify
+  (lambda (string)
+    (backslashify-2 string (make-string (+ (string-length string)
+                                           (string-length string))) 0 0)))
+;; Represent a string appropriately for the output assembly language file.
+(define asm-represent-string
+  (lambda (string)
+    (string-concatenate "\"" (string-concatenate (backslashify string) "\""))))
+
 
 
 ;;; Stack Machine Primitives
@@ -253,6 +305,11 @@
     (mov "$1" "%eax")                   ; __NR_exit
     (insn "int $0x80")))                ; make system call to exit
 
+(define compile-literal-string-2 (lambda (label) (push_const (lst "$" label))))
+(define compile-literal-string
+  (lambda (contents)
+    (compile-literal-string-2 (constant-string contents))))
+
 ;;; Main Program
 
 (define skeleton 
@@ -267,13 +324,7 @@
 
 (define my-body
   (lambda ()
-    (my-body-2 
-     (constant-string "hello, world\\n")))) ; note: this gets
-					    ; miscounted as 14 chars
-					    ; instead of 13
-(define my-body-2
-  (lambda (textlabel)
-    (push_const (lst "$" textlabel))
+    (compile-literal-string "hello, world\n")
     (target-display)))
 
 (skeleton my-body)
