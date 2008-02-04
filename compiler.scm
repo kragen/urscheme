@@ -30,12 +30,12 @@
 ;; All of this would be a little simpler if strings were just lists
 ;; of small integers.
 
-
 ;;; Implemented:
 ;; - display, for strings
 ;; - string constants
 ;; - newline
 ;; - begin
+;; - booleans
 
 ;;; Not implemented:
 ;; - call/cc, dynamic-wind
@@ -325,12 +325,25 @@
   (lambda (contents)
     (compile-literal-string-2 (constant-string contents))))
 
+
+;;; Booleans
+(define enum-tag 2)
+(define double (lambda (val) (+ val val)))
+(define tagshift (lambda (val) (double (double val))))
+(define nil-value (+ enum-tag (tagshift 256)))
+(define true-value (+ enum-tag (tagshift 257)))
+(define false-value (+ enum-tag (tagshift 258)))
+
 ;;; Compilation
 (define compile-var
   (lambda (var)
     (if (eq? var 'display) (target-display)
         (if (eq? var 'newline) (target-newline)
             (error var)))))
+(define compile-literal-boolean
+  (lambda (b) (push-const (lst "$" (number-to-string (if b 
+                                                         true-value
+                                                         false-value))))))
 ;; compile an expression, discarding result, e.g. for toplevel
 ;; expressions
 (define compile-discarding
@@ -355,13 +368,15 @@
     (if (pair? expr) (compile-pair expr)
         (if (symbol? expr) (compile-var expr)
             (if (string? expr) (compile-literal-string expr)
-                (error expr))))))
+                (if (boolean? expr) (compile-literal-boolean expr)
+                    (error expr)))))))
 (define compile-args
   (lambda (args)
     (if (null? args) 0
         (begin
           (compile-expr (car args))
           (+ 1 (compile-args (cdr args)))))))
+
 
 ;;; Main Program
 
@@ -381,6 +396,7 @@
     (begin
       (compile-discarding '(begin (display "hello, world")
                                   (newline)
+                                  #t #f
                                   (display "goodbye, world")))
       (compile-discarding '(newline)))))
 
