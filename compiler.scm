@@ -1,5 +1,5 @@
 ;;; A compiler from a subset of R5RS Scheme to x86 assembly, written in itself.
-;; Kragen Javier Sitaker, 2008
+;; Kragen Javier Sitaker, 2008-01-03
 
 ;; I think this is nearly the smallest subset of R5RS Scheme that it's
 ;; practical to write a Scheme compiler in, and I've tried to keep
@@ -58,6 +58,10 @@
 ;; - multiple-value returns
 ;; - scheme-report-environment, null-environment
 
+;; cute hex magic numbers: aba5ed? ab5ce55? acce55? add1ed? affab1e?
+;; a1fa1fa? bade? ba5eba11?  ba5e1e55? befa115? b1abbed? b1e55ed?
+;; b1a2ed? facade? face1e55? 1abe1ed? 5a1eab1e? 5eceded? 5eed1e55?
+;; 5e1f1e55?
 
 ;;; Design notes:
 
