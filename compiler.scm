@@ -265,21 +265,25 @@
     (label "notstring")
     (mov (lst "$" errlabel) "%eax")
     (insn "jmp report_error")))
-;; Emit code to ensure that %eax is a string
-;; XXX maybe factor this out into an asm routine?
-(define ensure-string
+
+(define ensure-string-code
   (lambda ()
-    ;; ensure that it's not an unboxed int
+    (label "ensure_string")
+    (insn "# ensures that %eax is a string")
+    (insn "# first, ensure that it's a pointer, not something unboxed")
     (mov "%eax" "%ebx")
     (insn "and $3, %ebx")               ; is there a way to do this
 					; without a register?
     (insn "jnz notstring")
-    ;; now fetch from it
+    (insn "# now, fetch its magic number")
     (dup)
     (mov "(%eax)" "%eax")
     (insn "xor $" string-magic ", %eax") ; can we use a memory operand?
     (insn "jnz notstring")
-    (pop)))
+    (pop)
+    (insn "ret")))
+;; Emit code to ensure that %eax is a string
+(define ensure-string (lambda () (insn "call ensure_string")))
 ;; Emit code to pull the string pointer and count out of a string
 ;; being pointed to and push them on the abstract stack
 (define extract-string
@@ -371,6 +375,7 @@
     (string-error-routine)
     (report-error)
     (newline-string-code)
+    (ensure-string-code)
     (global-label "main")
     (body)
     (mov "$0" "%eax")                   ; return code
