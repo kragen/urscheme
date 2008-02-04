@@ -168,7 +168,6 @@
 (define rodata (lambda () (insn ".section .rodata")))
 (define text (lambda () (insn ".text")))
 (define label (lambda (label) (emit label ":")))
-(define ascii (lambda (string) (insn ".ascii " (asm-represent-string string))))
 
 ;; define a .globl label
 (define global-label
@@ -210,6 +209,7 @@
   (lambda (string)
     (string-concatenate "\"" (string-concatenate (backslashify string) "\""))))
 
+(define ascii (lambda (string) (insn ".ascii " (asm-represent-string string))))
 
 
 ;;; Stack Machine Primitives
