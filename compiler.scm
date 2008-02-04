@@ -330,6 +330,11 @@
         (begin
           (compile-expr (car args))
           (+ 1 (compile-args (cdr args)))))))
+;; compile a toplevel expression, discarding result
+(define compile-toplevel
+  (lambda (expr)
+    (begin (compile-expr expr)
+           (pop))))
 
 
 ;;; Main Program
@@ -340,14 +345,13 @@
     (report-error)
     (global-label "main")
     (body)
-    (pop)
     (mov "$0" "%eax")                   ; return code
     (insn "ret")))
 
 (define my-body
   (lambda ()
     (begin
-      (compile-expr '(display "hello, world\n")))))
-
+      (compile-toplevel '(display "hello, world\n"))
+      (compile-toplevel '(display "goodbye, world\n")))))
 
 (compile-program my-body)
