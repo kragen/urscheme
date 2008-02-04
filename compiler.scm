@@ -252,7 +252,7 @@
 
 (define string-error-routine
   (lambda ()
-    (string-error-routine-2 (constant-string "type error: not a string"))))
+    (string-error-routine-2 (constant-string "type error: not a string\n"))))
 (define string-error-routine-2
   (lambda (errlabel)
     (label "notstring")
