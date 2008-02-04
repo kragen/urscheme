@@ -14,8 +14,8 @@
 ;;   integer?, char?
 ;; - eq? works for both chars and symbols
 ;; - if, lambda (with fixed numbers of arguments or with a single
-;;   argument that gets bound to the argument list (lambda x y (...))
-;;   and a single body expression)
+;;   argument that gets bound to the argument list (lambda <var>
+;;   <body>) and a single body expression)
 ;; - begin
 ;; - variables, with lexical scope and set!
 ;; - top-level define of a variable (not a function)
@@ -38,7 +38,7 @@
 ;; - display, for strings
 ;; - string constants
 ;; - newline
-;; - begin
+;; - begin, if
 ;; - booleans
 ;; - if
 ;; - recursive procedure calls
@@ -492,6 +492,7 @@
     (cmpl (const (number-to-string false-value)) tos)
     (pop)
     (je label)))
+
 
 ;;; Compilation
 (define compile-var-2
