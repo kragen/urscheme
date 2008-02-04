@@ -3,7 +3,9 @@
 
 ;; I think this is nearly the smallest subset of R5RS Scheme that it's
 ;; practical to write a Scheme compiler in, and I've tried to keep
-;; this implementation of it as simple as I can stand.
+;; this implementation of it as simple as I can stand.  I kind of feel
+;; that someone more adept would be having more success at keeping it
+;; simple, but hey, it's my first compiler.
 
 
 ;;; Implementation planned:
@@ -39,6 +41,7 @@
 ;; - begin
 ;; - booleans
 ;; - if
+;; - recursive procedure calls
 
 ;;; Not implemented:
 ;; - call/cc, dynamic-wind
@@ -88,24 +91,15 @@
 ;; error routine if the type test fails, which will exit the program.
 ;; I'll add more graceful exits later.
 
-;; The calling convention for subroutines is troubling me.  Avoiding
-;; register allocation means, I think, that they need to store their
-;; arguments in memory.  Perhaps a "local context pointer" register
-;; (%ebp? That's what it's for...) can point to the current local
-;; variable context, and local variable references can be compiled
-;; into indices into that context.  To eventually permit tail-calls
-;; (as well as to avoid extra unnecessary code) callees should clean
-;; up their own stack frames.  How should closures work?  The caller
-;; could load a parent context pointer into some other register or
-;; memory location, but maybe something better would be to use one of
-;; the indirect-threading or direct-threading strategies from Forth.
-
 ;;; Basic Lisp Stuff
 ;; To build up the spartan language implemented by the compiler to a
 ;; level where you can actually program in it.  Of course these mostly
 ;; exist in standard Scheme, but I thought it would be easier to write
 ;; them in Scheme rather than assembly in order to get the compiler to
 ;; the point where it could bootstrap itself.
+
+(define double (lambda (val) (+ val val)))
+(define quadruple (lambda (val) (double (double val))))
 
 (define lst (lambda args args))         ; identical to standard "list"
 (define list-length                     ; identical to standard "length"
@@ -209,14 +203,20 @@
 ;; Registers:
 (define eax "%eax")  (define ebx "%ebx")  
 (define ecx "%ecx")  (define edx "%edx")
+(define ebp "%ebp")  (define esp "%esp")
 
+;; x86 addressing modes:
 (define const (lambda (x) (lst "$" x)))
 (define indirect (lambda (x) (lst "(" x ")")))
+(define offset 
+  (lambda (x offset) (lst (number-to-string offset) (indirect x))))
+(define absolute (lambda (x) (lst "*" x)))
+;; Use this one inside of "indirect" or "offset".
+(define index-register
+  (lambda (base index size) (lst base "," index "," size)))
 
 (define syscall (lambda () (int (const "0x80"))))
 
-(define offset 
-  (lambda (x offset) (lst (number-to-string offset) (indirect x))))
 
 ;; Other stuff for basic asm emission.
 (define rodata (lambda () (insn ".section .rodata")))
@@ -285,6 +285,95 @@
 ;; dup: Emit code to copy top of stack.
 (define dup (lambda () (push tos)))
 
+;;; Procedure calls.
+;; Procedure values are 8 bytes:
+;; - 4 bytes: procedure magic number 0xca11ab1e
+;; - 4 bytes: pointer to procedure machine code
+;; At some point I'll have to add a context pointer.
+;; 
+;; The number of arguments is passed in %eax; on the machine stack is
+;; the return address, with the arguments underneath it.  (XXX
+;; Currently they're in the wrong order.)  Callee saves %ebp and pops
+;; their own arguments off the stack.  The prologue points %ebp at the
+;; arguments.  Return value goes in %eax.
+(define procedure-magic "0xca11ab1e")
+(define ensure-procedure
+  (lambda ()
+    (begin
+      (comment "make sure it's not boxed")
+      (test (const "3") tos)
+      (jnz "not_procedure")
+      (comment "now test its magic number")
+      (cmpl (const procedure-magic) (indirect tos))
+      (jnz "not_procedure"))))
+(define compile-apply
+  (lambda (nargs)
+    (begin
+      (ensure-procedure)
+      (mov (offset tos 4) ebx)            ; address of actual procedure
+      (mov (const (number-to-string nargs)) tos)
+      (call (absolute ebx)))))
+(define compile-procedure-prologue
+  (lambda (nargs)
+    (begin
+      (cmpl (const (number-to-string nargs)) tos)
+      (jnz "argument_count_wrong")
+      (lea (offset (index-register esp tos 4) 4) ebx) ; desired %esp on return
+      (push ebx)                        ; push restored %esp on stack
+      (mov ebp tos)                     ; save old %ebp --- in %eax!
+      (lea (offset esp 8) ebp))))       ; 8 bytes to skip saved %ebx and %eip
+(define compile-procedure-epilogue
+  (lambda ()
+    (begin
+      (pop-asm ebp) ; return val in %eax has pushed saved %ebp onto stack
+      (pop-asm ebx)                     ; value to restore %esp to
+      (pop-asm edx)                     ; saved return address
+      (mov ebx esp)
+      (jmp (absolute edx)))))           ; return via indirect jump
+
+(define not-procedure-routine-2
+  (lambda (errlabel)
+    (begin
+      (label "not_procedure")
+      (comment "error handling when you call something not callable")
+      (mov (const errlabel) tos)
+      (jmp "report_error"))))
+(define not-procedure-routine
+  (lambda ()
+    (not-procedure-routine-2 (constant-string "type error: not a procedure\n"))))
+(define argument-count-wrong
+  (lambda ()
+    ((lambda (errlabel)
+       (begin
+         (label "argument_count_wrong")
+         (mov (const errlabel) tos)
+         (jmp "report_error")))
+     (constant-string "error: wrong number of arguments\n"))))
+
+(define built-in-procedure-2
+  (lambda (labelname nargs body bodylabel)
+    (begin
+      (rodatum labelname)
+      (insn ".int " procedure-magic)
+      (insn ".int " bodylabel)
+      (text)
+      (label bodylabel)
+      (compile-procedure-prologue nargs)
+      (body)
+      (compile-procedure-epilogue)))) ; maybe we should just centralize
+                                      ; that and jump to it? :)
+;; Define a built-in procedure so we can refer to it by label and
+;; push-const that label, then expect to be able to compile-apply to
+;; it later.
+(define built-in-procedure
+  (lambda (labelname nargs body)
+    (built-in-procedure-2 labelname nargs body (new-label))))
+
+;; Emit code to fetch the Nth argument of the innermost procedure.
+(define get-procedure-arg
+  (lambda (n)
+    (push tos)
+    (mov (offset ebp (quadruple n)) tos)))
 
 ;;; Strings (on the target)
 ;; A string consists of the following, contiguous in memory:
@@ -360,6 +449,23 @@
     (rodatum "newline_string")
     (constant-string "\n")))
 
+;; Emit code for procedure versions of display and newline
+(define some-basic-procedures
+  (lambda ()
+    (begin
+      (built-in-procedure "display" 1 
+                          (lambda () (begin
+                                       (get-procedure-arg 0)
+                                       (target-display))))
+      (built-in-procedure "newline" 0 target-newline))))
+(define apply-built-in-by-label
+  (lambda (label nargs)
+    (lambda ()
+      (push-const label)
+      (compile-apply nargs))))
+(define display-by-label (apply-built-in-by-label "display" 1))
+(define newline-by-label (apply-built-in-by-label "newline" 0))
+
 ;; Emit the code for the normal error-reporting routine
 (define report-error
   (lambda ()
@@ -377,8 +483,7 @@
 
 ;;; Booleans
 (define enum-tag 2)
-(define double (lambda (val) (+ val val)))
-(define tagshift (lambda (val) (double (double val))))
+(define tagshift quadruple)
 (define nil-value (+ enum-tag (tagshift 256)))
 (define true-value (+ enum-tag (tagshift 257)))
 (define false-value (+ enum-tag (tagshift 258)))
@@ -453,15 +558,18 @@
 ;;; Main Program
 
 (define basic-env 
-  (lst (cons 'display target-display)
-       (cons 'newline target-newline)))
+  (lst (cons 'display display-by-label)
+       (cons 'newline newline-by-label)))
 
 (define compile-program
   (lambda (body)
     (string-error-routine)
+    (not-procedure-routine)
+    (argument-count-wrong)
     (report-error)
     (newline-string-code)
     (ensure-string-code)
+    (some-basic-procedures)
     (global-label "main")
     (body)
     (mov (const 0) eax)                 ; return code
