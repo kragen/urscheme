@@ -238,6 +238,7 @@
 (define constant-string-2
   (lambda (contents labelname)
     (rodata)
+    (insn ".align 4")                   ; so pointers end in 00!
     (label labelname)
     (insn ".int " string-magic)
     (insn ".int "(number-to-string (string-length contents)))
