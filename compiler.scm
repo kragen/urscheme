@@ -225,8 +225,8 @@
 ;; As explained earlier, there's an "abstract stack" that includes
 ;; %eax as well as the x86 stack.
 
-;; push_const: Emit code to push a constant onto the abstract stack
-(define push_const
+;; push-const: Emit code to push a constant onto the abstract stack
+(define push-const
   (lambda (const)
     (insn "push %eax")
     (mov const "%eax")))
@@ -304,7 +304,7 @@
 ;; Emit code to output a newline.
 (define target-newline
   (lambda ()
-    (push_const "$newline_string")
+    (push-const "$newline_string")
     (target-display)))
 (define newline-string-code
   (lambda ()
@@ -320,7 +320,7 @@
     (mov "$1" "%eax")                   ; __NR_exit
     (insn "int $0x80")))                ; make system call to exit
 
-(define compile-literal-string-2 (lambda (label) (push_const (lst "$" label))))
+(define compile-literal-string-2 (lambda (label) (push-const (lst "$" label))))
 (define compile-literal-string
   (lambda (contents)
     (compile-literal-string-2 (constant-string contents))))
@@ -339,7 +339,7 @@
            (pop))))
 (define compile-begin
   (lambda (rands)
-    (if (null? rands) (push_const "$31") ; XXX do something reasonable
+    (if (null? rands) (push-const "$31") ; XXX do something reasonable
         (if (null? (cdr rands)) (compile-expr (car rands))
             (begin (compile-discarding (car rands))
                    (compile-begin (cdr rands)))))))
