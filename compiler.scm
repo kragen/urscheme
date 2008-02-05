@@ -597,12 +597,14 @@
 
 ;;; Booleans and other misc. types
 (define enum-tag 2)
-(define nil-value (+ enum-tag (tagshift 256)))
-(define true-value (+ enum-tag (tagshift 257)))
-(define false-value (+ enum-tag (tagshift 258)))
+(define enum-value 
+  (lambda (offset) (number-to-string (+ enum-tag (tagshift offset)))))
+(define nil-value (enum-value 256))
+(define true-value (enum-value 257))
+(define false-value (enum-value 258))
 (define jump-if-false
   (lambda (label)
-    (cmpl (const (number-to-string false-value)) tos)
+    (cmpl (const false-value) tos)
     (pop)
     (je label)))
 
@@ -614,10 +616,10 @@
       (asm-pop ebx)
       (cmpl ebx tos)
       (je label1)
-      (mov (const (number-to-string false-value)) tos)
+      (mov (const false-value) tos)
       (jmp label2)
       (label label1)
-      (mov (const (number-to-string true-value)) tos)
+      (mov (const true-value) tos)
       (label label2)) (new-label) (new-label))))
 
 ;;; Compilation
@@ -628,9 +630,7 @@
   (lambda (var env)
     (compile-var-2 (lookup var env) var)))
 (define compile-literal-boolean
-  (lambda (b env) (push-const (number-to-string (if b 
-                                                    true-value
-                                                    false-value)))))
+  (lambda (b env) (push-const (if b true-value false-value))))
 (define compile-literal-integer
   (lambda (int env) (push-const (number-to-string (tagged-integer int)))))
 ;; compile an expression, discarding result, e.g. for toplevel
