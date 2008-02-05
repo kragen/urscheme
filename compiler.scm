@@ -30,11 +30,13 @@
 ;; - symbol?, null?, eq?, boolean?, pair?, string?, procedure?,
 ;;   integer?, char?
 ;; - eq? works for both chars and symbols
-;; - if, lambda (with fixed numbers of arguments or with a single
-;;   argument that gets bound to the argument list (lambda <var>
-;;   <body>) and a single body expression)
+;; - if (with three arguments)
+;; - lambda (with fixed numbers of arguments or with a single argument
+;;   that gets bound to the argument list (lambda <var> <body>) and a
+;;   single body expression)
 ;; - begin
-;; - variables, with lexical scope and set!
+;; - global variables, with set!
+;; - local variables, with lexical scope and set!
 ;; - top-level define of a variable (not a function)
 ;; - read, for proper lists, symbols, strings, integers, #t and #f,
 ;;   and '
@@ -53,14 +55,15 @@
 ;; of small integers.
 
 ;;; Implemented:
-;; - display, for strings
+;; - display, for strings, and newline
 ;; - string and numeric constants
-;; - newline
-;; - begin, if
-;; - booleans
+;; - begin
 ;; - if
+;; - booleans
 ;; - recursive procedure calls
 ;; - some arithmetic: +, -, and = for integers
+;; - lambda, with fixed numbers of arguments, without nesting
+;; - local variables
 
 ;;; Next up, after some simplifications:
 ;; - um, probably variables.  Which will involve a revamp of the
@@ -357,7 +360,7 @@
 (add-to-header (lambda ()
     (begin
       (label "ensure_procedure")
-      (comment "make sure procedure value is not boxed")
+      (comment "make sure procedure value is not unboxed")
       (test (const "3") tos)
       (jnz "not_procedure")
       (comment "now test its magic number")
@@ -756,6 +759,27 @@
                                (+ (fibonacci (- arg0 1))
                                   (fibonacci (- arg0 2)))))
                         basic-env)))))
+
+; I want to be able to write
+; (compile-toplevel-define
+;  'fibonacci
+;  '(lambda (arg0) (if (= arg0 0) (begin (display "*") 1 )
+;                      (if (= arg0 1) (begin (display "+") 1)
+;                          (+ (fibonacci (- arg0 1))
+;                             (fibonacci (- arg0 2))))))
+;  basic-env)
+; which should do the following:
+; - come up with some label for the procedure body
+; - compile a jump around the procedure body
+; - use built-in-procedure to compile the procedure body
+; - create a global variable called "fibonacci"
+; - store the procedure value in it
+; There are three sticky bits, both concerning creating the global variable.
+; - 'fibonacci is a symbol, and "fibonacci" is a string.  So I need
+;   symbol->string?
+; - Moreover, 'fibonacci might happen to not be a symbol whose string is a 
+;   valid label in assembly.  So maybe symbol->string won't really help.
+; - At the moment, global variables have to appear in basic-env.
 
 (define compile-program
   (lambda (body)
