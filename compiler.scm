@@ -483,11 +483,12 @@
 ;; pointer underneath it, outputs the string.
 (define write_2
   (lambda ()
-    (mov tos edx)                       ; byte count in arg 3
-    (asm-pop ecx)                       ; byte string in arg 2
-    (mov (const "4") eax)               ; __NR_write
-    (mov (const "1") ebx)               ; fd 1: stdout
-    (syscall)))                         ; return value is in %eax
+    (begin
+      (mov tos edx)                     ; byte count in arg 3
+      (asm-pop ecx)                     ; byte string in arg 2
+      (mov (const "4") eax)             ; __NR_write
+      (mov (const "1") ebx)             ; fd 1: stdout
+      (syscall))))                      ; return value is in %eax
 
 ;; Emit code to output a string.
 ;; XXX this needs to have a reasonable return value, and it doesn't!
@@ -495,8 +496,9 @@
 ;; Emit code to output a newline.
 (define target-newline
   (lambda ()
-    (push-const "newline_string")
-    (target-display)))
+    (begin
+      (push-const "newline_string")
+      (target-display))))
 (add-to-header (lambda () (rodatum "newline_string") (constant-string "\n")))
 
 ;; Emit code for procedure versions of display and newline
