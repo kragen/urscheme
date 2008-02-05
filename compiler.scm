@@ -1,9 +1,22 @@
 ;;; A compiler from a subset of R5RS Scheme to x86 assembly, written in itself.
-;; Kragen Javier Sitaker, 2008-01-03
+;; Kragen Javier Sitaker, 2008-01-03 and 04
 
 ;; From the Scheme 9 From Outer Space page:
 ;; Why in earth write another half-baked implementation of Scheme?
 ;; It is better than getting drunk at a bar.
+
+;; I had been working on this for a couple of days now when I ran across
+;http://www.iro.umontreal.ca/%7Eboucherd/mslug/meetings/20041020/minutes-en.html
+;; which says:
+;;     How to write a simple Scheme to C compiler, in Scheme. In only
+;;     90 minutes! And although not supporting the whole Scheme
+;;     standard, the compiler supports fully optimized proper tail
+;;     calls, continuations, and (of course) full closures.
+;; I was feeling pretty inferior until I started watching the video of
+;; the talk, in which Marc Feeley, the speaker, begins by explaining:
+;;     So, uh, let me clarify the, uh, the title of the presentation!
+;;     The 90 minutes is not the time to write the compiler, but to
+;;     explain it.
 
 ;; I think this is nearly the smallest subset of R5RS Scheme that it's
 ;; practical to write a Scheme compiler in, and I've tried to keep
@@ -78,11 +91,6 @@
 ;; - multiple-value returns
 ;; - scheme-report-environment, null-environment
 
-;; cute hex magic numbers: aba5ed? ab5ce55? acce55? add1ed? affab1e?
-;; a1fa1fa? bade? ba5eba11?  ba5e1e55? befa115? b1abbed? b1e55ed?
-;; b1a2ed? facade? face1e55? 1abe1ed? 5a1eab1e? 5eceded? 5eed1e55?
-;; 5e1f1e55?
-
 ;;; Design notes:
 
 ;; The strategy taken herein is to use the x86 as a stack machine
@@ -91,6 +99,15 @@
 ;; items.  This eliminates any need to allocate registers; for
 ;; ordinary expressions, we just need to convert the Lisp code to RPN
 ;; and glue together the instruction sequences that comprise them.
+
+;; We also use the ordinary x86 stack as a call stack.  See the
+;; section ";;; Procedure calls" for details.  This would pose
+;; problems for call/cc if I were going to implement it, but I'm not,
+;; so I don't care.  You might think it would cause problems for
+;; closures of indefinite extent, but the "Implementation of Lua 5.0"
+;; paper explains a fairly straightforward way of implementing
+;; closures, called "upvalues", that still lets us stack-allocate
+;; almost all of the time.
 
 ;; Pointers are tagged in the low bits in more or less the usual way:
 ;; - low bits binary 00: an actual pointer, to an object with an
@@ -107,6 +124,8 @@
 ;; testing the magic number.  In the usual case, we'll jump to an
 ;; error routine if the type test fails, which will exit the program.
 ;; I'll add more graceful exits later.
+
+
 
 ;;; Basic Lisp Stuff
 ;; To build up the spartan language implemented by the compiler to a
