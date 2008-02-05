@@ -1,7 +1,7 @@
 # Use any of these:
 #scheme = guile -s
-#scheme = mzscheme -r
-scheme = tinyscheme
+scheme = mzscheme -r
+#scheme = tinyscheme
 
 # This -nostdlib flag is optional; it just makes a smaller output
 # file.  (It's unusual to have an assembly file that can compile both
