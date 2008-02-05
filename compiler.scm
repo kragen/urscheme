@@ -86,12 +86,12 @@
 
 ;;; Design notes:
 
-;; The strategy taken herein is to use the x86 as a stack machine.
-;; %eax contains the top of stack; %esp points at a stack in memory
-;; containing the rest of the stack items.  This eliminates any need
-;; to allocate registers; for ordinary expressions, we just need to
-;; convert the Lisp code to RPN and glue together the instruction
-;; sequences that comprise them.
+;; The strategy taken herein is to use the x86 as a stack machine
+;; (within each function, anyway).  %eax contains the top of stack;
+;; %esp points at a stack in memory containing the rest of the stack
+;; items.  This eliminates any need to allocate registers; for
+;; ordinary expressions, we just need to convert the Lisp code to RPN
+;; and glue together the instruction sequences that comprise them.
 
 ;; Pointers are tagged in the low bits in more or less the usual way:
 ;; - low bits binary 00: an actual pointer, to an object with an
@@ -311,16 +311,17 @@
 ;; - 4 bytes: pointer to procedure machine code
 ;; At some point I'll have to add a context pointer.
 ;; 
-;; The number of arguments is passed in %eax; on the machine stack is
-;; the return address, with the arguments underneath it.  (XXX
-;; Currently they're in the wrong order.)  Callee saves %ebp and pops
-;; their own arguments off the stack.  The prologue points %ebp at the
-;; arguments.  Return value goes in %eax.
+;; The number of arguments is passed in %edx; on the machine stack is
+;; the return address, with the arguments underneath it; the address
+;; of the procedure value that was being called is in %eax.  (XXX
+;; Currently the arguments are in the wrong order.)  Callee saves %ebp
+;; and pops their own arguments off the stack.  The prologue points
+;; %ebp at the arguments.  Return value goes in %eax.
 (define procedure-magic "0xca11ab1e")
 (define ensure-procedure
   (lambda ()
     (begin
-      (comment "make sure it's not boxed")
+      (comment "make sure procedure value is not boxed")
       (test (const "3") tos)
       (jnz "not_procedure")
       (comment "now test its magic number")
@@ -330,16 +331,18 @@
   (lambda (nargs)
     (begin
       (ensure-procedure)
-      (mov (offset tos 4) ebx)            ; address of actual procedure
-      (mov (const (number-to-string nargs)) tos)
+      (mov (offset tos 4) ebx)          ; address of actual procedure
+      (mov (const (number-to-string nargs)) edx)
       (call (absolute ebx)))))
 (define compile-procedure-prologue
   (lambda (nargs)
     (begin
-      (cmpl (const (number-to-string nargs)) tos)
+      (cmpl (const (number-to-string nargs)) edx)
       (jnz "argument_count_wrong")
-      (lea (offset (index-register esp tos 4) 4) ebx) ; desired %esp on return
+      (lea (offset (index-register esp edx 4) 4) ebx) ; desired %esp on return
       (asm-push ebx)                    ; push restored %esp on stack
+      ;; At this point, if we were a closure, we would be doing
+      ;; something clever with the procedure value pointer in %eax.
       (mov ebp tos)                     ; save old %ebp --- in %eax!
       (lea (offset esp 8) ebp))))       ; 8 bytes to skip saved %ebx and %eip
 (define compile-procedure-epilogue
