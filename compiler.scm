@@ -664,6 +664,6 @@
                                   (newline)
                                   (display "indeed")) basic-env)
       (compile-discarding '(newline) basic-env)
-      (compile-discarding '(fibonacci 7) basic-env))))
+      (compile-discarding '(begin (fibonacci 7) (newline)) basic-env))))
 
 (compile-program my-body)
