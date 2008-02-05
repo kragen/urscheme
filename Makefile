@@ -2,6 +2,13 @@
 #scheme = guile -s
 scheme = mzscheme -r
 #scheme = tinyscheme
+#scheme = scm -f
+#scheme = bigloo -i
+#scheme = elk -l
+
+# Unfortunately RScheme's interpreter "rs" outputs warnings to stdout,
+# and it emits a warning when we define the variable "text", so I'm
+# not going to bother to make this work with RScheme.
 
 # This -nostdlib flag is optional; it just makes a smaller output
 # file.  (It's unusual to have an assembly file that can compile both
