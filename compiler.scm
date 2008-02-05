@@ -311,6 +311,7 @@
     (insn ".align 4")       ; align pointers so they end in binary 00!
     (label labelname)))
 
+(define compile-word (lambda (contents) (insn ".int " contents)))
 
 ;;; Stack Machine Primitives
 ;; As explained earlier, there's an "abstract stack" that includes
@@ -409,8 +410,8 @@
   (lambda (labelname nargs body bodylabel)
     (begin
       (rodatum labelname)
-      (insn ".int " procedure-magic)
-      (insn ".int " bodylabel)
+      (compile-word procedure-magic)
+      (compile-word bodylabel)
       (text)
       (label bodylabel)
       (compile-procedure-prologue nargs)
@@ -440,8 +441,8 @@
 (define constant-string-2
   (lambda (contents labelname)
     (rodatum labelname)
-    (insn ".int " string-magic)
-    (insn ".int " (number-to-string (string-length contents)))
+    (compile-word string-magic)
+    (compile-word (number-to-string (string-length contents)))
     (ascii contents)
     (text)
     labelname))
