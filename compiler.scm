@@ -305,6 +305,14 @@
 ;; dup: Emit code to copy top of stack.
 (define dup (lambda () (asm-push tos)))
 
+;;; Some convenience stuff for the structure of the program.
+
+(define stuff-to-put-in-the-header (lambda () #f))
+(define concatenate-thunks (lambda (a b) (lambda () (begin (a) (b)))))
+(define add-to-header 
+  (lambda (proc) (set! stuff-to-put-in-the-header 
+                       (concatenate-thunks stuff-to-put-in-the-header proc))))
+
 ;;; Procedure calls.
 ;; Procedure values are 8 bytes:
 ;; - 4 bytes: procedure magic number 0xca11ab1e
@@ -318,8 +326,7 @@
 ;; and pops their own arguments off the stack.  The prologue points
 ;; %ebp at the arguments.  Return value goes in %eax.
 (define procedure-magic "0xca11ab1e")
-(define ensure-procedure-code
-  (lambda ()
+(add-to-header (lambda ()
     (begin
       (label "ensure_procedure")
       (comment "make sure procedure value is not boxed")
@@ -364,11 +371,9 @@
       (comment "error handling when you call something not callable")
       (mov (const errlabel) tos)
       (jmp "report_error"))))
-(define not-procedure-routine
-  (lambda ()
+(add-to-header (lambda ()
     (not-procedure-routine-2 (constant-string "type error: not a procedure\n"))))
-(define argument-count-wrong
-  (lambda ()
+(add-to-header (lambda ()
     ((lambda (errlabel)
        (begin
          (label "argument_count_wrong")
@@ -421,17 +426,15 @@
   (lambda (contents)
     (constant-string-2 contents (new-label))))
 
-(define string-error-routine
-  (lambda ()
-    (string-error-routine-2 (constant-string "type error: not a string\n"))))
 (define string-error-routine-2
   (lambda (errlabel)
     (label "notstring")
     (mov (const errlabel) tos)
     (jmp "report_error")))
+(add-to-header (lambda ()
+    (string-error-routine-2 (constant-string "type error: not a string\n"))))
 
-(define ensure-string-code
-  (lambda ()
+(add-to-header (lambda ()
     (label "ensure_string")
     (comment "ensures that %eax is a string")
     (comment "first, ensure that it's a pointer, not something unboxed")
@@ -470,14 +473,10 @@
   (lambda ()
     (push-const "newline_string")
     (target-display)))
-(define newline-string-code
-  (lambda ()
-    (rodatum "newline_string")
-    (constant-string "\n")))
+(add-to-header (lambda () (rodatum "newline_string") (constant-string "\n")))
 
 ;; Emit code for procedure versions of display and newline
-(define some-basic-procedures
-  (lambda ()
+(add-to-header (lambda ()
     (begin
       (built-in-procedure "display" 1 
                           (lambda () (begin
@@ -498,8 +497,7 @@
 (define newline-by-label (apply-built-in-by-label "newline" 0))
 
 ;; Emit the code for the normal error-reporting routine
-(define report-error
-  (lambda ()
+(add-to-header (lambda ()
     (label "report_error")
     (target-display)                    ; print out whatever is in %eax
     (mov (const "1") ebx)               ; exit code of program
@@ -635,8 +633,7 @@
        (cons '+ integer-add)
        (cons '- integer-sub)))
 
-(define fibonacci-procedure
-  (lambda ()
+(add-to-header (lambda ()
     (built-in-procedure "fibonacci" 1 (lambda ()
         (compile-expr '(if (= arg0 0) (begin (display "*") 1 )
                            (if (= arg0 1) (begin (display "+") 1)
@@ -647,15 +644,7 @@
 (define compile-program
   (lambda (body)
     (begin
-      (string-error-routine)
-      (not-procedure-routine)
-      (argument-count-wrong)
-      (report-error)
-      (newline-string-code)
-      (ensure-string-code)
-      (ensure-procedure-code)
-      (some-basic-procedures)
-      (fibonacci-procedure)
+      (stuff-to-put-in-the-header)
 
       (global-label "_start")         ; allow compiling with -nostdlib
       (insn ".weak _start")     ; but also allow compiling with stdlib
