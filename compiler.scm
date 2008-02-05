@@ -513,12 +513,11 @@
                                        (get-procedure-arg 1)
                                        (target-eq?)))))))
 (define apply-built-in-by-label
-  (lambda (label nargs)
+  (lambda (label)
     (lambda ()
-      (push-const label)
-      (compile-apply nargs))))
-(define display-by-label (apply-built-in-by-label "display" 1))
-(define newline-by-label (apply-built-in-by-label "newline" 0))
+      (push-const label))))
+(define display-by-label (apply-built-in-by-label "display"))
+(define newline-by-label (apply-built-in-by-label "newline"))
 
 ;; Emit the code for the normal error-reporting routine
 (add-to-header (lambda ()
@@ -553,9 +552,12 @@
     (constant-string "type error: not an integer")
     (text)))
 (define ensure-integer (lambda () (call "ensure_integer")))
+(define assert-equal (lambda (a b) (if (= a b) #t (error "assert failed"))))
 (define integer-add
-  (lambda ()
-    (comment "integer add")
+  (lambda (rands env)
+    (comment "integer add operands")
+    (assert-equal 2 (compile-args rands env))
+    (comment "now execute integer add")
     (ensure-integer)
     (swap)
     (ensure-integer)
@@ -563,8 +565,10 @@
     (add ebx tos)
     (dec tos)))                         ; fix up tag
 (define integer-sub
-  (lambda ()
-    (comment "integer subtract")
+  (lambda (rands env)
+    (comment "integer subtract operands")
+    (assert-equal 2 (compile-args rands env))
+    (comment "now execute integer subtract")
     (ensure-integer)
     (swap)
     (ensure-integer)
@@ -638,12 +642,27 @@
         (compile-if-2 (car rands) (car (cdr rands)) (car (cdr (cdr rands)))
                       (new-label) (new-label) env)
         (error "if arguments length != 3"))))
+(define compile-application
+  (lambda (rator env nargs)
+    (begin
+      (comment "get the function")
+      (compile-expr rator env)
+      (comment "now apply the function")
+      (compile-apply nargs))))
+(define special-syntax-list
+  (lst (cons 'begin compile-begin)
+       (cons 'if compile-if)
+       (cons '+ integer-add)
+       (cons '- integer-sub)))
+(define compile-ration-2
+  (lambda (rator rands env handlers)
+    (if (null? handlers)            
+        (compile-application rator env (compile-args rands env))
+        (if (eq? rator (caar handlers)) ((cdar handlers) rands env)
+            (compile-ration-2 rator rands env (cdr handlers))))))
 (define compile-ration
   (lambda (rator rands env)
-    (if (eq? rator 'begin) (compile-begin rands env)
-        (if (eq? rator 'if) (compile-if rands env)
-            (begin (compile-args rands env)
-                   (compile-expr rator env))))))
+    (compile-ration-2 rator rands env special-syntax-list)))
 (define compile-pair
   (lambda (expr env) (compile-ration (car expr) (cdr expr) env)))
 (define compilation-expr-list
@@ -673,11 +692,9 @@
   (lst (cons 'display display-by-label)
        (cons 'newline newline-by-label)
        (cons 'arg0 (lambda () (get-procedure-arg 0)))
-       (cons 'fibonacci (apply-built-in-by-label "fibonacci" 1))
-       (cons '= (apply-built-in-by-label "target_eq" 2))
-       (cons 'eq? (apply-built-in-by-label "target_eq" 2))
-       (cons '+ integer-add)
-       (cons '- integer-sub)))
+       (cons 'fibonacci (apply-built-in-by-label "fibonacci"))
+       (cons '= (apply-built-in-by-label "target_eq"))
+       (cons 'eq? (apply-built-in-by-label "target_eq"))))
 
 (add-to-header (lambda ()
     (built-in-procedure "fibonacci" 1 (lambda ()
