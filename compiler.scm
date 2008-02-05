@@ -652,10 +652,16 @@
       (ensure-string-code)
       (some-basic-procedures)
       (fibonacci-procedure)
-      (global-label "main")
+
+      (global-label "_start")         ; allow compiling with -nostdlib
+      (insn ".weak _start")     ; but also allow compiling with stdlib
+      (global-label "main")     ; with entry point of main, not _start
+
       (body)
-      (mov (const 0) eax)         ; return code of main() goes in %eax
-      (ret))))
+
+      (mov (const 1) eax)               ; __NR_exit
+      (mov (const 0) ebx)               ; exit code
+      (syscall))))
 
 (define my-body
   (lambda ()
