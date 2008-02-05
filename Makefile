@@ -1,3 +1,4 @@
+# Use any of these:
 #scheme = guile -s
 #scheme = mzscheme -r
 scheme = tinyscheme
