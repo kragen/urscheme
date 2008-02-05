@@ -143,8 +143,10 @@
 (define lookup                          ; identical to standard "assq"
   (lambda (obj alist)
     (if (null? alist) #f
-        (if (eq? obj (car (car alist))) (car alist)
+        (if (eq? obj (caar alist)) (car alist)
             (lookup obj (cdr alist))))))
+(define caar (lambda (val) (car (car val))))
+(define cdar (lambda (val) (cdr (car val))))
 
 ;; string manipulation (part of Basic Lisp Stuff)
 (define string-concatenate-3
@@ -653,7 +655,7 @@
 (define compile-expr-2
   (lambda (expr env handlers)
     (if (null? handlers) (error expr)
-        (if ((car (car handlers)) expr) ((cdr (car handlers)) expr env)
+        (if ((caar handlers) expr) ((cdar handlers) expr env)
             (compile-expr-2 expr env (cdr handlers))))))
 (define compile-expr
   (lambda (expr env) (compile-expr-2 expr env compilation-expr-list)))
