@@ -376,7 +376,8 @@
     (begin
       (cmpl (const (number-to-string nargs)) edx)
       (jnz "argument_count_wrong")
-      (lea (offset (index-register esp edx 4) 4) ebx) ; desired %esp on return
+      (comment "compute desired %esp on return in %ebx and push it")
+      (lea (offset (index-register esp edx 4) 4) ebx)
       (asm-push ebx)                    ; push restored %esp on stack
       ;; At this point, if we were a closure, we would be doing
       ;; something clever with the procedure value pointer in %eax.
@@ -665,9 +666,9 @@
 (define compile-application
   (lambda (rator env nargs)
     (begin
-      (comment "get the function")
+      (comment "get the procedure")
       (compile-expr rator env)
-      (comment "now apply the function")
+      (comment "now apply the procedure")
       (compile-apply nargs))))
 (define special-syntax-list
   (lst (cons 'begin compile-begin)
