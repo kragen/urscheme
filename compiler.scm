@@ -318,15 +318,18 @@
 ;; and pops their own arguments off the stack.  The prologue points
 ;; %ebp at the arguments.  Return value goes in %eax.
 (define procedure-magic "0xca11ab1e")
-(define ensure-procedure
+(define ensure-procedure-code
   (lambda ()
     (begin
+      (label "ensure_procedure")
       (comment "make sure procedure value is not boxed")
       (test (const "3") tos)
       (jnz "not_procedure")
       (comment "now test its magic number")
       (cmpl (const procedure-magic) (indirect tos))
-      (jnz "not_procedure"))))
+      (jnz "not_procedure")
+      (ret))))
+(define ensure-procedure (lambda () (call "ensure_procedure")))
 (define compile-apply
   (lambda (nargs)
     (begin
@@ -650,6 +653,7 @@
       (report-error)
       (newline-string-code)
       (ensure-string-code)
+      (ensure-procedure-code)
       (some-basic-procedures)
       (fibonacci-procedure)
 
