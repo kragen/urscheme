@@ -147,6 +147,7 @@
             (lookup obj (cdr alist))))))
 (define caar (lambda (val) (car (car val))))
 (define cdar (lambda (val) (cdr (car val))))
+(define cadr (lambda (val) (car (cdr val))))
 
 ;; string manipulation (part of Basic Lisp Stuff)
 (define string-concatenate-3
@@ -641,6 +642,18 @@
   (lambda (expr env)
     (begin (compile-expr expr env)
            (pop))))
+(define compile-lambda-2
+  (lambda (vars body env proclabel jumplabel)
+    (begin (comment "jump past the body of the lambda")
+           (jmp jumplabel)
+           (built-in-procedure proclabel (list-length vars) 
+                               (lambda () (compile-expr body env)))
+           (label jumplabel)
+           (push-const proclabel))))
+(define compile-lambda
+  (lambda (rands env) (begin (assert-equal (list-length rands) 2)
+                             (compile-lambda-2 (car rands) (cadr rands) env 
+                                               (new-label) (new-label)))))
 (define compile-begin
   (lambda (rands env)
     (if (null? rands) (push-const "31") ; XXX do something reasonable
@@ -673,6 +686,7 @@
 (define special-syntax-list
   (lst (cons 'begin compile-begin)
        (cons 'if compile-if)
+       (cons 'lambda compile-lambda)
        (cons '+ integer-add)
        (cons '- integer-sub)))
 (define compile-ration-2
@@ -755,6 +769,8 @@
   (lambda ()
     (begin
       (compile-toplevel-define "msg" "this is a message" basic-env)
+      (compile-discarding '((lambda (hi) (begin (display arg0) (newline)))
+                            "hi there") basic-env)
       (compile-discarding '(begin (display (if #t "hello" "goodbye"))
                                   (display ", world")
                                   (newline)
