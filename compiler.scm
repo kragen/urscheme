@@ -1,6 +1,10 @@
 ;;; A compiler from a subset of R5RS Scheme to x86 assembly, written in itself.
 ;; Kragen Javier Sitaker, 2008-01-03
 
+;; From the Scheme 9 From Outer Space page:
+;; Why in earth write another half-baked implementation of Scheme?
+;; It is better than getting drunk at a bar.
+
 ;; I think this is nearly the smallest subset of R5RS Scheme that it's
 ;; practical to write a Scheme compiler in, and I've tried to keep
 ;; this implementation of it as simple as I can stand.  I kind of feel
@@ -37,12 +41,14 @@
 
 ;;; Implemented:
 ;; - display, for strings
-;; - string constants
+;; - string and numeric constants
 ;; - newline
 ;; - begin, if
 ;; - booleans
 ;; - if
 ;; - recursive procedure calls
+;; - some arithmetic: +, -, and = for integers (albeit without
+;;   typechecks so far)
 
 ;;; Next up, after some simplifications:
 ;; - um, probably variables.  Which will involve a revamp of the
@@ -54,7 +60,6 @@
 ;; At that point, it will become possible to evaluate "define"
 ;; expressions, which means you can write programs that do something
 ;; interesting and are also readable.
-;; - basic arithmetic.
 
 ;;; Not implemented:
 ;; - call/cc, dynamic-wind
