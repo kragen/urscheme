@@ -260,7 +260,8 @@
 
 
 ;; Other stuff for basic asm emission.
-(define rodata (lambda () (insn ".section .rodata")))
+(define section (lambda (name) (insn ".section " name)))
+(define rodata (lambda () (section ".rodata")))
 (define text (lambda () (insn ".text")))
 (define label (lambda (label) (emit label ":")))
 
@@ -502,13 +503,30 @@
       (target-display))))
 (add-to-header (lambda () (rodatum "newline_string") (constant-string "\n")))
 
+;; Emit code to create a mutable labeled cell, for use as a global
+;; variable.
+(define compile-global-variable
+  (lambda (varlabel initial)
+    (begin
+      (section ".data")
+      (label varlabel)
+      (compile-word initial)
+      (text))))
+
+;; Emit code to fetch from a named global variable.
+(define fetch-global-variable
+  (lambda (varname)
+    (lambda ()
+      (asm-push tos) (mov (indirect varname) tos))))
+
 ;; Emit code for procedure versions of display and newline
 (add-to-header (lambda ()
     (begin
-      (built-in-procedure "display" 1 
+      (built-in-procedure "display_code" 1 
                           (lambda () (begin
                                        (get-procedure-arg 0)
                                        (target-display))))
+      (compile-global-variable "display" "display_code")
       (built-in-procedure "newline" 0 target-newline)
       (built-in-procedure "target_eq" 2 
                           (lambda () (begin
@@ -690,7 +708,7 @@
 ;;; Main Program
 
 (define basic-env 
-  (lst (cons 'display (apply-built-in-by-label "display"))
+  (lst (cons 'display (fetch-global-variable "display"))
        (cons 'newline (apply-built-in-by-label "newline"))
        (cons 'arg0 (lambda () (get-procedure-arg 0)))
        (cons 'fibonacci (apply-built-in-by-label "fibonacci"))
