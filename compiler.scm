@@ -502,7 +502,7 @@
 
 (define compile-literal-string-2 (lambda (label) (push-const label)))
 (define compile-literal-string
-  (lambda (contents)
+  (lambda (contents env)
     (compile-literal-string-2 (constant-string contents))))
 
 
@@ -555,11 +555,11 @@
   (lambda (var env)
     (compile-var-2 (lookup var env) var)))
 (define compile-literal-boolean
-  (lambda (b) (push-const (number-to-string (if b 
-                                                true-value
-                                                false-value)))))
+  (lambda (b env) (push-const (number-to-string (if b 
+                                                    true-value
+                                                    false-value)))))
 (define compile-literal-integer
-  (lambda (int) (push-const (number-to-string (tagged-integer int)))))
+  (lambda (int env) (push-const (number-to-string (tagged-integer int)))))
 ;; compile an expression, discarding result, e.g. for toplevel
 ;; expressions
 (define compile-discarding
@@ -596,14 +596,19 @@
                    (compile-expr rator env))))))
 (define compile-pair
   (lambda (expr env) (compile-ration (car expr) (cdr expr) env)))
+(define compilation-expr-list
+  (lst (cons pair? compile-pair)
+       (cons symbol? compile-var)
+       (cons string? compile-literal-string)
+       (cons boolean? compile-literal-boolean)
+       (cons integer? compile-literal-integer)))
+(define compile-expr-2
+  (lambda (expr env handlers)
+    (if (null? handlers) (error expr)
+        (if ((car (car handlers)) expr) ((cdr (car handlers)) expr env)
+            (compile-expr-2 expr env (cdr handlers))))))
 (define compile-expr
-  (lambda (expr env)
-    (if (pair? expr) (compile-pair expr env)
-        (if (symbol? expr) (compile-var expr env)
-            (if (string? expr) (compile-literal-string expr)
-                (if (boolean? expr) (compile-literal-boolean expr)
-                    (if (integer? expr) (compile-literal-integer expr)
-                    (error expr))))))))
+  (lambda (expr env) (compile-expr-2 expr env compilation-expr-list)))
 (define compile-args
   (lambda (args env)
     (if (null? args) 0
