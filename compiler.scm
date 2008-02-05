@@ -642,12 +642,19 @@
   (lambda (expr env)
     (begin (compile-expr expr env)
            (pop))))
+;; Construct an environment binding the local variables of the lambda
+;; to bits of code to fetch them.  Handles nesting very incorrectly.
+(define lambda-environment
+  (lambda (env vars idx)
+    (if (null? vars) env
+        (cons (cons (car vars) (lambda () (get-procedure-arg idx)))
+              (lambda-environment env (cdr vars) (+ idx 1))))))
 (define compile-lambda-2
   (lambda (vars body env proclabel jumplabel)
     (begin (comment "jump past the body of the lambda")
            (jmp jumplabel)
            (built-in-procedure proclabel (list-length vars) 
-                               (lambda () (compile-expr body env)))
+             (lambda () (compile-expr body (lambda-environment env vars 0))))
            (label jumplabel)
            (push-const proclabel))))
 (define compile-lambda
@@ -769,7 +776,7 @@
   (lambda ()
     (begin
       (compile-toplevel-define "msg" "this is a message" basic-env)
-      (compile-discarding '((lambda (hi) (begin (display arg0) (newline)))
+      (compile-discarding '((lambda (hi) (begin (display hi) (newline)))
                             "hi there") basic-env)
       (compile-discarding '(begin (display (if #t "hello" "goodbye"))
                                   (display ", world")
