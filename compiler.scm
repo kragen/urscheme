@@ -516,8 +516,6 @@
   (lambda (label)
     (lambda ()
       (push-const label))))
-(define display-by-label (apply-built-in-by-label "display"))
-(define newline-by-label (apply-built-in-by-label "newline"))
 
 ;; Emit the code for the normal error-reporting routine
 (add-to-header (lambda ()
@@ -689,8 +687,8 @@
 ;;; Main Program
 
 (define basic-env 
-  (lst (cons 'display display-by-label)
-       (cons 'newline newline-by-label)
+  (lst (cons 'display (apply-built-in-by-label "display"))
+       (cons 'newline (apply-built-in-by-label "newline"))
        (cons 'arg0 (lambda () (get-procedure-arg 0)))
        (cons 'fibonacci (apply-built-in-by-label "fibonacci"))
        (cons '= (apply-built-in-by-label "target_eq"))
