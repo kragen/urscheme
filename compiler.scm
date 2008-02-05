@@ -704,6 +704,16 @@
           (compile-expr (car args) env)
           (+ 1 (compile-args (cdr args) env))))))
 
+;; XXX the "name" here is an assembly label, not a symbol to refer to
+;; in the program
+(define compile-toplevel-define
+  (lambda (name body env)
+    (compile-global-variable name nil-value)
+    (comment "compute initial value for global variable")
+    (compile-expr body env)
+    (comment "initialize global variable with value")
+    (mov tos (indirect name))
+    (pop)))
 
 ;;; Main Program
 
@@ -713,7 +723,8 @@
        (cons 'arg0 (lambda () (get-procedure-arg 0)))
        (cons 'fibonacci (apply-built-in-by-label "fibonacci"))
        (cons '= (apply-built-in-by-label "target_eq"))
-       (cons 'eq? (apply-built-in-by-label "target_eq"))))
+       (cons 'eq? (apply-built-in-by-label "target_eq"))
+       (cons 'msg (fetch-global-variable "msg"))))
 
 (add-to-header (lambda ()
     (built-in-procedure "fibonacci" 1 (lambda ()
@@ -741,11 +752,13 @@
 (define my-body
   (lambda ()
     (begin
+      (compile-toplevel-define "msg" "this is a message" basic-env)
       (compile-discarding '(begin (display (if #t "hello" "goodbye"))
                                   (display ", world")
                                   (newline)
                                   (display "indeed")) basic-env)
       (compile-discarding '(newline) basic-env)
-      (compile-discarding '(begin (fibonacci 7) (newline)) basic-env))))
+      (compile-discarding '(begin (fibonacci 7) (newline)) basic-env)
+      (compile-discarding '(display msg) basic-env))))
 
 (compile-program my-body)
