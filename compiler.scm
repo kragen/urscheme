@@ -201,21 +201,21 @@
 (define comment (lambda (comment) (insn "# " comment)))
 
 ;; Emit a two-argument instruction
-(define 2arg 
+(define twoarg 
   (lambda (mnemonic) (lambda (src dest) (insn mnemonic " " src ", " dest))))
 ;; For example:
-(define mov (2arg "mov"))   (define test (2arg "test"))
-(define cmpl (2arg "cmpl")) (define lea (2arg "lea"))
-(define add (2arg "add"))   (define sub (2arg "sub"))
-(define xchg (2arg "xchg"))
+(define mov (twoarg "mov"))   (define test (twoarg "test"))
+(define cmpl (twoarg "cmpl")) (define lea (twoarg "lea"))
+(define add (twoarg "add"))   (define sub (twoarg "sub"))
+(define xchg (twoarg "xchg"))
 
 ;; Emit a one-argument instruction
-(define 1arg (lambda (mnemonic) (lambda (rand) (insn mnemonic " " rand))))
-(define asm-push (1arg "push")) (define asm-pop (1arg "pop"))
-(define jmp (1arg "jmp"))       (define jnz (1arg "jnz"))
-(define je (1arg "je"))         (define jz je)
-(define call (1arg "call"))     (define int (1arg "int"))
-(define inc (1arg "inc"))       (define dec (1arg "dec"))
+(define onearg (lambda (mnemonic) (lambda (rand) (insn mnemonic " " rand))))
+(define asm-push (onearg "push")) (define asm-pop (onearg "pop"))
+(define jmp (onearg "jmp"))       (define jnz (onearg "jnz"))
+(define je (onearg "je"))         (define jz je)
+(define call (onearg "call"))     (define int (onearg "int"))
+(define inc (onearg "inc"))       (define dec (onearg "dec"))
 
 ;; Currently only using a single zero-argument instruction:
 (define ret (lambda () (insn "ret")))
