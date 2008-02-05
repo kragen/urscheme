@@ -215,7 +215,8 @@
         (if (pair? stuff) 
             (begin (emit-inline (car stuff))
                    (emit-inline (cdr stuff)))
-            (display stuff)))))
+            (if (string? stuff) (display stuff)
+                (error (lst "emitting" stuff)))))))
 
 ;; Emit an indented instruction
 (define insn (lambda insn (emit (cons "        " insn))))
@@ -254,7 +255,7 @@
 (define absolute (lambda (x) (lst "*" x)))
 ;; Use this one inside of "indirect" or "offset".
 (define index-register
-  (lambda (base index size) (lst base "," index "," size)))
+  (lambda (base index size) (lst base "," index "," (number-to-string size))))
 
 (define syscall (lambda () (int (const "0x80"))))
 
@@ -559,9 +560,9 @@
   (lambda (int) (+ integer-tag (tagshift int))))
 (add-to-header (lambda ()
     (label "ensure_integer")
-    (test (const 1) tos)
+    (test (const "1") tos)
     (jz "not_an_integer")
-    (test (const 2) tos)
+    (test (const "2") tos)
     (jnz "not_an_integer")
     (ret)
     (label "not_an_integer")
@@ -745,8 +746,8 @@
 
       (body)
 
-      (mov (const 1) eax)               ; __NR_exit
-      (mov (const 0) ebx)               ; exit code
+      (mov (const "1") eax)             ; __NR_exit
+      (mov (const "0") ebx)             ; exit code
       (syscall))))
 
 (define my-body
