@@ -47,8 +47,7 @@
 ;; - booleans
 ;; - if
 ;; - recursive procedure calls
-;; - some arithmetic: +, -, and = for integers (albeit without
-;;   typechecks so far)
+;; - some arithmetic: +, -, and = for integers
 
 ;;; Next up, after some simplifications:
 ;; - um, probably variables.  Which will involve a revamp of the
@@ -208,14 +207,15 @@
 (define mov (2arg "mov"))   (define test (2arg "test"))
 (define cmpl (2arg "cmpl")) (define lea (2arg "lea"))
 (define add (2arg "add"))   (define sub (2arg "sub"))
+(define xchg (2arg "xchg"))
 
 ;; Emit a one-argument instruction
 (define 1arg (lambda (mnemonic) (lambda (rand) (insn mnemonic " " rand))))
 (define asm-push (1arg "push")) (define asm-pop (1arg "pop"))
 (define jmp (1arg "jmp"))       (define jnz (1arg "jnz"))
-(define je (1arg "je"))         (define call (1arg "call"))
-(define int (1arg "int"))       (define inc (1arg "inc"))
-(define dec (1arg "dec"))
+(define je (1arg "je"))         (define jz je)
+(define call (1arg "call"))     (define int (1arg "int"))
+(define inc (1arg "inc"))       (define dec (1arg "dec"))
 
 ;; Currently only using a single zero-argument instruction:
 (define ret (lambda () (insn "ret")))
@@ -304,6 +304,9 @@
 
 ;; dup: Emit code to copy top of stack.
 (define dup (lambda () (asm-push tos)))
+
+;; swap: Emit code to exchange top of stack with what's under it.
+(define swap (lambda () (xchg tos (indirect esp))))
 
 ;;; Some convenience stuff for the structure of the program.
 
@@ -510,9 +513,46 @@
     (compile-literal-string-2 (constant-string contents))))
 
 
+;;; Integers
+(define tagshift quadruple)
+(define integer-tag 1)
+(define tagged-integer
+  (lambda (int) (+ integer-tag (tagshift int))))
+(add-to-header (lambda ()
+    (label "ensure_integer")
+    (test (const 1) tos)
+    (jz "not_an_integer")
+    (test (const 2) tos)
+    (jnz "not_an_integer")
+    (ret)
+    (label "not_an_integer")
+    (mov (const "not_int_msg") tos)
+    (jmp "report_error")
+    (rodatum "not_int_msg")
+    (constant-string "type error: not an integer")
+    (text)))
+(define ensure-integer (lambda () (call "ensure_integer")))
+(define integer-add
+  (lambda ()
+    (comment "integer add")
+    (ensure-integer)
+    (swap)
+    (ensure-integer)
+    (asm-pop ebx)
+    (add ebx tos)
+    (dec tos)))                         ; fix up tag
+(define integer-sub
+  (lambda ()
+    (comment "integer subtract")
+    (ensure-integer)
+    (swap)
+    (ensure-integer)
+    (sub (indirect esp) tos)
+    (asm-pop ebx)                       ; discard second argument
+    (inc tos)))                         ; fix up tag
+
 ;;; Booleans and other misc. types
 (define enum-tag 2)
-(define tagshift quadruple)
 (define nil-value (+ enum-tag (tagshift 256)))
 (define true-value (+ enum-tag (tagshift 257)))
 (define false-value (+ enum-tag (tagshift 258)))
@@ -521,21 +561,6 @@
     (cmpl (const (number-to-string false-value)) tos)
     (pop)
     (je label)))
-(define integer-tag 1)
-(define tagged-integer
-  (lambda (int) (+ integer-tag (tagshift int))))
-(define integer-add
-  (lambda ()
-    ;; XXX add type checking!
-    (asm-pop ebx)
-    (add ebx tos)
-    (dec tos)))
-(define integer-sub
-  (lambda ()
-    ;; XXX add type checking!
-    (sub tos (indirect esp))
-    (pop)
-    (inc tos)))
 
 ;; Emit code to push a boolean in place of the top two stack items.
 ;; It will be #t if they are equal, #f if they are not.
