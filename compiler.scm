@@ -673,7 +673,7 @@
 (define compile-if
   (lambda (rands env)
     (if (= (list-length rands) 3)
-        (compile-if-2 (car rands) (car (cdr rands)) (car (cdr (cdr rands)))
+        (compile-if-2 (car rands) (cadr rands) (cadr (cdr rands))
                       (new-label) (new-label) env)
         (error "if arguments length != 3"))))
 (define compile-application
