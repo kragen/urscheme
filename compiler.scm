@@ -66,6 +66,18 @@
 ;; - local variables
 ;; - global variables
 
+;; Next to implement:
+;; - renaming the functions with needlessly nonstandard names
+;; - some unit tests; now that the compiler is capable of compiling a
+;;   unit test suite, there should be one.
+;; - variadic functions (that will get us past the first two lines of
+;;   compiling itself)
+;; - cons cells with cons, car, cdr, null?, and pair? (that will get
+;;   us past the first three)
+;; - quote! that's going to be interesting.
+;; - immutable string operations: string-ref, string-length
+;; - mutable string operations: make-string, string-set!
+
 ;;; Not implemented:
 ;; - call/cc, dynamic-wind
 ;; - macros, quasiquote
