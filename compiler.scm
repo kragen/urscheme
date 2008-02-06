@@ -170,6 +170,7 @@
                           0)))
 (define string-of-char-2
   (lambda (buf char) (begin (string-set! buf 0 char) buf)))
+;; XXX rename to char->string
 (define string-of-char
   (lambda (char)
     (string-of-char-2 (make-string 1) char)))
@@ -181,12 +182,14 @@
     (if (= num 0) ""
         (string-append (number-to-string-2 (quotient num 10))
                        (string-digit (remainder num 10))))))
+;; XXX rename
 (define number-to-string                ; number->string
   (lambda (num) (if (= num 0) "0" (number-to-string-2 num))))
 
 ;; Boy, it sure causes a lot of hassle that Scheme has different types
 ;; for strings and chars.
 
+;; XXX rename
 (define char-eqv?                       ; identical to standard char=?
   (lambda (a b) (string=? (string-of-char a) (string-of-char b))))
 (define string-sub-2
@@ -194,6 +197,7 @@
     (if (= idx (string-length buf)) buf
         (begin (string-set! buf idx (string-ref string (+ start idx)))
                (string-sub-2 buf string start (+ idx 1))))))
+;; XXX rename
 (define string-sub                      ; identical to standard substring
   (lambda (string start end)
     (string-sub-2 (make-string (- end start)) string start 0)))
