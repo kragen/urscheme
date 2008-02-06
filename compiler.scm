@@ -302,8 +302,7 @@
                                            (string-length string))) 0 0)))
 ;; Represent a string appropriately for the output assembly language file.
 (define asm-represent-string
-  (lambda (string)
-    (string-append "\"" (string-append (backslashify string) "\""))))
+  (lambda (string) (list "\"" (backslashify string) "\"")))
 
 (define ascii (lambda (string) (insn ".ascii " (asm-represent-string string))))
 
