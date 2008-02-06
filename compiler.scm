@@ -135,7 +135,7 @@
 (define double (lambda (val) (+ val val)))
 (define quadruple (lambda (val) (double (double val))))
 
-(define lst (lambda args args))         ; identical to standard "list"
+(define list (lambda args args))        ; identical to standard "list"
 (define list-length                     ; identical to standard "length"
   (lambda (list) (if (null? list) 0 (+ 1 (list-length (cdr list))))))
 (define lookup                          ; identical to standard "assq"
@@ -216,7 +216,7 @@
             (begin (emit-inline (car stuff))
                    (emit-inline (cdr stuff)))
             (if (string? stuff) (display stuff)
-                (error (lst "emitting" stuff)))))))
+                (error (list "emitting" stuff)))))))
 
 ;; Emit an indented instruction
 (define insn (lambda insn (emit (cons "        " insn))))
@@ -248,14 +248,14 @@
 (define ebp "%ebp")  (define esp "%esp")
 
 ;; x86 addressing modes:
-(define const (lambda (x) (lst "$" x)))
-(define indirect (lambda (x) (lst "(" x ")")))
+(define const (lambda (x) (list "$" x)))
+(define indirect (lambda (x) (list "(" x ")")))
 (define offset 
-  (lambda (x offset) (lst (number-to-string offset) (indirect x))))
-(define absolute (lambda (x) (lst "*" x)))
+  (lambda (x offset) (list (number-to-string offset) (indirect x))))
+(define absolute (lambda (x) (list "*" x)))
 ;; Use this one inside of "indirect" or "offset".
 (define index-register
-  (lambda (base index size) (lst base "," index "," (number-to-string size))))
+  (lambda (base index size) (list base "," index "," (number-to-string size))))
 
 (define syscall (lambda () (int (const "0x80"))))
 
@@ -277,7 +277,7 @@
   (lambda ()
     (begin
       (set! constcounter (+ constcounter 1))
-      (lst "k_" (number-to-string constcounter)))))
+      (list "k_" (number-to-string constcounter)))))
 
 ;; stuff to output a Lisp string safely for assembly language
 (define dangerous "\\\n\"")
@@ -690,11 +690,11 @@
       (comment "now apply the procedure")
       (compile-apply nargs))))
 (define special-syntax-list
-  (lst (cons 'begin compile-begin)
-       (cons 'if compile-if)
-       (cons 'lambda compile-lambda)
-       (cons '+ integer-add)
-       (cons '- integer-sub)))
+  (list (cons 'begin compile-begin)
+        (cons 'if compile-if)
+        (cons 'lambda compile-lambda)
+        (cons '+ integer-add)
+        (cons '- integer-sub)))
 (define compile-ration-2
   (lambda (rator rands env handlers)
     (if (null? handlers)            
@@ -707,11 +707,11 @@
 (define compile-pair
   (lambda (expr env) (compile-ration (car expr) (cdr expr) env)))
 (define compilation-expr-list
-  (lst (cons pair? compile-pair)
-       (cons symbol? compile-var)
-       (cons string? compile-literal-string)
-       (cons boolean? compile-literal-boolean)
-       (cons integer? compile-literal-integer)))
+  (list (cons pair? compile-pair)
+        (cons symbol? compile-var)
+        (cons string? compile-literal-string)
+        (cons boolean? compile-literal-boolean)
+        (cons integer? compile-literal-integer)))
 (define compile-expr-2
   (lambda (expr env handlers)
     (if (null? handlers) (error expr)
@@ -740,13 +740,13 @@
 ;;; Main Program
 
 (define basic-env 
-  (lst (cons 'display (fetch-global-variable "display"))
-       (cons 'newline (apply-built-in-by-label "newline"))
-       (cons 'arg0 (lambda () (get-procedure-arg 0)))
-       (cons 'fibonacci (apply-built-in-by-label "fibonacci"))
-       (cons '= (apply-built-in-by-label "target_eq"))
-       (cons 'eq? (apply-built-in-by-label "target_eq"))
-       (cons 'msg (fetch-global-variable "msg"))))
+  (list (cons 'display (fetch-global-variable "display"))
+        (cons 'newline (apply-built-in-by-label "newline"))
+        (cons 'arg0 (lambda () (get-procedure-arg 0)))
+        (cons 'fibonacci (apply-built-in-by-label "fibonacci"))
+        (cons '= (apply-built-in-by-label "target_eq"))
+        (cons 'eq? (apply-built-in-by-label "target_eq"))
+        (cons 'msg (fetch-global-variable "msg"))))
 
 (add-to-header (lambda ()
     (built-in-procedure "fibonacci" 1 (lambda ()
