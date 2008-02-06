@@ -445,9 +445,18 @@
 ;; Define a built-in procedure so we can refer to it by label and
 ;; push-const that label, then expect to be able to compile-apply to
 ;; it later.
-(define built-in-procedure
+(define built-in-procedure-labeled
   (lambda (labelname nargs body)
     (built-in-procedure-2 labelname nargs body (new-label))))
+(define global-procedure-2
+  (lambda (symbolname nargs body procedure-value-label)
+    (begin
+      (define-global-variable symbolname procedure-value-label)
+      (built-in-procedure-labeled procedure-value-label nargs body))))
+;; Define a built-in procedure known by a certain global variable name.
+(define global-procedure
+  (lambda (symbolname nargs body)
+    (global-procedure-2 symbolname nargs body (new-label))))
 
 ;; Emit code to fetch the Nth argument of the innermost procedure.
 (define get-procedure-arg
@@ -544,17 +553,16 @@
 ;; Emit code for procedure versions of display and newline
 (add-to-header (lambda ()
     (begin
-      (built-in-procedure "display_code" 1 
-                          (lambda () (begin
-                                       (get-procedure-arg 0)
-                                       (target-display))))
-      (compile-global-variable "display" "display_code")
-      (built-in-procedure "newline" 0 target-newline)
-      (built-in-procedure "target_eq" 2 
-                          (lambda () (begin
-                                       (get-procedure-arg 0)
-                                       (get-procedure-arg 1)
-                                       (target-eq?)))))))
+      (global-procedure 'display 1 
+                        (lambda () (begin
+                                      (get-procedure-arg 0)
+                                      (target-display))))
+      (global-procedure 'newline 0 target-newline)
+      (global-procedure 'eq? 2 
+                        (lambda () (begin
+                                      (get-procedure-arg 0)
+                                      (get-procedure-arg 1)
+                                      (target-eq?)))))))
 (define apply-built-in-by-label
   (lambda (label)
     (lambda ()
@@ -717,7 +725,7 @@
   (lambda (vars body env proclabel jumplabel)
     (begin (comment "jump past the body of the lambda")
            (jmp jumplabel)
-           (built-in-procedure proclabel (length vars) 
+           (built-in-procedure-labeled proclabel (length vars) 
              (lambda () (compile-expr body (lambda-environment env vars 0))))
            (label jumplabel)
            (push-const proclabel))))
@@ -798,11 +806,7 @@
     (mov tos (indirect (global-variable-label name)))
     (pop)))
 
-(define global-env 
-  (list (cons 'display (lambda () (fetch-global-variable "display")))
-        (cons 'newline (apply-built-in-by-label "newline"))
-        (cons '= (apply-built-in-by-label "target_eq"))
-        (cons 'eq? (apply-built-in-by-label "target_eq"))))
+(define global-env '())
 
 (define compile-toplevel
   (lambda (expr)
@@ -821,6 +825,7 @@
       (insn ".weak _start")     ; but also allow compiling with stdlib
       (global-label "main")     ; with entry point of main, not _start
 
+      (compile-toplevel-define '= 'eq? global-env)
       (body)
 
       (mov (const "1") eax)             ; __NR_exit
