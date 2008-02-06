@@ -143,6 +143,7 @@
     (if (null? alist) #f
         (if (eq? obj (caar alist)) (car alist)
             (assq obj (cdr alist))))))
+;; identical to standard caar, cdar, etc.
 (define caar (lambda (val) (car (car val))))
 (define cdar (lambda (val) (cdr (car val))))
 (define cadr (lambda (val) (car (cdr val))))
