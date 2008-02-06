@@ -64,12 +64,7 @@
 ;; - some arithmetic: +, -, and = for integers
 ;; - lambda, with fixed numbers of arguments, without nesting
 ;; - local variables
-
-;;; Next up, after some simplifications:
-;; - global variables.  Allocate a place in .data for each one.
-;; At that point, it will become possible to evaluate "define"
-;; expressions, which means you can write programs that do something
-;; interesting and are also readable.
+;; - global variables
 
 ;;; Not implemented:
 ;; - call/cc, dynamic-wind
@@ -148,6 +143,14 @@
 (define cdar (lambda (val) (cdr (car val))))
 (define cadr (lambda (val) (car (cdr val))))
 (define caddr (lambda (val) (cadr (cdr val))))
+
+(define filter-2
+  (lambda (fn lst rest) (if (fn (car lst)) (cons (car lst) rest) rest)))
+(define filter           ; this must exist in r5rs but I can't find it
+  (lambda (fn lst) (if (null? lst) '()
+                       (filter-2 fn lst (filter fn (cdr lst))))))
+
+(define not (lambda (x) (if x #f #t)))  ; identical to standard "not"
 
 ;; string manipulation (part of Basic Lisp Stuff)
 (define string-append-3
@@ -511,7 +514,7 @@
 (add-to-header (lambda () (rodatum "newline_string") (constant-string "\n")))
 
 ;; Emit code to create a mutable labeled cell, for use as a global
-;; variable.
+;; variable, with a specific assembly label.
 (define compile-global-variable
   (lambda (varlabel initial)
     (begin
@@ -523,8 +526,7 @@
 ;; Emit code to fetch from a named global variable.
 (define fetch-global-variable
   (lambda (varname)
-    (lambda ()
-      (asm-push tos) (mov (indirect varname) tos))))
+      (asm-push tos) (mov (indirect varname) tos)))
 
 ;; Emit code for procedure versions of display and newline
 (add-to-header (lambda ()
@@ -629,10 +631,54 @@
       (mov (const true-value) tos)
       (label label2)) (new-label) (new-label))))
 
-;;; Compilation
+
+;;; Global variable handling.
+
+(define global-variable-labels '())
+(define global-variables-defined '())
+
+(define add-new-global-variable-binding!
+  (lambda (name label)
+    (begin (set! global-variable-labels 
+                 (cons (cons name label) global-variable-labels))
+           label)))
+(define allocate-new-global-variable-label!
+  (lambda (name) (add-new-global-variable-binding! name (new-label))))
+(define global-variable-label-2
+  (lambda (name binding)
+    (if binding (cdr binding) (allocate-new-global-variable-label! name))))
+;; Return a label representing this global variable, allocating a new
+;; one if necessary.
+(define global-variable-label
+  (lambda (name) 
+    (global-variable-label-2 name (assq name global-variable-labels))))
+
+(define define-global-variable
+  (lambda (name initial)
+    (if (assq name global-variables-defined) (error "double define" name)
+        (begin (compile-global-variable (global-variable-label name) initial)
+               (set! global-variables-defined 
+                     (cons (list name) global-variables-defined))))))
+
+(define undefined-global-variables
+  (lambda ()
+    (filter (lambda (pair) (not (assq (car pair) global-variables-defined)))
+            global-variable-labels)))
+
+;; This runs at the end of compilation to report any undefined
+;; globals.  The assumption is that you're recompiling frequently
+;; enough that there will normally only be one...
+(define assert-no-undefined-global-variables
+  (lambda ()
+    (if (not (null? (undefined-global-variables)))
+        (error "undefined global" (caar (undefined-global-variables)))
+        #t)))
+
+;;; Compilation of different kinds of expressions
 (define compile-var-2
   (lambda (lookupval var)
-    (if lookupval ((cdr lookupval)) (error var))))
+    (if lookupval ((cdr lookupval)) 
+        (fetch-global-variable (global-variable-label var)))))
 (define compile-var
   (lambda (var env)
     (compile-var-2 (assq var env) var)))
@@ -729,56 +775,22 @@
           (compile-expr (car args) env)
           (+ 1 (compile-args (cdr args) env))))))
 
-;; XXX the "name" here is an assembly label, not a symbol to refer to
-;; in the program
 (define compile-toplevel-define
   (lambda (name body env)
-    (compile-global-variable name nil-value)
+    (define-global-variable name nil-value)
     (comment "compute initial value for global variable")
     (compile-expr body env)
     (comment "initialize global variable with value")
-    (mov tos (indirect name))
+    (mov tos (indirect (global-variable-label name)))
     (pop)))
 
 ;;; Main Program
 
 (define basic-env 
-  (list (cons 'display (fetch-global-variable "display"))
+  (list (cons 'display (lambda () (fetch-global-variable "display")))
         (cons 'newline (apply-built-in-by-label "newline"))
-        (cons 'arg0 (lambda () (get-procedure-arg 0)))
-        (cons 'fibonacci (apply-built-in-by-label "fibonacci"))
         (cons '= (apply-built-in-by-label "target_eq"))
-        (cons 'eq? (apply-built-in-by-label "target_eq"))
-        (cons 'msg (fetch-global-variable "msg"))))
-
-(add-to-header (lambda ()
-    (built-in-procedure "fibonacci" 1 (lambda ()
-        (compile-expr '(if (= arg0 0) (begin (display "*") 1 )
-                           (if (= arg0 1) (begin (display "+") 1)
-                               (+ (fibonacci (- arg0 1))
-                                  (fibonacci (- arg0 2)))))
-                        basic-env)))))
-
-; I want to be able to write
-; (compile-toplevel-define
-;  'fibonacci
-;  '(lambda (arg0) (if (= arg0 0) (begin (display "*") 1 )
-;                      (if (= arg0 1) (begin (display "+") 1)
-;                          (+ (fibonacci (- arg0 1))
-;                             (fibonacci (- arg0 2))))))
-;  basic-env)
-; which should do the following:
-; - come up with some label for the procedure body
-; - compile a jump around the procedure body
-; - use built-in-procedure to compile the procedure body
-; - create a global variable called "fibonacci"
-; - store the procedure value in it
-; There are three sticky bits, both concerning creating the global variable.
-; - 'fibonacci is a symbol, and "fibonacci" is a string.  So I need
-;   symbol->string?
-; - Moreover, 'fibonacci might happen to not be a symbol whose string is a 
-;   valid label in assembly.  So maybe symbol->string won't really help.
-; - At the moment, global variables have to appear in basic-env.
+        (cons 'eq? (apply-built-in-by-label "target_eq"))))
 
 (define compile-program
   (lambda (body)
@@ -793,12 +805,19 @@
 
       (mov (const "1") eax)             ; __NR_exit
       (mov (const "0") ebx)             ; exit code
-      (syscall))))
+      (syscall)
+      (assert-no-undefined-global-variables))))
 
 (define my-body
   (lambda ()
     (begin
-      (compile-toplevel-define "msg" "this is a message" basic-env)
+      (compile-toplevel-define 'msg "this is a message" basic-env)
+      (compile-toplevel-define 'fibonacci
+       '(lambda (x) (if (= x 0) (begin (display "*") 1 )
+                           (if (= x 1) (begin (display "+") 1)
+                               (+ (fibonacci (- x 1))
+                                  (fibonacci (- x 2))))))
+       basic-env)
       (compile-discarding '((lambda (hi) (begin (display hi) (newline)))
                             "hi there") basic-env)
       (compile-discarding '(begin (display (if #t "hello" "goodbye"))
