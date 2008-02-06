@@ -696,14 +696,12 @@
         (cons '+ integer-add)
         (cons '- integer-sub)))
 (define compile-ration-2
-  (lambda (rator rands env handlers)
-    (if (null? handlers)            
-        (compile-application rator env (compile-args rands env))
-        (if (eq? rator (caar handlers)) ((cdar handlers) rands env)
-            (compile-ration-2 rator rands env (cdr handlers))))))
+  (lambda (rator rands env handler)
+    (if handler ((cdr handler) rands env)
+        (compile-application rator env (compile-args rands env)))))
 (define compile-ration
   (lambda (rator rands env)
-    (compile-ration-2 rator rands env special-syntax-list)))
+    (compile-ration-2 rator rands env (assq rator special-syntax-list))))
 (define compile-pair
   (lambda (expr env) (compile-ration (car expr) (cdr expr) env)))
 (define compilation-expr-list
