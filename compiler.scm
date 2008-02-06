@@ -814,23 +814,12 @@
       (syscall)
       (assert-no-undefined-global-variables))))
 
-(define my-body
+(define read-compile-loop
   (lambda ()
-    (begin
-      (compile-toplevel '(define msg "this is a message"))
-      (compile-toplevel '(define fibonacci
-       (lambda (x) (if (= x 0) (begin (display "*") 1 )
-                       (if (= x 1) (begin (display "+") 1)
-                           (+ (fibonacci (- x 1))
-                              (fibonacci (- x 2))))))))
-      (compile-toplevel '((lambda (hi) (begin (display hi) (newline)))
-                          "hi there"))
-      (compile-toplevel '(begin (display (if #t "hello" "goodbye"))
-                                (display ", world")
-                                (newline)
-                                (display "indeed")))
-      (compile-toplevel '(newline))
-      (compile-toplevel '(begin (fibonacci 7) (newline)))
-      (compile-toplevel '(display msg)))))
+    ((lambda (expr)
+       (if (eof-object? expr) #t
+           (begin (compile-toplevel expr)
+                  (read-compile-loop))))
+     (read))))
 
-(compile-program my-body)
+(compile-program read-compile-loop)

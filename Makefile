@@ -20,8 +20,8 @@ test: a.out
 	./a.out
 a.out: tmp.s
 	$(CC) $(asflags) $<
-tmp.s: compiler.scm
-	$(scheme) $< > $@
+tmp.s: compiler.scm simple.scm
+	$(scheme) compiler.scm < simple.scm > $@
 	mv $@.ref $@.ref.old ||:
 	cp $@ $@.ref
 	diff -u $@.ref.old $@.ref ||:
