@@ -1,5 +1,5 @@
 ;;; A compiler from a subset of R5RS Scheme to x86 assembly, written in itself.
-;; Kragen Javier Sitaker, 2008-01-03, 04, and 05
+;; Kragen Javier Sitaker, 2008-01-03, 04, 05, and 06
 
 ;; From the Scheme 9 From Outer Space page:
 ;; Why in earth write another half-baked implementation of Scheme?
@@ -70,10 +70,11 @@
 ;; - renaming the functions with needlessly nonstandard names
 ;; - some unit tests; now that the compiler is capable of compiling a
 ;;   unit test suite, there should be one.
+;; - dynamic allocation
+;; - cons cells with cons, car, cdr, null?, and pair?; suggested magic
+;;   number: ce11
 ;; - variadic functions (that will get us past the first two lines of
 ;;   compiling itself)
-;; - cons cells with cons, car, cdr, null?, and pair? (that will get
-;;   us past the first three)
 ;; - quote! that's going to be interesting.
 ;; - immutable string operations: string-ref, string-length
 ;; - mutable string operations: make-string, string-set!
