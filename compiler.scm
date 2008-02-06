@@ -674,7 +674,7 @@
         (error "undefined global" (caar (undefined-global-variables)))
         #t)))
 
-;;; Compilation of different kinds of expressions
+;;; Compilation of particular kinds of expressions
 (define compile-var-2
   (lambda (lookupval var)
     (if lookupval ((cdr lookupval)) 
