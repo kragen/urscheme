@@ -136,8 +136,8 @@
 (define quadruple (lambda (val) (double (double val))))
 
 (define list (lambda args args))        ; identical to standard "list"
-(define list-length                     ; identical to standard "length"
-  (lambda (list) (if (null? list) 0 (+ 1 (list-length (cdr list))))))
+(define length                        ; identical to standard "length"
+  (lambda (list) (if (null? list) 0 (+ 1 (length (cdr list))))))
 (define lookup                          ; identical to standard "assq"
   (lambda (obj alist)
     (if (null? alist) #f
@@ -652,12 +652,12 @@
   (lambda (vars body env proclabel jumplabel)
     (begin (comment "jump past the body of the lambda")
            (jmp jumplabel)
-           (built-in-procedure proclabel (list-length vars) 
+           (built-in-procedure proclabel (length vars) 
              (lambda () (compile-expr body (lambda-environment env vars 0))))
            (label jumplabel)
            (push-const proclabel))))
 (define compile-lambda
-  (lambda (rands env) (begin (assert-equal (list-length rands) 2)
+  (lambda (rands env) (begin (assert-equal (length rands) 2)
                              (compile-lambda-2 (car rands) (cadr rands) env 
                                                (new-label) (new-label)))))
 (define compile-begin
@@ -678,7 +678,7 @@
       (label lab2))))
 (define compile-if
   (lambda (rands env)
-    (if (= (list-length rands) 3)
+    (if (= (length rands) 3)
         (compile-if-2 (car rands) (cadr rands) (caddr rands)
                       (new-label) (new-label) env)
         (error "if arguments length != 3"))))
