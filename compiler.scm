@@ -138,11 +138,11 @@
 (define list (lambda args args))        ; identical to standard "list"
 (define length                        ; identical to standard "length"
   (lambda (list) (if (null? list) 0 (+ 1 (length (cdr list))))))
-(define lookup                          ; identical to standard "assq"
+(define assq                            ; identical to standard "assq"
   (lambda (obj alist)
     (if (null? alist) #f
         (if (eq? obj (caar alist)) (car alist)
-            (lookup obj (cdr alist))))))
+            (assq obj (cdr alist))))))
 (define caar (lambda (val) (car (car val))))
 (define cdar (lambda (val) (cdr (car val))))
 (define cadr (lambda (val) (car (cdr val))))
@@ -630,7 +630,7 @@
     (if lookupval ((cdr lookupval)) (error var))))
 (define compile-var
   (lambda (var env)
-    (compile-var-2 (lookup var env) var)))
+    (compile-var-2 (assq var env) var)))
 (define compile-literal-boolean
   (lambda (b env) (push-const (if b true-value false-value))))
 (define compile-literal-integer
