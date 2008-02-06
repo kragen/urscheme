@@ -146,6 +146,7 @@
 (define caar (lambda (val) (car (car val))))
 (define cdar (lambda (val) (cdr (car val))))
 (define cadr (lambda (val) (car (cdr val))))
+(define caddr (lambda (val) (cadr (cdr val))))
 
 ;; string manipulation (part of Basic Lisp Stuff)
 (define string-concatenate-3
@@ -678,7 +679,7 @@
 (define compile-if
   (lambda (rands env)
     (if (= (list-length rands) 3)
-        (compile-if-2 (car rands) (cadr rands) (cadr (cdr rands))
+        (compile-if-2 (car rands) (cadr rands) (caddr rands)
                       (new-label) (new-label) env)
         (error "if arguments length != 3"))))
 (define compile-application
