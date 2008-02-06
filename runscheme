@@ -1,0 +1,5 @@
+#!/bin/sh
+set -e
+mzscheme -r compiler.scm < "${1?usage: $0 foo.scm}" > tmp.s
+gcc -nostdlib tmp.s
+./a.out

@@ -14,3 +14,5 @@
 (newline)
 (begin (fibonacci 7) (newline))
 (display msg)
+(newline)
+
