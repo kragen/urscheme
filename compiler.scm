@@ -109,10 +109,11 @@
 ;; - low bits binary 01: a signed integer, stored in the upper 30 bits.
 ;; - low bits binary 10: one of a small number of unique objects.  The
 ;;   first 256 are the chars; following these we have the empty list,
-;;   #t, and #f, in that order.  This means that eq? works to compare
-;;   chars in this implementation, but that isn't guaranteed by R5RS,
-;;   so we can't depend on that property inside the compiler, since we
-;;   want to be able to run it on other R5RS Schemes.
+;;   #t, #f, and the EOF object, in that order.  This means that eq?
+;;   works to compare chars in this implementation, but that isn't
+;;   guaranteed by R5RS, so we can't depend on that property inside
+;;   the compiler, since we want to be able to run it on other R5RS
+;;   Schemes.
 ;; So, type-testing consists of testing the type-tag, then possibly
 ;; testing the magic number.  In the usual case, we'll jump to an
 ;; error routine if the type test fails, which will exit the program.
@@ -611,6 +612,7 @@
 (define nil-value (enum-value 256))
 (define true-value (enum-value 257))
 (define false-value (enum-value 258))
+(define eof-value (enum-value 259))
 (define jump-if-false
   (lambda (label)
     (cmpl (const false-value) tos)
