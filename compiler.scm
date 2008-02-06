@@ -319,7 +319,8 @@
 ;; As explained earlier, there's an "abstract stack" that includes
 ;; %eax as well as the x86 stack.
 
-(define tos eax)
+(define tos eax)                        ; top-of-stack register
+(define nos (indirect esp))   ; "next on stack", what's underneath TOS
 
 ;; push-const: Emit code to push a constant onto the abstract stack
 (define push-const (lambda (val) (asm-push tos) (mov (const val) tos)))
@@ -330,7 +331,7 @@
 (define dup (lambda () (asm-push tos)))
 
 ;; swap: Emit code to exchange top of stack with what's under it.
-(define swap (lambda () (xchg tos (indirect esp))))
+(define swap (lambda () (xchg tos nos)))
 
 ;;; Some convenience stuff for the structure of the program.
 
@@ -593,7 +594,7 @@
     (ensure-integer)
     (swap)
     (ensure-integer)
-    (sub (indirect esp) tos)
+    (sub nos tos)
     (asm-pop ebx)                       ; discard second argument
     (inc tos)))                         ; fix up tag
 
