@@ -784,13 +784,19 @@
     (mov tos (indirect (global-variable-label name)))
     (pop)))
 
-;;; Main Program
-
-(define basic-env 
+(define global-env 
   (list (cons 'display (lambda () (fetch-global-variable "display")))
         (cons 'newline (apply-built-in-by-label "newline"))
         (cons '= (apply-built-in-by-label "target_eq"))
         (cons 'eq? (apply-built-in-by-label "target_eq"))))
+
+(define compile-toplevel
+  (lambda (expr)
+    (if (eq? (car expr) 'define) 
+        (compile-toplevel-define (cadr expr) (caddr expr) global-env)
+        (compile-discarding expr global-env))))
+
+;;; Main Program
 
 (define compile-program
   (lambda (body)
@@ -811,21 +817,20 @@
 (define my-body
   (lambda ()
     (begin
-      (compile-toplevel-define 'msg "this is a message" basic-env)
-      (compile-toplevel-define 'fibonacci
-       '(lambda (x) (if (= x 0) (begin (display "*") 1 )
-                           (if (= x 1) (begin (display "+") 1)
-                               (+ (fibonacci (- x 1))
-                                  (fibonacci (- x 2))))))
-       basic-env)
-      (compile-discarding '((lambda (hi) (begin (display hi) (newline)))
-                            "hi there") basic-env)
-      (compile-discarding '(begin (display (if #t "hello" "goodbye"))
-                                  (display ", world")
-                                  (newline)
-                                  (display "indeed")) basic-env)
-      (compile-discarding '(newline) basic-env)
-      (compile-discarding '(begin (fibonacci 7) (newline)) basic-env)
-      (compile-discarding '(display msg) basic-env))))
+      (compile-toplevel '(define msg "this is a message"))
+      (compile-toplevel '(define fibonacci
+       (lambda (x) (if (= x 0) (begin (display "*") 1 )
+                       (if (= x 1) (begin (display "+") 1)
+                           (+ (fibonacci (- x 1))
+                              (fibonacci (- x 2))))))))
+      (compile-toplevel '((lambda (hi) (begin (display hi) (newline)))
+                          "hi there"))
+      (compile-toplevel '(begin (display (if #t "hello" "goodbye"))
+                                (display ", world")
+                                (newline)
+                                (display "indeed")))
+      (compile-toplevel '(newline))
+      (compile-toplevel '(begin (fibonacci 7) (newline)))
+      (compile-toplevel '(display msg)))))
 
 (compile-program my-body)
