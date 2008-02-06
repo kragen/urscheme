@@ -1,5 +1,5 @@
 ;;; A compiler from a subset of R5RS Scheme to x86 assembly, written in itself.
-;; Kragen Javier Sitaker, 2008-01-03 and 04
+;; Kragen Javier Sitaker, 2008-01-03, 04, and 05
 
 ;; From the Scheme 9 From Outer Space page:
 ;; Why in earth write another half-baked implementation of Scheme?
@@ -66,11 +66,6 @@
 ;; - local variables
 
 ;;; Next up, after some simplifications:
-;; - um, probably variables.  Which will involve a revamp of the
-;;   stupid "environment" structure we have now, but will make it
-;;   possible to implement
-;; - lambdas without a parent context pointer, which covers most of
-;;   this program at this point, actually; and
 ;; - global variables.  Allocate a place in .data for each one.
 ;; At that point, it will become possible to evaluate "define"
 ;; expressions, which means you can write programs that do something
