@@ -204,8 +204,7 @@
 ;; Boy, it sure causes a lot of hassle that Scheme has different types
 ;; for strings and chars.
 
-;; XXX rename
-(define char-eqv?                       ; identical to standard char=?
+(define char=?                          ; identical to standard char=?
   (lambda (a b) (string=? (char->string a) (char->string b))))
 (define string-sub-2
   (lambda (buf string start idx)
@@ -219,7 +218,7 @@
 (define string-idx-2
   (lambda (string char idx)
     (if (= idx (string-length string)) #f
-        (if (char-eqv? (string-ref string idx) char) idx
+        (if (char=? (string-ref string idx) char) idx
             (string-idx-2 string char (+ idx 1))))))
 (define string-idx                      ; returns #f or index into string
   (lambda (string char) (string-idx-2 string char 0)))
