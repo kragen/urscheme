@@ -366,10 +366,9 @@
 ;; 
 ;; The number of arguments is passed in %edx; on the machine stack is
 ;; the return address, with the arguments underneath it; the address
-;; of the procedure value that was being called is in %eax.  (XXX
-;; Currently the arguments are in the wrong order.)  Callee saves %ebp
-;; and pops their own arguments off the stack.  The prologue points
-;; %ebp at the arguments.  Return value goes in %eax.
+;; of the procedure value that was being called is in %eax.  Callee
+;; saves %ebp and pops their own arguments off the stack.  The
+;; prologue points %ebp at the arguments.  Return value goes in %eax.
 (define procedure-magic "0xca11ab1e")
 (add-to-header (lambda ()
     (begin
@@ -618,6 +617,7 @@
     (ensure-integer)
     (swap)
     (ensure-integer)
+    (swap)                              ; XXX this is probably suboptimal
     (sub nos tos)
     (asm-pop ebx)                       ; discard second argument
     (inc tos)))                         ; fix up tag
@@ -787,12 +787,13 @@
             (compile-expr-2 expr env (cdr handlers))))))
 (define compile-expr
   (lambda (expr env) (compile-expr-2 expr env compilation-expr-list)))
+(define compile-args-2
+  (lambda (args env n) (begin (compile-expr (car args) env)
+                              (+ 1 n))))
 (define compile-args
   (lambda (args env)
     (if (null? args) 0
-        (begin
-          (compile-expr (car args) env)
-          (+ 1 (compile-args (cdr args) env))))))
+        (compile-args-2 args env (compile-args (cdr args) env)))))
 
 (define compile-toplevel-define
   (lambda (name body env)

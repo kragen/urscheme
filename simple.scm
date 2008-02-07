@@ -12,6 +12,7 @@
        (newline)
        (display "indeed"))
 (newline)
+((lambda (hello goodbye) (begin (display hello) (newline))) "ok" "NOT OK")
 (begin (fibonacci 7) (newline))
 (display msg)
 (newline)
