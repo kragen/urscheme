@@ -456,6 +456,10 @@
 (define global-procedure
   (lambda (symbolname nargs body)
     (global-procedure-2 symbolname nargs body (new-label))))
+;; Add code to define a global procedure to the header
+(define define-global-procedure
+  (lambda (symbolname nargs body)
+    (add-to-header (lambda () (global-procedure symbolname nargs body)))))
 
 ;; Emit code to fetch the Nth argument of the innermost procedure.
 (define get-procedure-arg
@@ -542,19 +546,14 @@
       (target-display))))
 (add-to-header (lambda () (rodatum "newline_string") (constant-string "\n")))
 
-;; Emit code for some primitive procedures
-(add-to-header (lambda ()
-    (begin
-      (global-procedure 'display 1 
-         (lambda () (begin
-                      (get-procedure-arg 0)
-                      (target-display))))
-      (global-procedure 'newline 0 target-newline)
-      (global-procedure 'eq? 2 
-         (lambda () (begin
-                      (get-procedure-arg 0)
-                      (get-procedure-arg 1)
-                      (target-eq?)))))))
+(define-global-procedure 'display 1
+  (lambda () (begin (get-procedure-arg 0)
+                    (target-display))))
+(define-global-procedure 'newline 0 target-newline)
+(define-global-procedure 'eq? 2 
+  (lambda () (begin (get-procedure-arg 0)
+                    (get-procedure-arg 1)
+                    (target-eq?))))
 
 ;; Emit the code for the normal error-reporting routine
 (add-to-header (lambda ()
@@ -637,18 +636,15 @@
     (sub edx edx)
     (idiv ebx)))
 
-(add-to-header (lambda () (begin
-      (global-procedure 'remainder 2
-         (lambda () (begin
-                      (emit-division-code)
-                      (comment "remainder (<<2) is in %edx")
-                      (mov edx tos)
-                      (comment "put the tag back")
-                      (inc tos))))
-      (global-procedure 'quotient 2
-         (lambda () (begin
-                      (emit-division-code)
-                      (native-to-scheme-integer tos)))))))
+(define-global-procedure 'remainder 2
+  (lambda () (begin (emit-division-code)
+                    (comment "remainder (<<2) is in %edx")
+                    (mov edx tos)
+                    (comment "put the tag back")
+                    (inc tos))))
+(define-global-procedure 'quotient 2
+  (lambda () (begin (emit-division-code)
+                    (native-to-scheme-integer tos))))
 
 ;;; Booleans and other misc. types
 (define enum-tag 2)
