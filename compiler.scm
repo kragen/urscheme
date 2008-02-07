@@ -582,29 +582,36 @@
     (text)))
 (define ensure-integer (lambda () (call "ensure_integer")))
 (define assert-equal (lambda (a b) (if (= a b) #t (error "assert failed"))))
+;; Emit code to add NOS to TOS; assumes they're already tag-checked
+(define emit-integer-addition
+  (lambda ()
+    (begin (asm-pop ebx)
+           (add ebx tos)
+           (dec tos))))                 ; fix up tag
+
 (define integer-add
   (lambda (rands env)
-    (comment "integer add operands")
-    (assert-equal 2 (compile-args rands env))
-    (comment "now execute integer add")
-    (ensure-integer)
-    (swap)
-    (ensure-integer)
-    (asm-pop ebx)
-    (add ebx tos)
-    (dec tos)))                         ; fix up tag
+    (begin
+      (comment "integer add operands")
+      (assert-equal 2 (compile-args rands env))
+      (comment "now execute integer add")
+      (ensure-integer)
+      (swap)
+      (ensure-integer)
+      (emit-integer-addition))))
 (define integer-sub
   (lambda (rands env)
-    (comment "integer subtract operands")
-    (assert-equal 2 (compile-args rands env))
-    (comment "now execute integer subtract")
-    (ensure-integer)
-    (swap)
-    (ensure-integer)
-    (swap)                              ; XXX this is probably suboptimal
-    (sub nos tos)
-    (asm-pop ebx)                       ; discard second argument
-    (inc tos)))                         ; fix up tag
+    (begin
+      (comment "integer subtract operands")
+      (assert-equal 2 (compile-args rands env))
+      (comment "now execute integer subtract")
+      (ensure-integer)
+      (swap)
+      (ensure-integer)
+      (swap)                         ; XXX this is probably suboptimal
+      (sub nos tos)
+      (asm-pop ebx)                     ; discard second argument
+      (inc tos))))                      ; fix up tag
 
 ;; Emit code to convert a native integer to a tagged integer.
 (define native-to-scheme-integer 
