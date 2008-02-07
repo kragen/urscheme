@@ -534,35 +534,6 @@
       (target-display))))
 (add-to-header (lambda () (rodatum "newline_string") (constant-string "\n")))
 
-;; XXX all this integer stuff doesn't belong in the strings section
-;; Emit code to convert a native integer to a tagged integer.
-(define native-to-scheme-integer 
-  (lambda (reg) (begin (sal reg) (sal reg) (inc reg))))
-;; Emit code to convert a tagged integer to a native integer.    
-(define scheme-to-native-integer 
-  (lambda (reg) (begin (sar reg) (sar reg))))
-
-;; Emit code to divide procedure arg 0 by procedure arg 1
-;; This merely zeroes out the tags rather than shifting them off.  The
-;; normal tagged representation of an integer N is N*4+1.
-;; Unfortunately (N*4+1)/(M*4+1) and (N*4+1) % (M*4+1) don't seem to
-;; have particularly nice properties, so we divide (N*4) by (M*4)
-;; instead.  (N*4) / (M*4) = N/M, and (N*4) % (M*4) = (N%M) * 4.
-(define emit-division-code
-  (lambda ()
-    (get-procedure-arg 1)
-    (ensure-integer)
-    (comment "fetch dividend second; idiv wants it in %eax")
-    (get-procedure-arg 0)
-    (ensure-integer)
-    (comment "zero out the tag")
-    (dec tos)
-    (asm-pop ebx)
-    (dec ebx)
-    (comment "zero the top half of the dividend")
-    (sub edx edx)
-    (idiv ebx)))
-
 ;; Emit code for some primitive procedures
 (add-to-header (lambda ()
     (begin
@@ -575,18 +546,8 @@
          (lambda () (begin
                       (get-procedure-arg 0)
                       (get-procedure-arg 1)
-                      (target-eq?))))
-      (global-procedure 'remainder 2
-         (lambda () (begin
-                      (emit-division-code)
-                      (comment "remainder (<<2) is in %edx")
-                      (mov edx tos)
-                      (comment "put the tag back")
-                      (inc tos))))
-      (global-procedure 'quotient 2
-         (lambda () (begin
-                      (emit-division-code)
-                      (native-to-scheme-integer tos)))))))
+                      (target-eq?)))))))
+
 (define apply-built-in-by-label
   (lambda (label)
     (lambda ()
@@ -649,6 +610,47 @@
     (sub nos tos)
     (asm-pop ebx)                       ; discard second argument
     (inc tos)))                         ; fix up tag
+
+;; Emit code to convert a native integer to a tagged integer.
+(define native-to-scheme-integer 
+  (lambda (reg) (begin (sal reg) (sal reg) (inc reg))))
+;; Emit code to convert a tagged integer to a native integer.    
+(define scheme-to-native-integer 
+  (lambda (reg) (begin (sar reg) (sar reg))))
+
+;; Emit code to divide procedure arg 0 by procedure arg 1
+;; This merely zeroes out the tags rather than shifting them off.  The
+;; normal tagged representation of an integer N is N*4+1.
+;; Unfortunately (N*4+1)/(M*4+1) and (N*4+1) % (M*4+1) don't seem to
+;; have particularly nice properties, so we divide (N*4) by (M*4)
+;; instead.  (N*4) / (M*4) = N/M, and (N*4) % (M*4) = (N%M) * 4.
+(define emit-division-code
+  (lambda ()
+    (get-procedure-arg 1)
+    (ensure-integer)
+    (comment "fetch dividend second; idiv wants it in %eax")
+    (get-procedure-arg 0)
+    (ensure-integer)
+    (comment "zero out the tag")
+    (dec tos)
+    (asm-pop ebx)
+    (dec ebx)
+    (comment "zero the top half of the dividend")
+    (sub edx edx)
+    (idiv ebx)))
+
+(add-to-header (lambda () (begin
+      (global-procedure 'remainder 2
+         (lambda () (begin
+                      (emit-division-code)
+                      (comment "remainder (<<2) is in %edx")
+                      (mov edx tos)
+                      (comment "put the tag back")
+                      (inc tos))))
+      (global-procedure 'quotient 2
+         (lambda () (begin
+                      (emit-division-code)
+                      (native-to-scheme-integer tos)))))))
 
 ;;; Booleans and other misc. types
 (define enum-tag 2)
