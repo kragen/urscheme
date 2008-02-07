@@ -35,3 +35,5 @@ clean:
 	rm -f a.out tmp.s $(listing) tmp.s.ref tmp.s.ref.old
 tests:
 	./runtests
+summary:
+	egrep '^;;;|^\(' compiler.scm
