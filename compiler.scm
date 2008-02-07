@@ -690,7 +690,7 @@
 (define assert-no-undefined-global-variables
   (lambda ()
     (if (not (null? (undefined-global-variables)))
-        (error "undefined global" (caar (undefined-global-variables)))
+        (error "error: undefined global" (caar (undefined-global-variables)))
         #t)))
 
 ;;; Compilation of particular kinds of expressions
