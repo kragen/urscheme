@@ -534,21 +534,7 @@
       (target-display))))
 (add-to-header (lambda () (rodatum "newline_string") (constant-string "\n")))
 
-;; Emit code to create a mutable labeled cell, for use as a global
-;; variable, with a specific assembly label.
-(define compile-global-variable
-  (lambda (varlabel initial)
-    (begin
-      (section ".data")
-      (label varlabel)
-      (compile-word initial)
-      (text))))
-
-;; Emit code to fetch from a named global variable.
-(define fetch-global-variable
-  (lambda (varname)
-      (asm-push tos) (mov (indirect varname) tos)))
-
+;; XXX all this integer stuff doesn't belong in the strings section
 ;; Emit code to convert a native integer to a tagged integer.
 (define native-to-scheme-integer 
   (lambda (reg) (begin (sal reg) (sal reg) (inc reg))))
@@ -714,6 +700,18 @@
   (lambda (name) 
     (global-variable-label-2 name (assq name global-variable-labels))))
 
+;; Emit code to create a mutable labeled cell, for use as a global
+;; variable, with a specific assembly label.
+(define compile-global-variable
+  (lambda (varlabel initial)
+    (begin
+      (section ".data")
+      (label varlabel)
+      (compile-word initial)
+      (text))))
+
+;; Emit code to create a mutable labeled cell for use as a global
+;; variable, bound to a specific identifier.
 (define define-global-variable
   (lambda (name initial)
     (if (assq name global-variables-defined) (error "double define" name)
@@ -721,6 +719,12 @@
                (set! global-variables-defined 
                      (cons (list name) global-variables-defined))))))
 
+;; Emit code to fetch from a named global variable.
+(define fetch-global-variable
+  (lambda (varname)
+      (asm-push tos) (mov (indirect varname) tos)))
+
+;; Return a list of undefined global variables.
 (define undefined-global-variables
   (lambda ()
     (filter (lambda (pair) (not (assq (car pair) global-variables-defined)))
