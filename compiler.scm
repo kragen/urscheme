@@ -244,7 +244,7 @@
 (define twoarg 
   (lambda (mnemonic) (lambda (src dest) (insn mnemonic " " src ", " dest))))
 ;; For example:
-(define mov (twoarg "mov"))   (define test (twoarg "test"))
+(define mov (twoarg "movl"))  (define test (twoarg "test"))
 (define cmpl (twoarg "cmpl")) (define lea (twoarg "lea"))
 (define add (twoarg "add"))   (define sub (twoarg "sub"))
 (define xchg (twoarg "xchg"))
@@ -260,13 +260,15 @@
 ;; These have two-arg forms too, but I'm not using them.
 (define sal (onearg "sal"))       (define sar (onearg "sar"))
 
-;; Currently only using a single zero-argument instruction:
+;; Currently only using two zero-argument instructions:
 (define ret (lambda () (insn "ret")))
+(define repstosb (lambda () (insn "rep stosb")))
 
 ;; Registers:
 (define eax "%eax")  (define ebx "%ebx")  
 (define ecx "%ecx")  (define edx "%edx")
 (define ebp "%ebp")  (define esp "%esp")
+(define edi "%edi")
 
 ;; x86 addressing modes:
 (define const (lambda (x) (list "$" x)))
@@ -461,9 +463,32 @@
 
 ;; Emit code to fetch the Nth argument of the innermost procedure.
 (define get-procedure-arg
-  (lambda (n)
-    (asm-push tos)
-    (mov (offset ebp (quadruple n)) tos)))
+  (lambda (n) (begin (asm-push tos)
+                     (mov (offset ebp (quadruple n)) tos))))
+
+
+;;; Memory management.
+
+(add-to-header
+ (lambda () 
+   (begin (insn ".bss")
+          (label "the_arena")
+          (insn ".space 1048576")
+          (compile-global-variable "arena_pointer" "the_arena"))))
+
+(define emit-malloc
+  (lambda ()
+    (begin (comment "code to allocate memory; tagged number of bytes in %eax")
+           (ensure-integer)
+           (scheme-to-native-integer eax)
+           (mov (indirect "arena_pointer") ebx)
+           (add ebx eax)
+           (mov eax (indirect "arena_pointer"))
+           (mov ebx eax)
+           (comment "now %eax points to newly allocated memory"))))
+
+;; XXX still need to implement deallocation and a GC
+
 
 ;;; Strings (on the target)
 ;; A string consists of the following, contiguous in memory:
@@ -519,6 +544,26 @@
   (lambda (contents env)
     (compile-literal-string-2 (constant-string contents))))
 
+(define-global-procedure 'make-string 1
+  (lambda () (begin (get-procedure-arg 0)
+                    (ensure-integer)
+                    (comment "we need 8 bytes more than the string length")
+                    (push-const (number->string (tagged-integer 8)))
+                    (emit-integer-addition)
+                    (emit-malloc)
+                    (mov (const string-magic) (indirect tos))
+                    (mov tos ebx)
+                    (comment "push address to return, get string length and store it")
+                    (get-procedure-arg 0)
+                    (scheme-to-native-integer tos)
+                    (mov tos (offset ebx 4))
+                    (comment "fill string with Xes")
+                    (lea (offset ebx 8) edi)
+                    (mov tos ecx)
+                    (mov (const "'X") eax)
+                    (repstosb)
+                    (comment "now pop and return the address")
+                    (pop))))
 
 ;;; Other miscellaneous crap that needs reorganizing
 
@@ -701,8 +746,8 @@
   (lambda (name) 
     (global-variable-label-2 name (assq name global-variable-labels))))
 
-;; Emit code to create a mutable labeled cell, for use as a global
-;; variable, with a specific assembly label.
+;; Emit code to create a mutable labeled cell, for example for use as
+;; a global variable, with a specific assembly label.
 (define compile-global-variable
   (lambda (varlabel initial)
     (begin
