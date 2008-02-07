@@ -481,11 +481,19 @@
           (insn ".space 1048576")
           (compile-global-variable "arena_pointer" "the_arena"))))
 
+;; Emit code to bump a pointer in a register up, if necessary, to be
+;; divisible by 4.
+(define align4
+  (lambda (reg)
+    (begin (add (const "3") reg)
+           (asm-and (const "~3") reg))))
+
 (define emit-malloc
   (lambda ()
     (begin (comment "code to allocate memory; tagged number of bytes in %eax")
            (ensure-integer)
            (scheme-to-native-integer eax)
+           (align4 eax)
            (mov (indirect "arena_pointer") ebx)
            (add ebx eax)
            (mov eax (indirect "arena_pointer"))
