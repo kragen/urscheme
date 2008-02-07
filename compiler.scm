@@ -715,7 +715,7 @@
     (mov (const "not_int_msg") tos)
     (jmp "report_error")
     (rodatum "not_int_msg")
-    (constant-string "type error: not an integer")
+    (constant-string "type error: not an integer\n")
     (text)))
 (define ensure-integer (lambda () (call "ensure_integer")))
 (define assert-equal (lambda (a b) (if (= a b) #t (error "assert failed"))))
