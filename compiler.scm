@@ -244,16 +244,20 @@
 (define twoarg 
   (lambda (mnemonic) (lambda (src dest) (insn mnemonic " " src ", " dest))))
 ;; For example:
-(define mov (twoarg "movl"))  (define test (twoarg "test"))
-(define cmpl (twoarg "cmpl")) (define lea (twoarg "lea"))
+(define mov (twoarg "movl"))  (define movb (twoarg "movb"))
+(define movsbl (twoarg "movsbl"))
+(define test (twoarg "test")) (define cmp (twoarg "cmpl"))
+(define lea (twoarg "lea"))
 (define add (twoarg "add"))   (define sub (twoarg "sub"))
 (define xchg (twoarg "xchg"))
+(define asm-and (twoarg "and"))
 
 ;; Emit a one-argument instruction
 (define onearg (lambda (mnemonic) (lambda (rand) (insn mnemonic " " rand))))
 (define asm-push (onearg "push")) (define asm-pop (onearg "pop"))
 (define jmp (onearg "jmp"))       (define jnz (onearg "jnz"))
 (define je (onearg "je"))         (define jz je)
+(define jnb (onearg "jnb"))
 (define call (onearg "call"))     (define int (onearg "int"))
 (define inc (onearg "inc"))       (define dec (onearg "dec"))
 (define idiv (onearg "idiv"))
@@ -269,6 +273,7 @@
 (define ecx "%ecx")  (define edx "%edx")
 (define ebp "%ebp")  (define esp "%esp")
 (define edi "%edi")
+(define al "%al")
 
 ;; x86 addressing modes:
 (define const (lambda (x) (list "$" x)))
@@ -382,7 +387,7 @@
       (test (const "3") tos)
       (jnz "not_procedure")
       (comment "now test its magic number")
-      (cmpl (const procedure-magic) (indirect tos))
+      (cmp (const procedure-magic) (indirect tos))
       (jnz "not_procedure")
       (ret))))
 (define ensure-procedure (lambda () (call "ensure_procedure")))
@@ -396,7 +401,7 @@
 (define compile-procedure-prologue
   (lambda (nargs)
     (begin
-      (cmpl (const (number->string nargs)) edx)
+      (cmp (const (number->string nargs)) edx)
       (jnz "argument_count_wrong")
       (comment "compute desired %esp on return in %ebx and push it")
       (lea (offset (index-register esp edx 4) 4) ebx)
@@ -525,7 +530,7 @@
     (test (const "3") tos)              ; test low two bits
     (jnz "notstring")
     (comment "now, test its magic number")
-    (cmpl (const string-magic) (indirect tos))
+    (cmp (const string-magic) (indirect tos))
     (jnz "notstring")
     (ret)))
 ;; Emit code to ensure that %eax is a string
@@ -706,7 +711,7 @@
 (define eof-value (enum-value 259))
 (define jump-if-false
   (lambda (label)
-    (cmpl (const false-value) tos)
+    (cmp (const false-value) tos)
     (pop)
     (je label)))
 
@@ -716,7 +721,7 @@
   (lambda ()
     ((lambda (label1 label2)
       (asm-pop ebx)
-      (cmpl ebx tos)
+      (cmp ebx tos)
       (je label1)
       (mov (const false-value) tos)
       (jmp label2)
