@@ -512,6 +512,14 @@
     (asm-push ebx)
     (mov (offset tos 4) tos)))          ; string length
 
+(define compile-literal-string-2 (lambda (label) (push-const label)))
+(define compile-literal-string
+  (lambda (contents env)
+    (compile-literal-string-2 (constant-string contents))))
+
+
+;;; Other miscellaneous crap that needs reorganizing
+
 ;; Emit code which, given a byte count on top of stack and a string
 ;; pointer underneath it, outputs the string.
 (define write_2
@@ -555,11 +563,6 @@
     (mov (const "1") ebx)               ; exit code of program
     (mov (const "1") eax)               ; __NR_exit
     (syscall)))                         ; make system call to exit
-
-(define compile-literal-string-2 (lambda (label) (push-const label)))
-(define compile-literal-string
-  (lambda (contents env)
-    (compile-literal-string-2 (constant-string contents))))
 
 
 ;;; Integers
