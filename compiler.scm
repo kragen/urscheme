@@ -452,14 +452,12 @@
     (begin
       (define-global-variable symbolname procedure-value-label)
       (built-in-procedure-labeled procedure-value-label nargs body))))
-;; Define a built-in procedure known by a certain global variable name.
-(define global-procedure
-  (lambda (symbolname nargs body)
-    (global-procedure-2 symbolname nargs body (new-label))))
-;; Add code to define a global procedure to the header
+;; Add code to define a global procedure known by a certain global
+;; variable name to the header
 (define define-global-procedure
   (lambda (symbolname nargs body)
-    (add-to-header (lambda () (global-procedure symbolname nargs body)))))
+    (add-to-header (lambda () 
+                     (global-procedure-2 symbolname nargs body (new-label))))))
 
 ;; Emit code to fetch the Nth argument of the innermost procedure.
 (define get-procedure-arg
