@@ -206,15 +206,14 @@
 
 (define char=?                          ; identical to standard char=?
   (lambda (a b) (string=? (char->string a) (char->string b))))
-(define string-sub-2
+(define substring-2
   (lambda (buf string start idx)
     (if (= idx (string-length buf)) buf
         (begin (string-set! buf idx (string-ref string (+ start idx)))
-               (string-sub-2 buf string start (+ idx 1))))))
-;; XXX rename
-(define string-sub                      ; identical to standard substring
+               (substring-2 buf string start (+ idx 1))))))
+(define substring                  ; identical to standard "substring"
   (lambda (string start end)
-    (string-sub-2 (make-string (- end start)) string start 0)))
+    (substring-2 (make-string (- end start)) string start 0)))
 (define string-idx-2
   (lambda (string char idx)
     (if (= idx (string-length string)) #f
@@ -311,7 +310,7 @@
                (backslashify-2 string buf (+ idx 1) (+ idxo 1))))))
 (define backslashify-2
   (lambda (string buf idx idxo)
-    (if (= idx (string-length string)) (string-sub buf 0 idxo)
+    (if (= idx (string-length string)) (substring buf 0 idxo)
         (backslashify-3 string buf idx idxo 
                         (string-idx dangerous (string-ref string idx))))))
 (define backslashify
