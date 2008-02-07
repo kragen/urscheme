@@ -578,6 +578,85 @@
                     (comment "now pop and return the address")
                     (pop))))
 
+(define check-array-bounds
+  (lambda ()
+    (begin 
+      (comment "verify that tagged %eax is in [0, untagged NOS)")
+      (ensure-integer)
+
+      ;; Intel manual 253667 explains, "[The SUB instruction]
+      ;; evaluates the result for both signed and unsigned integer
+      ;; operands and sets the OF and CF flags to indicate an overflow
+      ;; in the signed or unsigned result, respectively. The SF flag
+      ;; indicates the sign of the signed result."  
+
+      (scheme-to-native-integer eax)
+      ;; We can do this with a single unsigned comparison; negative
+      ;; array indices will look like very large positive numbers and
+      ;; therefore be out of bounds.
+      (comment "set flags by (unsigned array index - array max)")
+      (cmp nos tos)
+      (comment "now we expect unsigned overflow, i.e. borrow/carry.")
+      (jnb "index_out_of_bounds")
+      (comment "now discard both the index and the bound")
+      (pop) (pop))))
+
+(add-to-header (lambda ()
+    ((lambda (errlabel)
+       (begin
+         (label "index_out_of_bounds")
+         (mov (const errlabel) tos)
+         (jmp "report_error")))
+     (constant-string "error: array index out of bounds\n"))))
+
+(define-global-procedure 'string-set! 3
+  (lambda () 
+    (begin 
+      (comment "string-set! primitive procedure")
+      (get-procedure-arg 0)
+      (extract-string)
+      (get-procedure-arg 1)
+      (check-array-bounds)
+      (get-procedure-arg 1)
+      (scheme-to-native-integer tos)
+      (mov tos edi)
+      (comment "now retrieve the address of string bytes from the stack")
+      (pop)
+      (mov tos ebx)
+      (get-procedure-arg 2)
+      (ensure-character)
+      (scheme-to-native-character tos)
+      (movb al (indirect (index-register ebx edi 1)))
+      (comment "discard the character and base address")
+      (pop) (pop)
+      (comment "but we need a return value...")
+      (get-procedure-arg 0))))
+
+(define-global-procedure 'string-ref 2
+  (lambda ()
+    (begin
+      (comment "string-ref primitive procedure")
+      (get-procedure-arg 0)
+      (extract-string)
+      (get-procedure-arg 1)
+      (check-array-bounds)
+      (get-procedure-arg 1)
+      (scheme-to-native-character tos)
+      (comment "get base address of string data from stack")
+      (asm-pop ebx)
+      (movb (indirect (index-register tos ebx 1)) al)
+      (movsbl al tos)
+      (native-to-scheme-character tos))))
+
+(define-global-procedure 'string-length 1
+  (lambda ()
+    (begin
+      (comment "string-length primitive procedure")
+      (get-procedure-arg 0)
+      (extract-string)
+      (asm-pop ebx)
+      (native-to-scheme-integer tos))))
+
 ;;; Other miscellaneous crap that needs reorganizing
 
 ;; Emit code which, given a byte count on top of stack and a string
@@ -722,6 +801,37 @@
     (cmp (const false-value) tos)
     (pop)
     (je label)))
+
+;; Emit code to generate an error if TOS isn't a character.
+(define ensure-character
+  (lambda () (begin (test (const "1") tos)
+                    (jnz "not_a_character")
+                    (test (const "2") tos)
+                    (jz "not_a_character")
+                    ;; Intel manual 253666 says, "The comparison is
+                    ;; performed by subtracting the second operand
+                    ;; from the first operand and then setting the
+                    ;; status flags in the same manner as the SUB
+                    ;; instruction."  Here we're using AT&T syntax, so
+                    ;; that means "the first operand from the second
+                    ;; operand", so we expect to set the carry flag
+                    ;; here.
+                    (cmp (const (enum-value 256)) tos)
+                    (jnb "not_a_character"))))
+(add-to-header (lambda ()
+    ((lambda (errlabel)
+       (begin
+         (label "not_a_character")
+         (mov (const errlabel) tos)
+         (jmp "report_error")))
+     (constant-string "error: not a character\n"))))
+;; Emit code to leave an unsigned native character in the register,
+;; converting from a tagged character.
+(define scheme-to-native-character scheme-to-native-integer)
+;; Emit code to convert from an unsigned native character to a tagged
+;; character.
+(define native-to-scheme-character
+  (lambda (reg) (begin (sal reg) (inc reg) (sal reg))))
 
 ;; Emit code to push a boolean in place of the top two stack items.
 ;; It will be #t if they are equal, #f if they are not.
