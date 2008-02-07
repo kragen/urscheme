@@ -16,7 +16,7 @@ listing=tmp.s.lst
 # with and without -nostdlib, but this is one.)
 asflags = -nostdlib -Wa,-adhlns=$(listing)
 all: test tests
-test: a.out
+test:
 	./a.out
 a.out: tmp.s
 	$(CC) $(asflags) $<
@@ -27,5 +27,5 @@ tmp.s: compiler.scm test.simple.scm
 	diff -u $@.ref.old $@.ref ||:
 clean:
 	rm -f a.out tmp.s $(listing) tmp.s.ref tmp.s.ref.old
-tests: test.*.scm runtests
+tests:
 	./runtests
