@@ -185,14 +185,13 @@
     (string-append-2 s1 s2 (make-string (+ (string-length s1) 
                                            (string-length s2)))
                           0)))
-(define string-of-char-2
+(define char->string-2
   (lambda (buf char) (begin (string-set! buf 0 char) buf)))
-;; XXX rename to char->string
-(define string-of-char
+(define char->string
   (lambda (char)
-    (string-of-char-2 (make-string 1) char)))
+    (char->string-2 (make-string 1) char)))
 (define string-digit
-  (lambda (digit) (string-of-char (string-ref "0123456789" digit))))
+  (lambda (digit) (char->string (string-ref "0123456789" digit))))
 ;; Note that this strategy is O(N^2) in the number of digits.
 (define number-to-string-2
   (lambda (num)
@@ -208,7 +207,7 @@
 
 ;; XXX rename
 (define char-eqv?                       ; identical to standard char=?
-  (lambda (a b) (string=? (string-of-char a) (string-of-char b))))
+  (lambda (a b) (string=? (char->string a) (char->string b))))
 (define string-sub-2
   (lambda (buf string start idx)
     (if (= idx (string-length buf)) buf
