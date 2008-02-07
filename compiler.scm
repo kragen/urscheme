@@ -68,11 +68,9 @@
 ;; - strings, with string-set!, string-ref, string literals,
 ;;   string-length, and make-string with one argument; no string=?
 ;;   yet.  (And it should probably be implemented in Scheme.)
+;; - dynamic allocation (but no GC yet)
 
 ;; Next to implement:
-;; - some unit tests; now that the compiler is capable of compiling a
-;;   unit test suite, there should be one.
-;; - dynamic allocation
 ;; - cons cells with cons, car, cdr, null?, and pair?; suggested magic
 ;;   number: ce11
 ;; - variadic functions (that will get us past the first two lines of
