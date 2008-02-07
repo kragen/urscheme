@@ -1,0 +1,14 @@
+#!/bin/sh
+set -e
+refscheme="mzscheme -r"
+trap '/bin/rm -f refscheme.out newcompiler.out runtest.s runtest' EXIT
+runtest () {
+        prog="${1?runtest needs an argument}"
+        echo "running $prog"
+        $refscheme "$prog" > refscheme.out
+        $refscheme compiler.scm < "$prog" > runtest.s
+        gcc -nostdlib runtest.s -o runtest
+        ./runtest > newcompiler.out
+        diff -au refscheme.out newcompiler.out
+}
+for test in test.*.scm; do runtest "$test"; done
