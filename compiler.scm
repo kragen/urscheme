@@ -368,6 +368,19 @@
   (lambda (proc) (set! stuff-to-put-in-the-header 
                        (concatenate-thunks stuff-to-put-in-the-header proc))))
 
+;; Add code to the header to define an error message.
+(define define-error-routine
+  (lambda (labelname message)
+    (add-to-header (lambda ()
+      ((lambda (errlabel)
+        (begin
+          (label labelname)
+          (mov (const errlabel) tos)
+          (jmp "report_error")))
+       (constant-string (string-append "error: " 
+                                       (string-append message "\n"))))))))
+
+
 ;;; Procedure calls.
 ;; Procedure values are 8 bytes:
 ;; - 4 bytes: procedure magic number 0xca11ab1e
@@ -419,22 +432,8 @@
       (mov ebx esp)
       (jmp (absolute edx)))))           ; return via indirect jump
 
-(define not-procedure-routine-2
-  (lambda (errlabel)
-    (begin
-      (label "not_procedure")
-      (comment "error handling when you call something not callable")
-      (mov (const errlabel) tos)
-      (jmp "report_error"))))
-(add-to-header (lambda ()
-    (not-procedure-routine-2 (constant-string "type error: not a procedure\n"))))
-(add-to-header (lambda ()
-    ((lambda (errlabel)
-       (begin
-         (label "argument_count_wrong")
-         (mov (const errlabel) tos)
-         (jmp "report_error")))
-     (constant-string "error: wrong number of arguments\n"))))
+(define-error-routine "not_procedure" "not a procedure")
+(define-error-routine "argument_count_wrong" "wrong number of arguments")
 
 (define built-in-procedure-2
   (lambda (labelname nargs body bodylabel)
@@ -523,13 +522,7 @@
   (lambda (contents)
     (constant-string-2 contents (new-label))))
 
-(define string-error-routine-2
-  (lambda (errlabel)
-    (label "notstring")
-    (mov (const errlabel) tos)
-    (jmp "report_error")))
-(add-to-header (lambda ()
-    (string-error-routine-2 (constant-string "type error: not a string\n"))))
+(define-error-routine "notstring" "not a string")
 
 (add-to-header (lambda ()
     (label "ensure_string")
@@ -601,13 +594,7 @@
       (comment "now discard both the index and the bound")
       (pop) (pop))))
 
-(add-to-header (lambda ()
-    ((lambda (errlabel)
-       (begin
-         (label "index_out_of_bounds")
-         (mov (const errlabel) tos)
-         (jmp "report_error")))
-     (constant-string "error: array index out of bounds\n"))))
+(define-error-routine "index_out_of_bounds" "array index out of bounds")
 
 (define-global-procedure 'string-set! 3
   (lambda () 
@@ -710,13 +697,9 @@
     (jz "not_an_integer")
     (test (const "2") tos)
     (jnz "not_an_integer")
-    (ret)
-    (label "not_an_integer")
-    (mov (const "not_int_msg") tos)
-    (jmp "report_error")
-    (rodatum "not_int_msg")
-    (constant-string "type error: not an integer\n")
-    (text)))
+    (ret)))
+(define-error-routine "not_an_integer" "not an integer")
+
 (define ensure-integer (lambda () (call "ensure_integer")))
 (define assert-equal (lambda (a b) (if (= a b) #t (error "assert failed"))))
 ;; Emit code to add NOS to TOS; assumes they're already tag-checked
@@ -818,13 +801,9 @@
                     ;; here.
                     (cmp (const (enum-value 256)) tos)
                     (jnb "not_a_character"))))
-(add-to-header (lambda ()
-    ((lambda (errlabel)
-       (begin
-         (label "not_a_character")
-         (mov (const errlabel) tos)
-         (jmp "report_error")))
-     (constant-string "error: not a character\n"))))
+
+(define-error-routine "not_a_character" "not a character")
+
 ;; Emit code to leave an unsigned native character in the register,
 ;; converting from a tagged character.
 (define scheme-to-native-character scheme-to-native-integer)
