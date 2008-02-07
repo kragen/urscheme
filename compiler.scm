@@ -256,6 +256,9 @@
 (define je (onearg "je"))         (define jz je)
 (define call (onearg "call"))     (define int (onearg "int"))
 (define inc (onearg "inc"))       (define dec (onearg "dec"))
+(define idiv (onearg "idiv"))
+;; These have two-arg forms too, but I'm not using them.
+(define sal (onearg "sal"))       (define sar (onearg "sar"))
 
 ;; Currently only using a single zero-argument instruction:
 (define ret (lambda () (insn "ret")))
@@ -550,15 +553,34 @@
 (add-to-header (lambda ()
     (begin
       (global-procedure 'display 1 
-                        (lambda () (begin
-                                      (get-procedure-arg 0)
-                                      (target-display))))
+         (lambda () (begin
+                      (get-procedure-arg 0)
+                      (target-display))))
       (global-procedure 'newline 0 target-newline)
       (global-procedure 'eq? 2 
-                        (lambda () (begin
-                                      (get-procedure-arg 0)
-                                      (get-procedure-arg 1)
-                                      (target-eq?)))))))
+         (lambda () (begin
+                      (get-procedure-arg 0)
+                      (get-procedure-arg 1)
+                      (target-eq?))))
+      (global-procedure 'remainder 2
+         (lambda () (begin
+                      (get-procedure-arg 1)
+                      (ensure-integer)
+                      (comment "fetch dividend second; idiv wants it in %eax")
+                      (get-procedure-arg 0)
+                      (ensure-integer)
+                      (comment "zero out the tag")
+                      (dec tos)
+                      (asm-pop ebx)
+                      (dec ebx)
+                      (comment "zero the top half of the dividend")
+                      (sub edx edx)
+                      (idiv ebx)
+                      (comment "remainder (<<2) is in %edx")
+                      (mov edx tos)
+                      (comment "put the tag back")
+                      (inc tos))))
+)))
 (define apply-built-in-by-label
   (lambda (label)
     (lambda ()
