@@ -65,9 +65,11 @@
 ;; - lambda, with fixed numbers of arguments, without nesting
 ;; - local variables
 ;; - global variables
+;; - strings, with string-set!, string-ref, string literals,
+;;   string-length, and make-string with one argument; no string=?
+;;   yet.  (And it should probably be implemented in Scheme.)
 
 ;; Next to implement:
-;; - renaming the functions with needlessly nonstandard names
 ;; - some unit tests; now that the compiler is capable of compiling a
 ;;   unit test suite, there should be one.
 ;; - dynamic allocation
@@ -76,8 +78,6 @@
 ;; - variadic functions (that will get us past the first two lines of
 ;;   compiling itself)
 ;; - quote! that's going to be interesting.
-;; - immutable string operations: string-ref, string-length
-;; - mutable string operations: make-string, string-set!
 
 ;;; Not implemented:
 ;; - call/cc, dynamic-wind
