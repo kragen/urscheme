@@ -548,11 +548,6 @@
                       (get-procedure-arg 1)
                       (target-eq?)))))))
 
-(define apply-built-in-by-label
-  (lambda (label)
-    (lambda ()
-      (push-const label))))
-
 ;; Emit the code for the normal error-reporting routine
 (add-to-header (lambda ()
     (label "report_error")
