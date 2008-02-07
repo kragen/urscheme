@@ -726,9 +726,8 @@
       (ensure-integer)
       (swap)
       (ensure-integer)
-      (swap)                         ; XXX this is probably suboptimal
-      (sub nos tos)
-      (asm-pop ebx)                     ; discard second argument
+      (sub tos nos)
+      (pop)
       (inc tos))))                      ; fix up tag
 
 ;; Emit code to convert a native integer to a tagged integer.
