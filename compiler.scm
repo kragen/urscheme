@@ -193,14 +193,13 @@
 (define string-digit
   (lambda (digit) (char->string (string-ref "0123456789" digit))))
 ;; Note that this strategy is O(N^2) in the number of digits.
-(define number-to-string-2
+(define number->string-2
   (lambda (num)
     (if (= num 0) ""
-        (string-append (number-to-string-2 (quotient num 10))
+        (string-append (number->string-2 (quotient num 10))
                        (string-digit (remainder num 10))))))
-;; XXX rename
-(define number-to-string                ; number->string
-  (lambda (num) (if (= num 0) "0" (number-to-string-2 num))))
+(define number->string        ; identical to standard "number->string"
+  (lambda (num) (if (= num 0) "0" (number->string-2 num))))
 
 ;; Boy, it sure causes a lot of hassle that Scheme has different types
 ;; for strings and chars.
@@ -272,11 +271,11 @@
 (define const (lambda (x) (list "$" x)))
 (define indirect (lambda (x) (list "(" x ")")))
 (define offset 
-  (lambda (x offset) (list (number-to-string offset) (indirect x))))
+  (lambda (x offset) (list (number->string offset) (indirect x))))
 (define absolute (lambda (x) (list "*" x)))
 ;; Use this one inside of "indirect" or "offset".
 (define index-register
-  (lambda (base index size) (list base "," index "," (number-to-string size))))
+  (lambda (base index size) (list base "," index "," (number->string size))))
 
 (define syscall (lambda () (int (const "0x80"))))
 
@@ -298,7 +297,7 @@
   (lambda ()
     (begin
       (set! constcounter (+ constcounter 1))
-      (list "k_" (number-to-string constcounter)))))
+      (list "k_" (number->string constcounter)))))
 
 ;; stuff to output a Lisp string safely for assembly language
 (define dangerous "\\\n\"")
@@ -390,12 +389,12 @@
     (begin
       (ensure-procedure)
       (mov (offset tos 4) ebx)          ; address of actual procedure
-      (mov (const (number-to-string nargs)) edx)
+      (mov (const (number->string nargs)) edx)
       (call (absolute ebx)))))
 (define compile-procedure-prologue
   (lambda (nargs)
     (begin
-      (cmpl (const (number-to-string nargs)) edx)
+      (cmpl (const (number->string nargs)) edx)
       (jnz "argument_count_wrong")
       (comment "compute desired %esp on return in %ebx and push it")
       (lea (offset (index-register esp edx 4) 4) ebx)
@@ -475,7 +474,7 @@
   (lambda (contents labelname)
     (rodatum labelname)
     (compile-word string-magic)
-    (compile-word (number-to-string (string-length contents)))
+    (compile-word (number->string (string-length contents)))
     (ascii contents)
     (text)
     labelname))
@@ -628,7 +627,7 @@
 ;;; Booleans and other misc. types
 (define enum-tag 2)
 (define enum-value 
-  (lambda (offset) (number-to-string (+ enum-tag (tagshift offset)))))
+  (lambda (offset) (number->string (+ enum-tag (tagshift offset)))))
 (define nil-value (enum-value 256))
 (define true-value (enum-value 257))
 (define false-value (enum-value 258))
@@ -707,7 +706,7 @@
 (define compile-literal-boolean
   (lambda (b env) (push-const (if b true-value false-value))))
 (define compile-literal-integer
-  (lambda (int env) (push-const (number-to-string (tagged-integer int)))))
+  (lambda (int env) (push-const (number->string (tagged-integer int)))))
 ;; compile an expression, discarding result, e.g. for toplevel
 ;; expressions
 (define compile-discarding
