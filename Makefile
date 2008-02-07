@@ -22,7 +22,7 @@ listing=tmp.s.lst
 # with and without -nostdlib, but this is one.)
 asflags = -nostdlib -Wa,-adhlns=$(listing)
 all: test tests
-test:
+test: a.out
 	./a.out
 a.out: tmp.s
 	$(CC) $(asflags) $<
