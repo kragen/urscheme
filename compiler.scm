@@ -204,7 +204,7 @@
 ;; Boy, it sure causes a lot of hassle that Scheme has different types
 ;; for strings and chars.
 
-(define char=?                          ; identical to standard char=?
+(define char=?                        ; identical to standard "char=?"
   (lambda (a b) (string=? (char->string a) (char->string b))))
 (define substring-2
   (lambda (buf string start idx)
