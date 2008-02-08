@@ -55,6 +55,7 @@
 ;; of small integers.
 
 ;;; Implemented:
+;; - car, cdr, cons
 ;; - display, for strings, and newline
 ;; - string and numeric constants
 ;; - begin
@@ -72,8 +73,7 @@
 ;; - dynamic allocation (but no GC yet)
 
 ;; Next to implement:
-;; - cons cells with cons, car, cdr, null?, and pair?; suggested magic
-;;   number: ce11
+;; - null?, and pair?
 ;; - variadic functions (that will get us past the first two lines of
 ;;   compiling itself)
 ;; - quote! that's going to be interesting.
@@ -637,6 +637,42 @@
       (extract-string)
       (asm-pop ebx)
       (native-to-scheme-integer tos))))
+
+;;; conses
+;; They're 12 bytes: magic number, car, cdr.  That's all, folks.
+
+(define cons-magic "0x2ce11ed")
+(define ensure-cons (lambda () (call "ensure_cons")))
+(add-to-header (lambda () (begin (label "ensure_cons")
+                                 (test (const "3") tos)
+                                 (jnz "not_cons")
+                                 (cmp (const cons-magic) (indirect tos))
+                                 (jnz "not_cons")
+                                 (ret))))
+(define-error-routine "not_cons" "not a cons")
+(define-global-procedure 'car 1
+  (lambda ()
+    (begin (get-procedure-arg 0)
+           (ensure-cons)
+           (mov (offset tos 4) tos))))
+(define-global-procedure 'cdr 1
+  (lambda ()
+    (begin (get-procedure-arg 0)
+           (ensure-cons)
+           (mov (offset tos 8) tos))))
+(define-global-procedure 'cons 2
+  (lambda ()
+    (begin (push-const (tagged-integer 12))
+           (emit-malloc)
+           (mov (const cons-magic) (indirect tos))
+           (mov tos ebx)
+           (get-procedure-arg 0)
+           (mov tos (offset ebx 4))
+           (pop)
+           (get-procedure-arg 1)
+           (mov tos (offset ebx 8))
+           (pop))))
+
 
 ;;; Other miscellaneous crap that needs reorganizing
 

@@ -1,0 +1,5 @@
+(define messages (cons "hello" "world"))
+(display (car messages))
+(display ", ")
+(display (cdr messages))
+(newline)
