@@ -1,7 +1,7 @@
 ;;; A compiler from a subset of R5RS Scheme to x86 assembly, written in itself.
 ;; Kragen Javier Sitaker, 2008-01-03, 04, 05, and 06
 
-;; From the Scheme 9 From Outer Space page:
+;; From the Scheme 9 From Empty Space page:
 ;; Why in earth write another half-baked implementation of Scheme?
 ;; It is better than getting drunk at a bar.
 
