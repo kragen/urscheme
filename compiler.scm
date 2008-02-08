@@ -44,7 +44,7 @@
 ;; - garbage collection
 ;; - strings, with string-set!, string-ref, string literals,
 ;;   string=?, string-length, and make-string with one argument
-;; - which unfortunately requires characters
+;; - which unfortunately requires characters; char=?
 ;; - very basic arithmetic: two-argument +, -, quotient, remainder,
 ;;   and = for integers, and decimal numeric constants
 ;; - recursive procedure calls
@@ -69,7 +69,7 @@
 ;; - strings, with string-set!, string-ref, string literals,
 ;;   string-length, and make-string with one argument; no string=?
 ;;   yet.  (And it should probably be implemented in Scheme.)
-;; - characters
+;; - characters with char=?
 ;; - dynamic allocation (but no GC yet)
 
 ;; Next to implement:
@@ -205,16 +205,6 @@
 ;; Boy, it sure causes a lot of hassle that Scheme has different types
 ;; for strings and chars.
 
-(define char=?                        ; identical to standard "char=?"
-  (lambda (a b) (string=? (char->string a) (char->string b))))
-(define substring-2
-  (lambda (buf string start idx)
-    (if (= idx (string-length buf)) buf
-        (begin (string-set! buf idx (string-ref string (+ start idx)))
-               (substring-2 buf string start (+ idx 1))))))
-(define substring                  ; identical to standard "substring"
-  (lambda (string start end)
-    (substring-2 (make-string (- end start)) string start 0)))
 (define string-idx-2
   (lambda (string char idx)
     (if (= idx (string-length string)) #f
@@ -1046,6 +1036,8 @@
       (global-label "main")     ; with entry point of main, not _start
 
       (compile-toplevel-define '= 'eq? global-env)
+      ;; because chars are unboxed, char=? is eq?
+      (compile-toplevel-define 'char=? 'eq? global-env)
       (body)
 
       (mov (const "1") eax)             ; __NR_exit
