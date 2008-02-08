@@ -1,10 +1,10 @@
 #!/bin/sh
 set -e
 # I like MzScheme for its diagnostics:
-# : ${refscheme:="mzscheme -r"}
+: ${refscheme:="mzscheme -r"}
 # But ELK is the fastest of bigloo, guile, mzscheme, SCM, and ELK for
 # this purpose:
-: ${refscheme:="elk -l"}
+# : ${refscheme:="elk -l"}
 trap '/bin/rm -f refscheme.out newcompiler.out runtest.s runtest' EXIT
 runtest () {
         prog="${1?runtest needs an argument}"
