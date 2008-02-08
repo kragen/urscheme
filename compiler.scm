@@ -58,7 +58,7 @@
 ;; - display, for strings, and newline
 ;; - string and numeric constants
 ;; - begin
-;; - if
+;; - if (with three arguments)
 ;; - booleans
 ;; - recursive procedure calls
 ;; - some arithmetic: +, -, and = for integers
@@ -68,6 +68,7 @@
 ;; - strings, with string-set!, string-ref, string literals,
 ;;   string-length, and make-string with one argument; no string=?
 ;;   yet.  (And it should probably be implemented in Scheme.)
+;; - characters
 ;; - dynamic allocation (but no GC yet)
 
 ;; Next to implement:
@@ -738,6 +739,7 @@
 ;; Unfortunately (N*4+1)/(M*4+1) and (N*4+1) % (M*4+1) don't seem to
 ;; have particularly nice properties, so we divide (N*4) by (M*4)
 ;; instead.  (N*4) / (M*4) = N/M, and (N*4) % (M*4) = (N%M) * 4.
+;; (Barring overflow.)
 (define emit-division-code
   (lambda ()
     (get-procedure-arg 1)
