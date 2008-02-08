@@ -681,11 +681,9 @@
 
 
 ;;; Integers
-(define tagshift quadruple)
-(define integer-tag 1)
-(define tagged-integer
-  (lambda (int) 
-    (list (number->list integer-tag) " + " (number->list int) "<<2")))
+(define tagshift (lambda (str) (list (number->list str) "<<2")))
+(define integer-tag "1")
+(define tagged-integer (lambda (int) (list integer-tag " + " (tagshift int))))
 (add-to-header (lambda ()
     (label "ensure_integer")
     (test (const "1") tos)
@@ -767,9 +765,8 @@
                     (native-to-scheme-integer tos))))
 
 ;;; Booleans and other misc. types
-(define enum-tag 2)
-(define enum-value 
-  (lambda (offset) (number->list (+ enum-tag (tagshift offset)))))
+(define enum-tag "2")
+(define enum-value (lambda (offset) (list enum-tag " + " (tagshift offset))))
 (define nil-value (enum-value 256))
 (define true-value (enum-value 257))
 (define false-value (enum-value 258))
