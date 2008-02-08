@@ -46,7 +46,7 @@
 ;;   string=?, string-length, and make-string with one argument
 ;; - which unfortunately requires characters; char=?
 ;; - very basic arithmetic: two-argument +, -, quotient, remainder,
-;;   and = for integers, and decimal numeric constants
+;;   <, and = for integers, and decimal numeric constants
 ;; - recursive procedure calls
 ;; - display, for strings, and newline
 ;; - error
@@ -200,7 +200,9 @@
 ;; Converts a number into a list of one-digit strings, similar to
 ;; standard number->string.
 (define number->list
-  (lambda (num) (if (= num 0) "0" (number->list-2 num '()))))
+  (lambda (num) (if (= num 0) "0" 
+                    (if (< num 0) (cons "-" (number->list-2 (- 0 num) '()))
+                        (number->list-2 num '())))))
 
 ;; Boy, it sure causes a lot of hassle that Scheme has different types
 ;; for strings and chars.
