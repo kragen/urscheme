@@ -949,15 +949,15 @@
         (cons 'lambda compile-lambda)
         (cons '+ integer-add)
         (cons '- integer-sub)))
-(define compile-ration-2
+(define compile-combination-2
   (lambda (rator rands env handler)
     (if handler ((cdr handler) rands env)
         (compile-application rator env (compile-args rands env)))))
-(define compile-ration
+(define compile-combination
   (lambda (rator rands env)
-    (compile-ration-2 rator rands env (assq rator special-syntax-list))))
+    (compile-combination-2 rator rands env (assq rator special-syntax-list))))
 (define compile-pair
-  (lambda (expr env) (compile-ration (car expr) (cdr expr) env)))
+  (lambda (expr env) (compile-combination (car expr) (cdr expr) env)))
 (define compilation-expr-list
   (list (cons pair? compile-pair)
         (cons symbol? compile-var)
