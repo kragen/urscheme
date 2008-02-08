@@ -309,8 +309,8 @@
       (list "k_" (number->list constcounter)))))
 
 ;; stuff to output a Lisp string safely for assembly language
-(define ndangerous '("\\" "\n" "\""))
-(define nescapes '("\\\\" "\\n" "\\\""))
+(define dangerous '("\\" "\n" "\""))
+(define escapes '("\\\\" "\\n" "\\\""))
 (define backslashify-char
   (lambda (char dangerous escapes)
     (if (null? dangerous) (char->string char)
@@ -319,7 +319,7 @@
 (define backslashify
   (lambda (string idx)
     (if (= idx (string-length string)) '("\"")
-        (cons (backslashify-char (string-ref string idx) ndangerous nescapes)
+        (cons (backslashify-char (string-ref string idx) dangerous escapes)
               (backslashify string (+ idx 1))))))
 ;; Represent a string appropriately for the output assembly language file.
 (define asm-represent-string 
