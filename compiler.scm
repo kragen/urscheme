@@ -306,28 +306,21 @@
       (list "k_" (number->string constcounter)))))
 
 ;; stuff to output a Lisp string safely for assembly language
-(define dangerous "\\\n\"")
-(define escapes "\\n\"")
-(define backslash (string-ref "\\" 0))  ; I don't have reader syntax for characters
-(define backslashify-3
-  (lambda (string buf idx idxo backslashed)
-    (if backslashed (begin (string-set! buf idxo backslash)
-                           (string-set! buf (+ idxo 1) (string-ref escapes backslashed))
-                           (backslashify-2 string buf (+ idx 1) (+ idxo 2)))
-        (begin (string-set! buf idxo (string-ref string idx))
-               (backslashify-2 string buf (+ idx 1) (+ idxo 1))))))
-(define backslashify-2
-  (lambda (string buf idx idxo)
-    (if (= idx (string-length string)) (substring buf 0 idxo)
-        (backslashify-3 string buf idx idxo 
-                        (string-idx dangerous (string-ref string idx))))))
+(define ndangerous '("\\" "\n" "\""))
+(define nescapes '("\\\\" "\\n" "\\\""))
+(define backslashify-char
+  (lambda (char dangerous escapes)
+    (if (null? dangerous) (char->string char)
+        (if (char=? char (string-ref (car dangerous) 0)) (car escapes)
+            (backslashify-char char (cdr dangerous) (cdr escapes))))))
 (define backslashify
-  (lambda (string)
-    (backslashify-2 string (make-string (+ (string-length string)
-                                           (string-length string))) 0 0)))
+  (lambda (string idx)
+    (if (= idx (string-length string)) '("\"")
+        (cons (backslashify-char (string-ref string idx) ndangerous nescapes)
+              (backslashify string (+ idx 1))))))
 ;; Represent a string appropriately for the output assembly language file.
-(define asm-represent-string
-  (lambda (string) (list "\"" (backslashify string) "\"")))
+(define asm-represent-string 
+  (lambda (string) (cons "\"" (backslashify string 0))))
 
 (define ascii (lambda (string) (insn ".ascii " (asm-represent-string string))))
 
