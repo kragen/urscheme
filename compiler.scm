@@ -1,5 +1,5 @@
 ;;; A compiler from a subset of R5RS Scheme to x86 assembly, written in itself.
-;; Kragen Javier Sitaker, 2008-01-03, 04, 05, and 06
+;; Kragen Javier Sitaker, 2008-01-03, 04, 05, and 06, 07, and 08
 
 ;; From the Scheme 9 From Empty Space page:
 ;; Why in earth write another half-baked implementation of Scheme?
@@ -63,7 +63,7 @@
 ;; - booleans
 ;; - recursive procedure calls
 ;; - some arithmetic: +, -, and = for integers
-;; - lambda, with fixed numbers of arguments, without nesting
+;; - lambda, without nesting
 ;; - local variables
 ;; - global variables
 ;; - strings, with string-set!, string-ref, string literals,
@@ -74,8 +74,6 @@
 
 ;; Next to implement:
 ;; - null?, and pair?
-;; - variadic functions (that will get us past the first two lines of
-;;   compiling itself)
 ;; - quote! that's going to be interesting.
 
 ;;; Not implemented:
@@ -397,18 +395,52 @@
       (mov (offset tos 4) ebx)          ; address of actual procedure
       (mov (const (number->list nargs)) edx)
       (call (absolute ebx)))))
+
+;; package up variadic arguments into a list.  %ebp is fully set up,
+;; so we can index off of it to find each argument, and %edx is the
+;; total number of arguments.  Only trouble is that we have to push
+;; %edx and our loop counter and whatever if we want to save them
+;; across a call to cons.
+(add-to-header 
+ (lambda () 
+   (begin 
+     (label "package_up_variadic_args")
+     (comment "we have %ebp pointing at args, %edx with count")
+     (comment "saved %ebp in %eax.  zero-iterations case: return nil")
+     (push-const nil-value)
+     (label "variadic_loop")
+     (comment "calling cons clobbers registers, so push %edx")
+     (asm-push edx)
+     (comment "now push args for cons")
+     (asm-push eax)
+     (asm-push (offset (index-register ebp edx 4) -4))
+     (comment "give cons its argument count")
+     (mov (const "2") edx)
+     (call "cons")
+     (comment "now the args are popped and we have new list in %eax")
+     (asm-pop edx)
+     (dec edx)
+     (jnz "variadic_loop")
+     (comment "now we pretend procedure was called with the list as first arg")
+     (mov eax (indirect ebp))
+     (comment "restore %eax to value on entry to package_up_variadic_args")
+     (pop)
+     (ret))))
 (define compile-procedure-prologue
   (lambda (nargs)
     (begin
-      (cmp (const (number->list nargs)) edx)
-      (jnz "argument_count_wrong")
       (comment "compute desired %esp on return in %ebx and push it")
       (lea (offset (index-register esp edx 4) 4) ebx)
       (asm-push ebx)                    ; push restored %esp on stack
       ;; At this point, if we were a closure, we would be doing
       ;; something clever with the procedure value pointer in %eax.
       (mov ebp tos)                     ; save old %ebp --- in %eax!
-      (lea (offset esp 8) ebp))))       ; 8 bytes to skip saved %ebx and %eip
+      (lea (offset esp 8) ebp)   ; 8 bytes to skip saved %ebx and %eip
+      (if (null? nargs)
+          (call "package_up_variadic_args")
+          (begin
+            (cmp (const (number->list nargs)) edx)
+            (jnz "argument_count_wrong"))))))
 (define compile-procedure-epilogue
   (lambda ()
     (begin
@@ -652,6 +684,9 @@
     (begin (get-procedure-arg 0)
            (ensure-cons)
            (mov (offset tos 8) tos))))
+;; We define a label here before the procedure prologue so that other
+;; asm routines can call cons
+(add-to-header (lambda () (text) (label "cons")))
 (define-global-procedure 'cons 2
   (lambda ()
     (begin (push-const (tagged-integer 12))
@@ -932,18 +967,23 @@
     (if (null? vars) env
         (cons (cons (car vars) (lambda () (get-procedure-arg idx)))
               (lambda-environment env (cdr vars) (+ idx 1))))))
-(define compile-lambda-2
-  (lambda (vars body env proclabel jumplabel)
+(define compile-lambda-3
+  (lambda (vars body env proclabel jumplabel nargs)
     (begin (comment "jump past the body of the lambda")
            (jmp jumplabel)
-           (built-in-procedure-labeled proclabel (length vars) 
+           (built-in-procedure-labeled proclabel nargs
              (lambda () (compile-expr body (lambda-environment env vars 0))))
            (label jumplabel)
            (push-const proclabel))))
+(define compile-lambda-2
+  (lambda (vars body env)
+    (if (pair? vars)
+        (compile-lambda-3 vars body env (new-label) (new-label) (length vars))
+        (compile-lambda-3 (list vars) body env (new-label) (new-label) '()))))
 (define compile-lambda
-  (lambda (rands env) (begin (assert-equal (length rands) 2)
-                             (compile-lambda-2 (car rands) (cadr rands) env 
-                                               (new-label) (new-label)))))
+  (lambda (rands env) 
+    (begin (assert-equal (length rands) 2)
+           (compile-lambda-2 (car rands) (cadr rands) env))))
 (define compile-begin
   (lambda (rands env)
     (if (null? rands) (push-const "31") ; XXX do something reasonable
@@ -1040,6 +1080,7 @@
       (compile-toplevel-define '= 'eq? global-env)
       ;; because chars are unboxed, char=? is eq?
       (compile-toplevel-define 'char=? 'eq? global-env)
+      (mov (const "0x610ba1") ebp)      ; global-scope ebp
       (body)
 
       (mov (const "1") eax)             ; __NR_exit

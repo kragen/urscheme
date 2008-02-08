@@ -1,0 +1,5 @@
+(define lst (lambda xs xs))
+(display (car (lst "hello, " "there")))
+(display (car (cdr (lst "around the" "world"))))
+(display (car (cdr (cdr (lst "!" "," ".")))))
+(newline)
