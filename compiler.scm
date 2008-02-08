@@ -178,6 +178,7 @@
         (begin
           (string-set! buf idx (string-ref s1 idx))
           (string-append-2 s1 s2 buf (+ idx 1))))))
+;; XXX we could get rid of this if we weren't using it for creating error msgs
 (define string-append          ; identical to standard "string-append"
   (lambda (s1 s2)
     (string-append-2 s1 s2 (make-string (+ (string-length s1) 
@@ -190,14 +191,15 @@
     (char->string-2 (make-string 1) char)))
 (define string-digit
   (lambda (digit) (char->string (string-ref "0123456789" digit))))
-;; Note that this strategy is O(N^2) in the number of digits.
-(define number->string-2
-  (lambda (num)
-    (if (= num 0) ""
-        (string-append (number->string-2 (quotient num 10))
-                       (string-digit (remainder num 10))))))
-(define number->string        ; identical to standard "number->string"
-  (lambda (num) (if (= num 0) "0" (number->string-2 num))))
+(define number->list-2
+  (lambda (num tail)
+    (if (= num 0) tail
+        (number->list-2 (quotient num 10)
+                        (cons (string-digit (remainder num 10)) tail)))))
+;; Converts a number into a list of one-digit strings, similar to
+;; standard number->string.
+(define number->list
+  (lambda (num) (if (= num 0) "0" (number->list-2 num '()))))
 
 ;; Boy, it sure causes a lot of hassle that Scheme has different types
 ;; for strings and chars.
@@ -277,11 +279,11 @@
 (define const (lambda (x) (list "$" x)))
 (define indirect (lambda (x) (list "(" x ")")))
 (define offset 
-  (lambda (x offset) (list (number->string offset) (indirect x))))
+  (lambda (x offset) (list (number->list offset) (indirect x))))
 (define absolute (lambda (x) (list "*" x)))
 ;; Use this one inside of "indirect" or "offset".
 (define index-register
-  (lambda (base index size) (list base "," index "," (number->string size))))
+  (lambda (base index size) (list base "," index "," (number->list size))))
 
 (define syscall (lambda () (int (const "0x80"))))
 
@@ -303,7 +305,7 @@
   (lambda ()
     (begin
       (set! constcounter (+ constcounter 1))
-      (list "k_" (number->string constcounter)))))
+      (list "k_" (number->list constcounter)))))
 
 ;; stuff to output a Lisp string safely for assembly language
 (define ndangerous '("\\" "\n" "\""))
@@ -400,12 +402,12 @@
     (begin
       (ensure-procedure)
       (mov (offset tos 4) ebx)          ; address of actual procedure
-      (mov (const (number->string nargs)) edx)
+      (mov (const (number->list nargs)) edx)
       (call (absolute ebx)))))
 (define compile-procedure-prologue
   (lambda (nargs)
     (begin
-      (cmp (const (number->string nargs)) edx)
+      (cmp (const (number->list nargs)) edx)
       (jnz "argument_count_wrong")
       (comment "compute desired %esp on return in %ebx and push it")
       (lea (offset (index-register esp edx 4) 4) ebx)
@@ -504,7 +506,7 @@
   (lambda (contents labelname)
     (rodatum labelname)
     (compile-word string-magic)
-    (compile-word (number->string (string-length contents)))
+    (compile-word (number->list (string-length contents)))
     (ascii contents)
     (text)
     labelname))
@@ -545,7 +547,7 @@
   (lambda () (begin (get-procedure-arg 0)
                     (ensure-integer)
                     (comment "we need 8 bytes more than the string length")
-                    (push-const (number->string (tagged-integer 8)))
+                    (push-const (number->list (tagged-integer 8)))
                     (emit-integer-addition)
                     (emit-malloc)
                     (mov (const string-magic) (indirect tos))
@@ -764,7 +766,7 @@
 ;;; Booleans and other misc. types
 (define enum-tag 2)
 (define enum-value 
-  (lambda (offset) (number->string (+ enum-tag (tagshift offset)))))
+  (lambda (offset) (number->list (+ enum-tag (tagshift offset)))))
 (define nil-value (enum-value 256))
 (define true-value (enum-value 257))
 (define false-value (enum-value 258))
@@ -888,7 +890,7 @@
 (define compile-literal-boolean
   (lambda (b env) (push-const (if b true-value false-value))))
 (define compile-literal-integer
-  (lambda (int env) (push-const (number->string (tagged-integer int)))))
+  (lambda (int env) (push-const (number->list (tagged-integer int)))))
 ;; compile an expression, discarding result, e.g. for toplevel
 ;; expressions
 (define compile-discarding
