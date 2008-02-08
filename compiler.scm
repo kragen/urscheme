@@ -548,7 +548,7 @@
   (lambda () (begin (get-procedure-arg 0)
                     (ensure-integer)
                     (comment "we need 8 bytes more than the string length")
-                    (push-const (number->list (tagged-integer 8)))
+                    (push-const (tagged-integer 8))
                     (emit-integer-addition)
                     (emit-malloc)
                     (mov (const string-magic) (indirect tos))
@@ -684,7 +684,8 @@
 (define tagshift quadruple)
 (define integer-tag 1)
 (define tagged-integer
-  (lambda (int) (+ integer-tag (tagshift int))))
+  (lambda (int) 
+    (list (number->list integer-tag) " + " (number->list int) "<<2")))
 (add-to-header (lambda ()
     (label "ensure_integer")
     (test (const "1") tos)
@@ -892,7 +893,7 @@
 (define compile-literal-boolean
   (lambda (b env) (push-const (if b true-value false-value))))
 (define compile-literal-integer
-  (lambda (int env) (push-const (number->list (tagged-integer int)))))
+  (lambda (int env) (push-const (tagged-integer int))))
 ;; compile an expression, discarding result, e.g. for toplevel
 ;; expressions
 (define compile-discarding
