@@ -26,51 +26,41 @@
 
 
 ;;; Implementation planned:
-;; - car, cdr, cons
-;; - symbol?, null?, eq?, boolean?, pair?, string?, procedure?,
-;;   integer?, char?
-;; - eq? works for both chars and symbols
-;; - if (with three arguments)
-;; - lambda (with fixed numbers of arguments or with a single argument
+;; ("D" means "done")
+;; D car, cdr, cons
+;; D null?
+;; D booleans
+;; - symbol?, boolean?, pair?, string?, procedure?, integer?, char?
+;; D eq?
+;; D if (with three arguments)
+;; D lambda (with fixed numbers of arguments or with a single argument
 ;;   that gets bound to the argument list (lambda <var> <body>) and a
 ;;   single body expression)
-;; - begin
-;; - global variables, with set!
-;; - local variables, with lexical scope and set!
+;; D begin
+;; D global variables
+;; D lexically-scoped local variables with lexical scope
+;; - nested scopes and closures
+;; - set! for global and local variables
 ;; - top-level define of a variable (not a function)
 ;; - read, for proper lists, symbols, strings, integers, #t and #f,
 ;;   and '
 ;; - eof-object?
 ;; - garbage collection
-;; - strings, with string-set!, string-ref, string literals,
-;;   string=?, string-length, and make-string with one argument
-;; - which unfortunately requires characters; char=?
-;; - very basic arithmetic: two-argument +, -, quotient, remainder,
-;;   <, and = for integers, and decimal numeric constants
-;; - recursive procedure calls
-;; - display, for strings, and newline
+;; D strings, with string-set!, string-ref, string literals,
+;;   string-length, and make-string with one argument
+;; D which unfortunately requires characters; char=?
+;; - string=?
+;; D very basic arithmetic: two-argument +, -, quotient, remainder,
+;;   and = for integers, and decimal numeric constants
+;; - < for integers
+;; D recursive procedure calls
+;; D display, for strings, and newline
 ;; - error
+;; D several other standard procedures: list, length, assq, caar,
+;;   cdar, cadr, caddr, not, string-append, map (in a limited fashion)
 
 ;; All of this would be a little simpler if strings were just lists
 ;; of small integers.
-
-;;; Implemented:
-;; - car, cdr, cons
-;; - display, for strings, and newline
-;; - string and numeric constants
-;; - begin
-;; - if (with three arguments)
-;; - booleans
-;; - recursive procedure calls
-;; - some arithmetic: +, -, and = for integers
-;; - lambda, without nesting
-;; - local variables
-;; - global variables
-;; - strings, with string-set!, string-ref, string literals,
-;;   string-length, and make-string with one argument; no string=?
-;;   yet.  (And it should probably be implemented in Scheme.)
-;; - characters with char=?
-;; - dynamic allocation (but no GC yet)
 
 ;; Next to implement:
 ;; - pair?
@@ -939,16 +929,7 @@
         #t)))
 
 ;;; Compilation of particular kinds of expressions
-(define compile-quote
-  (lambda (expr env)
-    (begin
-      (assert-equal 1 (length expr))
-      (push-const (compile-quote-2 (car expr))))))
-(define compile-quote-2
-  (lambda (expr)
-    (if (null? expr) nil-value
-        (if (symbol? expr) (symbol-value expr)
-            (compile-quote-3 expr (new-label))))))
+
 (define compile-quote-3
   (lambda (expr labelname)
     (begin
@@ -960,6 +941,17 @@
                             labelname)
               (error "unquotable" expr)))
       labelname)))
+(define compile-quote-2
+  (lambda (expr)
+    (if (null? expr) nil-value
+        (if (symbol? expr) (symbol-value expr)
+            (compile-quote-3 expr (new-label))))))
+(define compile-quote
+  (lambda (expr env)
+    (begin
+      (assert-equal 1 (length expr))
+      (push-const (compile-quote-2 (car expr))))))
+
 (define compile-var-2
   (lambda (lookupval var)
     (if lookupval ((cdr lookupval)) 
@@ -967,16 +959,20 @@
 (define compile-var
   (lambda (var env)
     (compile-var-2 (assq var env) var)))
+
 (define compile-literal-boolean
   (lambda (b env) (push-const (if b true-value false-value))))
+
 (define compile-literal-integer
   (lambda (int env) (push-const (tagged-integer int))))
+
 ;; compile an expression, discarding result, e.g. for toplevel
 ;; expressions
 (define compile-discarding
   (lambda (expr env)
     (begin (compile-expr expr env)
            (pop))))
+
 ;; Construct an environment binding the local variables of the lambda
 ;; to bits of code to fetch them.  Handles nesting very incorrectly.
 (define lambda-environment
@@ -1001,12 +997,14 @@
   (lambda (rands env) 
     (begin (assert-equal (length rands) 2)
            (compile-lambda-2 (car rands) (cadr rands) env))))
+
 (define compile-begin
   (lambda (rands env)
     (if (null? rands) (push-const "31") ; XXX do something reasonable
         (if (null? (cdr rands)) (compile-expr (car rands) env)
             (begin (compile-discarding (car rands) env)
                    (compile-begin (cdr rands) env))))))
+
 (define compile-if-2
   (lambda (cond then else lab1 lab2 env)
     (begin
@@ -1023,6 +1021,7 @@
         (compile-if-2 (car rands) (cadr rands) (caddr rands)
                       (new-label) (new-label) env)
         (error "if arguments length != 3"))))
+
 (define compile-application
   (lambda (rator env nargs)
     (begin
@@ -1030,6 +1029,7 @@
       (compile-expr rator env)
       (comment "now apply the procedure")
       (compile-apply nargs))))
+
 (define special-syntax-list
   (list (cons 'begin compile-begin)
         (cons 'if compile-if)
