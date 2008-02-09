@@ -124,6 +124,7 @@
 ;;   guaranteed by R5RS, so we can't depend on that property inside
 ;;   the compiler, since we want to be able to run it on other R5RS
 ;;   Schemes.
+;; - low bits binary 11: symbols.
 ;; So, type-testing consists of testing the type-tag, then possibly
 ;; testing the magic number.  In the usual case, we'll jump to an
 ;; error routine if the type test fails, which will exit the program.
@@ -534,7 +535,7 @@
     (compile-word (number->list (string-length contents)))
     (ascii contents)
     (text)
-    labelname))
+    labelname))                         ; XXX do we really need this?
 ;; constant-string: Emit code to represent a constant string.
 (define constant-string
   (lambda (contents)
@@ -699,6 +700,31 @@
            (get-procedure-arg 1)
            (mov tos (offset ebx 8))
            (pop))))
+;; Compile a quoted cons cell.
+(define compile-cons
+  (lambda (car-contents cdr-contents labelname)
+    (begin (rodatum labelname)
+           (compile-word cons-magic)
+           (compile-word car-contents)
+           (compile-word cdr-contents)
+           (text))))
+
+;;; Symbols.
+;; Just unique numbers with the low-order bits set to 11.
+(define interned-symbol-list '())
+(define intern
+  (lambda (symbol)
+    (interning symbol interned-symbol-list)))
+(define interning
+  (lambda (symbol symlist)
+    (if (null? symlist) 
+        ;; XXX isn't this kind of duplicative with the global variables stuff?
+        (begin (set! interned-symbol-list (cons symbol interned-symbol-list))
+               (length interned-symbol-list))
+        (if (eq? symbol (car symlist)) (length symlist)
+            (interning symbol (cdr symlist))))))
+(define symbol-value
+  (lambda (symbol) (list "3 + " (tagshift (intern symbol)))))
 
 
 ;;; Other miscellaneous crap that needs reorganizing
@@ -943,6 +969,27 @@
         #t)))
 
 ;;; Compilation of particular kinds of expressions
+(define compile-quote
+  (lambda (expr env)
+    (begin
+      (assert-equal 1 (length expr))
+      (push-const (compile-quote-2 (car expr))))))
+(define compile-quote-2
+  (lambda (expr)
+    (if (null? expr) nil-value
+        (if (symbol? expr) (symbol-value expr)
+            (compile-quote-3 expr (new-label))))))
+(define compile-quote-3
+  (lambda (expr labelname)
+    (begin
+      (if (string? expr) 
+          (constant-string-2 expr labelname)
+          (if (pair? expr)
+              (compile-cons (compile-quote-2 (car expr))
+                            (compile-quote-2 (cdr expr))
+                            labelname)
+              (error "unquotable" expr)))
+      labelname)))
 (define compile-var-2
   (lambda (lookupval var)
     (if lookupval ((cdr lookupval)) 
@@ -1017,6 +1064,7 @@
   (list (cons 'begin compile-begin)
         (cons 'if compile-if)
         (cons 'lambda compile-lambda)
+        (cons 'quote compile-quote)
         (cons '+ integer-add)
         (cons '- integer-sub)))
 (define compile-combination-2
