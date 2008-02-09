@@ -1,24 +1,6 @@
 ;;; A simple example program --- a decimal print routine
 ;; Extracted from compiler.scm.
 
-(define string-append-3
-  (lambda (length s2 buf idx)
-    (if (= idx (string-length buf)) buf
-        (begin
-          (string-set! buf idx (string-ref s2 (- idx length)))
-          (string-append-3 length s2 buf (+ idx 1))))))
-(define string-append-2
-  (lambda (s1 s2 buf idx)
-    (if (= idx (string-length s1)) 
-        (string-append-3 (string-length s1) s2 buf idx)
-        (begin
-          (string-set! buf idx (string-ref s1 idx))
-          (string-append-2 s1 s2 buf (+ idx 1))))))
-(define string-append          ; identical to standard "string-append"
-  (lambda (s1 s2)
-    (string-append-2 s1 s2 (make-string (+ (string-length s1) 
-                                           (string-length s2)))
-                          0)))
 (define char->string-2
   (lambda (buf char) (begin (string-set! buf 0 char) buf)))
 (define char->string

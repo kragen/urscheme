@@ -73,8 +73,17 @@
 ;; - dynamic allocation (but no GC yet)
 
 ;; Next to implement:
-;; - null?, and pair?
-;; - quote! that's going to be interesting.
+;; - pair?
+
+;; There were a bunch of parts of standard Scheme that I implemented
+;; at the top of the compiler, which was a little bit silly --- any
+;; program to be compiled by this compiler would either have to forgo
+;; using those same facilities, or reimplement them itself.
+
+;; Now I have moved them into a prelude called "standard-library" that
+;; gets compiled before the user's program, which considerably expands
+;; the subset of Scheme supported without adding any complexity to the
+;; overall system.
 
 ;;; Not implemented:
 ;; - call/cc, dynamic-wind
@@ -133,28 +142,11 @@
 
 
 ;;; Basic Lisp Stuff
-;; To build up the spartan language implemented by the compiler to a
-;; level where you can actually program in it.  Of course these mostly
-;; exist in standard Scheme, but I thought it would be easier to write
-;; them in Scheme rather than assembly in order to get the compiler to
-;; the point where it could bootstrap itself.
+;; Things that I can't find in R5RS, and so I'm not including in
+;; standard-library down below.
 
 (define double (lambda (val) (+ val val)))
 (define quadruple (lambda (val) (double (double val))))
-
-(define list (lambda args args))        ; identical to standard "list"
-(define length                        ; identical to standard "length"
-  (lambda (list) (if (null? list) 0 (+ 1 (length (cdr list))))))
-(define assq                            ; identical to standard "assq"
-  (lambda (obj alist)
-    (if (null? alist) #f
-        (if (eq? obj (caar alist)) (car alist)
-            (assq obj (cdr alist))))))
-;; identical to standard caar, cdar, etc.
-(define caar (lambda (val) (car (car val))))
-(define cdar (lambda (val) (cdr (car val))))
-(define cadr (lambda (val) (car (cdr val))))
-(define caddr (lambda (val) (cadr (cdr val))))
 
 (define filter-2
   (lambda (fn lst rest) (if (fn (car lst)) (cons (car lst) rest) rest)))
@@ -162,28 +154,6 @@
   (lambda (fn lst) (if (null? lst) '()
                        (filter-2 fn lst (filter fn (cdr lst))))))
 
-(define not (lambda (x) (if x #f #t)))  ; identical to standard "not"
-
-;; string manipulation (part of Basic Lisp Stuff)
-(define string-append-3
-  (lambda (length s2 buf idx)
-    (if (= idx (string-length buf)) buf
-        (begin
-          (string-set! buf idx (string-ref s2 (- idx length)))
-          (string-append-3 length s2 buf (+ idx 1))))))
-(define string-append-2
-  (lambda (s1 s2 buf idx)
-    (if (= idx (string-length s1)) 
-        (string-append-3 (string-length s1) s2 buf idx)
-        (begin
-          (string-set! buf idx (string-ref s1 idx))
-          (string-append-2 s1 s2 buf (+ idx 1))))))
-;; XXX we could get rid of this if we weren't using it for creating error msgs
-(define string-append          ; identical to standard "string-append"
-  (lambda (s1 s2)
-    (string-append-2 s1 s2 (make-string (+ (string-length s1) 
-                                           (string-length s2)))
-                          0)))
 (define char->string-2
   (lambda (buf char) (begin (string-set! buf 0 char) buf)))
 (define char->string
@@ -1114,6 +1084,53 @@
         (compile-toplevel-define (cadr expr) (caddr expr) global-env)
         (compile-discarding expr global-env))))
 
+;;; Library of (a few) standard Scheme procedures defined in Scheme
+
+(define standard-library 
+  '((define list (lambda args args))    ; standard
+    (define length                      ; standard
+      (lambda (list) (if (null? list) 0 (+ 1 (length (cdr list))))))
+    (define assq                        ; standard
+      (lambda (obj alist)
+        (if (null? alist) #f
+            (if (eq? obj (caar alist)) (car alist)
+                (assq obj (cdr alist))))))
+    ;; identical to standard caar, cdar, etc.
+    (define caar (lambda (val) (car (car val))))
+    (define cdar (lambda (val) (cdr (car val))))
+    (define cadr (lambda (val) (car (cdr val))))
+    (define caddr (lambda (val) (cadr (cdr val))))
+    (define not (lambda (x) (if x #f #t))) ; standard
+
+    ;; string manipulation
+    (define string-append-3
+      (lambda (length s2 buf idx)
+        (if (= idx (string-length buf)) buf
+            (begin
+              (string-set! buf idx (string-ref s2 (- idx length)))
+              (string-append-3 length s2 buf (+ idx 1))))))
+    (define string-append-2
+      (lambda (s1 s2 buf idx)
+        (if (= idx (string-length s1)) 
+            (string-append-3 (string-length s1) s2 buf idx)
+            (begin
+              (string-set! buf idx (string-ref s1 idx))
+              (string-append-2 s1 s2 buf (+ idx 1))))))
+    ;; XXX we could get rid of this if we weren't using it for creating error msgs
+    (define string-append               ; standard
+      (lambda (s1 s2)
+        (string-append-2 s1 s2 (make-string (+ (string-length s1) 
+                                               (string-length s2)))
+                         0)))
+    (define map                     ; subset of standard: one arg only
+      (lambda (fn lst)
+        (if (null? lst) '()
+            (cons (fn (car lst)) (map fn (cdr lst))))))
+    (define = eq?)
+    ;; because chars are unboxed, char=? is eq?
+    (define char=? eq?)
+    (define null? (lambda (x) (eq? x '())))))
+
 ;;; Main Program
 
 (define compile-program
@@ -1124,11 +1141,10 @@
       (global-label "_start")         ; allow compiling with -nostdlib
       (insn ".weak _start")     ; but also allow compiling with stdlib
       (global-label "main")     ; with entry point of main, not _start
-
-      (compile-toplevel-define '= 'eq? global-env)
-      ;; because chars are unboxed, char=? is eq?
-      (compile-toplevel-define 'char=? 'eq? global-env)
       (mov (const "0x610ba1") ebp)      ; global-scope ebp
+
+      (map compile-toplevel standard-library) ; XXX probably should be for-each
+
       (body)
 
       (mov (const "1") eax)             ; __NR_exit
