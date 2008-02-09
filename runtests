@@ -15,4 +15,5 @@ runtest () {
         ./runtest > newcompiler.out
         diff -au refscheme.out newcompiler.out
 }
-for test in test.*.scm; do runtest "$test"; done
+if [ $# -eq 0 ] ; then set test.*.scm; fi
+for test in "$@"; do runtest "$test"; done
