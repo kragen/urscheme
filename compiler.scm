@@ -1143,6 +1143,11 @@
     (define char=? eq?)
     (define null? (lambda (x) (eq? x '())))
     (define boolean? (lambda (x) (if (eq? x #t) #t (eq? x #f))))
+    (define memq
+      (lambda (obj list) 
+        (if (null? list) #f 
+            (if (eq? obj (car list)) list
+                (memq obj (cdr list))))))
     (define for-each
       (lambda (proc list) (if (null? list) #f
                               (begin
