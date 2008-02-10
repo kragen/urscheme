@@ -1048,19 +1048,19 @@
                    (compile-begin (cdr rands) env tail?))))))
 
 (define compile-if-2
-  (lambda (cond then else lab1 lab2 env)
+  (lambda (cond then else lab1 lab2 env tail?)
     (compile-expr cond env #f)
     (jump-if-false lab1)
-    (compile-expr then env #f)          ; XXX wrong
+    (compile-expr then env tail?)
     (jmp lab2)
     (label lab1)
-    (compile-expr else env #f)          ; XXX wrong
+    (compile-expr else env tail?)
     (label lab2)))
 (define compile-if
   (lambda (rands env tail?)
     (if (= (length rands) 3)
         (compile-if-2 (car rands) (cadr rands) (caddr rands)
-                      (new-label) (new-label) env)
+                      (new-label) (new-label) env tail?)
         (error "if arguments length != 3"))))
 
 (define compile-application

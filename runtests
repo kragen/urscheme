@@ -7,6 +7,7 @@ set -e
 # : ${refscheme:="elk -l"}
 status='echo ERROR: FAILED'
 trap '/bin/rm -f refscheme.out newcompiler.out runtest.s runtest; $status' EXIT
+ulimit -s 1024         # to make the tailcall test run reasonably fast
 runtest () {
         prog="${1?runtest needs an argument}"
         echo "running $prog"
