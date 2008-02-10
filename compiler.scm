@@ -947,7 +947,7 @@
   (lambda (expr)
     (if (null? expr) nil-value
         (if (symbol? expr) (symbol-value expr)
-            (if (number? expr) (tagged-integer expr)
+            (if (integer? expr) (tagged-integer expr)
                 (if (boolean? expr) (if expr true-value false-value)
                     (compile-quote-3 expr (new-label))))))))
 (define compile-quotable 
