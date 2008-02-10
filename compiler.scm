@@ -353,6 +353,24 @@
       (mov (offset tos 4) ebx)          ; address of actual procedure
       (mov (const (number->string nargs)) edx)
       (call (absolute ebx))))
+(define compile-tail-apply
+  (lambda (nargs)
+    (comment "Tail call.")
+    (comment "Note %esp points at the last thing pushed,")
+    (comment "not the next thing to push.  So for 1 arg, we want %ebx=%esp")
+    (lea (offset esp (- nargs 1)) ebx)
+    (pop-stack-frame edx)
+    (copy-args ebx nargs 0)
+    (asm-push edx)
+    (ensure-procedure)
+    (mov (offset tos 4) ebx)
+    (mov (const (number->string nargs)) edx)
+    (jmp (absolute ebx))))
+(define copy-args
+  (lambda (basereg nargs i)
+    (if (= nargs i) '()
+        (begin (push (offset basereg i))
+               (copy-args basereg nargs (+ i 1))))))
 
 ;; package up variadic arguments into a list.  %ebp is fully set up,
 ;; so we can index off of it to find each argument, and %edx is the
@@ -401,10 +419,14 @@
   (lambda ()
     (comment "procedure epilogue")
     (comment "get return address")
-    (mov (offset ebp -4) edx)
-    (mov (offset ebp -8) esp)
-    (mov (offset ebp -12) ebp)
+    (pop-stack-frame edx)
     (jmp (absolute edx))))
+
+(define pop-stack-frame
+  (lambda (return-address-register)
+    (mov (offset ebp -4) return-address-register)
+    (mov (offset ebp -8) esp)
+    (mov (offset ebp -12) ebp)))
 
 (define-error-routine "not_procedure" "not a procedure")
 (define-error-routine "argument_count_wrong" "wrong number of arguments")
