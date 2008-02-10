@@ -34,8 +34,7 @@
 ;; D eq?
 ;; D if (with three arguments)
 ;; D lambda (with fixed numbers of arguments or with a single argument
-;;   that gets bound to the argument list (lambda <var> <body>) and a
-;;   single body expression)
+;;   that gets bound to the argument list (lambda <var> <body>)
 ;; D begin
 ;; D global variables
 ;; D lexically-scoped local variables with lexical scope
@@ -985,7 +984,7 @@
     (begin (comment "jump past the body of the lambda")
            (jmp jumplabel)
            (built-in-procedure-labeled proclabel nargs
-             (lambda () (compile-expr body (lambda-environment env vars 0))))
+             (lambda () (compile-begin body (lambda-environment env vars 0))))
            (label jumplabel)
            (push-const proclabel))))
 (define compile-lambda-2
@@ -995,8 +994,7 @@
         (compile-lambda-3 (list vars) body env (new-label) (new-label) '()))))
 (define compile-lambda
   (lambda (rands env) 
-    (begin (assert-equal (length rands) 2)
-           (compile-lambda-2 (car rands) (cadr rands) env))))
+    (begin (compile-lambda-2 (car rands) (cdr rands) env))))
 
 (define compile-begin
   (lambda (rands env)
