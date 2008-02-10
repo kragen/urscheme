@@ -1013,7 +1013,7 @@
 ;; compile an expression, discarding result, e.g. for toplevel
 ;; expressions
 (define compile-discarding
-  (lambda (expr env) (compile-expr expr env) (pop)))
+  (lambda (expr env) (compile-expr expr env #f) (pop)))
 
 ;; Construct an environment binding the local variables of the lambda
 ;; to bits of code to fetch them.  Handles nesting very incorrectly.
@@ -1041,18 +1041,18 @@
 (define compile-begin
   (lambda (rands env)
     (if (null? rands) (push-const "31") ; XXX do something reasonable
-        (if (null? (cdr rands)) (compile-expr (car rands) env)
+        (if (null? (cdr rands)) (compile-expr (car rands) env #f) ; XXX wrong
             (begin (compile-discarding (car rands) env)
                    (compile-begin (cdr rands) env))))))
 
 (define compile-if-2
   (lambda (cond then else lab1 lab2 env)
-    (compile-expr cond env)
+    (compile-expr cond env #f)
     (jump-if-false lab1)
-    (compile-expr then env)
+    (compile-expr then env #f)          ; XXX wrong
     (jmp lab2)
     (label lab1)
-    (compile-expr else env)
+    (compile-expr else env #f)          ; XXX wrong
     (label lab2)))
 (define compile-if
   (lambda (rands env)
@@ -1064,7 +1064,7 @@
 (define compile-application
   (lambda (rator env nargs)
     (comment "get the procedure")
-    (compile-expr rator env)
+    (compile-expr rator env #f)
     (comment "now apply the procedure")
     (compile-apply nargs)))
 
@@ -1098,10 +1098,10 @@
         (if ((caar handlers) expr) ((cdar handlers) expr env)
             (compile-expr-2 expr env (cdr handlers))))))
 (define compile-expr
-  (lambda (expr env) (compile-expr-2 expr env compilation-expr-list)))
+  (lambda (expr env tail?) (compile-expr-2 expr env compilation-expr-list)))
 (define compile-args-2
   (lambda (args env n)
-    (compile-expr (car args) env) 
+    (compile-expr (car args) env #f)    ; XXX tail? wrong?
     (+ 1 n)))
 (define compile-args
   (lambda (args env)
@@ -1112,7 +1112,7 @@
   (lambda (name body env)
     (define-global-variable name nil-value)
     (comment "compute initial value for global variable")
-    (compile-expr body env)
+    (compile-expr body env #f)
     (comment "initialize global variable with value")
     (mov tos (indirect (global-variable-label name)))
     (pop)))
