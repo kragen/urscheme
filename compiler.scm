@@ -30,8 +30,8 @@
 ;; D car, cdr, cons
 ;; D null?
 ;; D booleans
-;; - symbol?, boolean?, string?, procedure?, integer?, char?
-;; D eq?, pair?, null?
+;; - boolean?, string?, procedure?, integer?, char?
+;; D eq?, pair?, null?, symbol?
 ;; D if (with three arguments)
 ;; D lambda (with fixed numbers of arguments or with a single argument
 ;;   that gets bound to the argument list (lambda <var> <body>)
@@ -677,7 +677,13 @@
             (interning symbol (cdr symlist))))))
 (define symbol-value
   (lambda (symbol) (list "3 + " (tagshift (intern symbol)))))
-
+(define-global-procedure 'symbol? 1
+  (lambda ()
+    (get-procedure-arg 0)
+    (asm-and (const "3") tos)
+    (cmp (const "3") tos)
+    (je "return_true")
+    (jmp "return_false")))
 
 ;;; Other miscellaneous crap that needs reorganizing
 
