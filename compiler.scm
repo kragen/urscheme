@@ -51,7 +51,7 @@
 ;; - string=?
 ;; D very basic arithmetic: two-argument +, -, quotient, remainder,
 ;;   and = for integers, and decimal numeric constants
-;; - < for integers
+;; D < for integers
 ;; D recursive procedure calls
 ;; D display, for strings, and newline
 ;; - error
