@@ -1064,7 +1064,7 @@
         (error "if arguments length != 3"))))
 
 (define compile-application
-  (lambda (rator env nargs)
+  (lambda (rator env nargs tail?)
     (comment "get the procedure")
     (compile-expr rator env #f)
     (comment "now apply the procedure")
@@ -1080,14 +1080,16 @@
         (cons '+ integer-add)
         (cons '- integer-sub)))
 (define compile-combination-2
-  (lambda (rator rands env handler)
+  (lambda (rator rands env handler tail?)
     (if handler ((cdr handler) rands env)
-        (compile-application rator env (compile-args rands env)))))
+        (compile-application rator env (compile-args rands env) tail?))))
 (define compile-combination
-  (lambda (rator rands env)
-    (compile-combination-2 rator rands env (assq rator special-syntax-list))))
+  (lambda (rator rands env tail?)
+    (compile-combination-2 rator rands env (assq rator special-syntax-list) 
+                           tail?)))
 (define compile-pair
-  (lambda (expr env tail?) (compile-combination (car expr) (cdr expr) env)))
+  (lambda (expr env tail?) 
+    (compile-combination (car expr) (cdr expr) env tail?)))
 (define compilation-expr-list
   (list (cons pair? compile-pair)
         (cons symbol? compile-var)
