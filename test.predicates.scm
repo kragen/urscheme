@@ -1,8 +1,10 @@
 (define predicates (list (cons "pair?" pair?) (cons "null?" null?) 
                          (cons "symbol?" symbol?) (cons "integer?" integer?)
-                         (cons "boolean?" boolean?) (cons "string?" string?)))
-(define values '(("()" ()) ("(hello)" (hello)) ("hello" hello) ("39" 39) 
-                 ("#t" #t) ("#f" #f) ("\"hi\"" "hi")))
+                         (cons "boolean?" boolean?) (cons "string?" string?)
+                         (cons "procedure?" procedure?)))
+(define values (cons (list "a lambda" (lambda (foo) foo))
+                     '(("()" ()) ("(hello)" (hello)) ("hello" hello) 
+                       ("39" 39) ("#t" #t) ("#f" #f) ("\"hi\"" "hi"))))
 (define testpreds 
   (lambda (preds value)
     (if (not (null? preds))

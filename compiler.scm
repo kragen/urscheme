@@ -30,8 +30,8 @@
 ;; D car, cdr, cons
 ;; D null?
 ;; D booleans
-;; - procedure?, char?
-;; D eq?, pair?, null?, symbol?, integer?, boolean?, string?
+;; - char?
+;; D eq?, pair?, null?, symbol?, integer?, boolean?, string?, procedure?
 ;; D if (with three arguments)
 ;; D lambda (with fixed numbers of arguments or with a single argument
 ;;   that gets bound to the argument list (lambda <var> <body>)
@@ -438,6 +438,12 @@
 ;; Emit code to fetch the Nth argument of the innermost procedure.
 (define get-procedure-arg (lambda (n) (asm-push tos)
                                       (mov (offset ebp (quadruple n)) tos)))
+
+(define-global-procedure 'procedure? 1
+  (lambda () 
+    (get-procedure-arg 0)
+    (if-not-right-magic-jump procedure-magic "return_false")
+    (jmp "return_true")))
 
 
 ;;; Memory management.
