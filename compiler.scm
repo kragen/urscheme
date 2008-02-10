@@ -144,7 +144,7 @@
                        (filter-2 fn lst (filter fn (cdr lst))))))
 
 (define char->string-2
-  (lambda (buf char) (begin (string-set! buf 0 char) buf)))
+  (lambda (buf char) (string-set! buf 0 char) buf))
 (define char->string
   (lambda (char)
     (char->string-2 (make-string 1) char)))
@@ -247,16 +247,12 @@
 
 ;; define a .globl label
 (define global-label
-  (lambda (lbl)
-    (begin (insn ".globl " lbl) (label lbl))))
+  (lambda (lbl) (insn ".globl " lbl) (label lbl)))
 
 ;; new-label: Allocate a new label (e.g. for a constant) and return it.
 (define constcounter 0)
-(define new-label
-  (lambda ()
-    (begin
-      (set! constcounter (+ constcounter 1))
-      (list "k_" (number->list constcounter)))))
+(define new-label (lambda () (set! constcounter (+ constcounter 1))
+                             (list "k_" (number->list constcounter))))
 
 ;; stuff to output a Lisp string safely for assembly language
 (define dangerous '("\\" "\n" "\""))
@@ -307,7 +303,7 @@
 ;;; Some convenience stuff for the structure of the program.
 
 (define stuff-to-put-in-the-header (lambda () #f))
-(define concatenate-thunks (lambda (a b) (lambda () (begin (a) (b)))))
+(define concatenate-thunks (lambda (a b) (lambda () (a) (b))))
 (define add-to-header 
   (lambda (proc) (set! stuff-to-put-in-the-header 
                        (concatenate-thunks stuff-to-put-in-the-header proc))))
@@ -317,10 +313,9 @@
   (lambda (labelname message)
     (add-to-header (lambda ()
       ((lambda (errlabel)
-        (begin
-          (label labelname)
-          (mov (const errlabel) tos)
-          (jmp "report_error")))
+         (label labelname)
+         (mov (const errlabel) tos)
+         (jmp "report_error"))
        (constant-string (string-append "error: " 
                                        (string-append message "\n"))))))))
 
@@ -338,7 +333,6 @@
 ;; prologue points %ebp at the arguments.  Return value goes in %eax.
 (define procedure-magic "0xca11ab1e")
 (add-to-header (lambda ()
-    (begin
       (label "ensure_procedure")
       (comment "make sure procedure value is not unboxed")
       (test (const "3") tos)
@@ -346,15 +340,14 @@
       (comment "now test its magic number")
       (cmp (const procedure-magic) (indirect tos))
       (jnz "not_procedure")
-      (ret))))
+      (ret)))
 (define ensure-procedure (lambda () (call "ensure_procedure")))
 (define compile-apply
   (lambda (nargs)
-    (begin
       (ensure-procedure)
       (mov (offset tos 4) ebx)          ; address of actual procedure
       (mov (const (number->list nargs)) edx)
-      (call (absolute ebx)))))
+      (call (absolute ebx))))
 
 ;; package up variadic arguments into a list.  %ebp is fully set up,
 ;; so we can index off of it to find each argument, and %edx is the
@@ -363,68 +356,64 @@
 ;; across a call to cons.
 (add-to-header 
  (lambda () 
-   (begin 
-     (label "package_up_variadic_args")
-     (comment "we have %ebp pointing at args, %edx with count")
-     (comment "saved %ebp in %eax.  zero-iterations case: return nil")
-     (push-const nil-value)
-     (label "variadic_loop")
-     (comment "calling cons clobbers registers, so push %edx")
-     (asm-push edx)
-     (comment "now push args for cons")
-     (asm-push eax)
-     (asm-push (offset (index-register ebp edx 4) -4))
-     (comment "give cons its argument count")
-     (mov (const "2") edx)
-     (call "cons")
-     (comment "now the args are popped and we have new list in %eax")
-     (asm-pop edx)
-     (dec edx)
-     (jnz "variadic_loop")
-     (comment "now we pretend procedure was called with the list as first arg")
-     (mov eax (indirect ebp))
-     (comment "restore %eax to value on entry to package_up_variadic_args")
-     (pop)
-     (ret))))
+   (label "package_up_variadic_args")
+   (comment "we have %ebp pointing at args, %edx with count")
+   (comment "saved %ebp in %eax.  zero-iterations case: return nil")
+   (push-const nil-value)
+   (label "variadic_loop")
+   (comment "calling cons clobbers registers, so push %edx")
+   (asm-push edx)
+   (comment "now push args for cons")
+   (asm-push eax)
+   (asm-push (offset (index-register ebp edx 4) -4))
+   (comment "give cons its argument count")
+   (mov (const "2") edx)
+   (call "cons")
+   (comment "now the args are popped and we have new list in %eax")
+   (asm-pop edx)
+   (dec edx)
+   (jnz "variadic_loop")
+   (comment "now we pretend procedure was called with the list as first arg")
+   (mov eax (indirect ebp))
+   (comment "restore %eax to value on entry to package_up_variadic_args")
+   (pop)
+   (ret)))
 (define compile-procedure-prologue
   (lambda (nargs)
-    (begin
-      (comment "compute desired %esp on return in %ebx and push it")
-      (lea (offset (index-register esp edx 4) 4) ebx)
-      (asm-push ebx)                    ; push restored %esp on stack
-      ;; At this point, if we were a closure, we would be doing
-      ;; something clever with the procedure value pointer in %eax.
-      (mov ebp tos)                     ; save old %ebp --- in %eax!
-      (lea (offset esp 8) ebp)   ; 8 bytes to skip saved %ebx and %eip
-      (if (null? nargs)
-          (call "package_up_variadic_args")
-          (begin
-            (cmp (const (number->list nargs)) edx)
-            (jnz "argument_count_wrong"))))))
+    (comment "compute desired %esp on return in %ebx and push it")
+    (lea (offset (index-register esp edx 4) 4) ebx)
+    (asm-push ebx)                    ; push restored %esp on stack
+    ;; At this point, if we were a closure, we would be doing
+    ;; something clever with the procedure value pointer in %eax.
+    (mov ebp tos)                     ; save old %ebp --- in %eax!
+    (lea (offset esp 8) ebp)   ; 8 bytes to skip saved %ebx and %eip
+    (if (null? nargs)
+        (call "package_up_variadic_args")
+        (begin
+          (cmp (const (number->list nargs)) edx)
+          (jnz "argument_count_wrong")))))
 (define compile-procedure-epilogue
   (lambda ()
-    (begin
-      (asm-pop ebp) ; return val in %eax has pushed saved %ebp onto stack
-      (asm-pop ebx)                     ; value to restore %esp to
-      (asm-pop edx)                     ; saved return address
-      (mov ebx esp)
-      (jmp (absolute edx)))))           ; return via indirect jump
+    (asm-pop ebp) ; return val in %eax has pushed saved %ebp onto stack
+    (asm-pop ebx)                       ; value to restore %esp to
+    (asm-pop edx)                       ; saved return address
+    (mov ebx esp)
+    (jmp (absolute edx))))              ; return via indirect jump
 
 (define-error-routine "not_procedure" "not a procedure")
 (define-error-routine "argument_count_wrong" "wrong number of arguments")
 
 (define built-in-procedure-2
   (lambda (labelname nargs body bodylabel)
-    (begin
-      (rodatum labelname)
-      (compile-word procedure-magic)
-      (compile-word bodylabel)
-      (text)
-      (label bodylabel)
-      (compile-procedure-prologue nargs)
-      (body)
-      (compile-procedure-epilogue)))) ; maybe we should just centralize
-                                      ; that and jump to it? :)
+    (rodatum labelname)
+    (compile-word procedure-magic)
+    (compile-word bodylabel)
+    (text)
+    (label bodylabel)
+    (compile-procedure-prologue nargs)
+    (body)
+    (compile-procedure-epilogue)))   ; maybe we should just centralize
+                                     ; that and jump to it? :)
 ;; Define a built-in procedure so we can refer to it by label and
 ;; push-const that label, then expect to be able to compile-apply to
 ;; it later.
@@ -433,9 +422,8 @@
     (built-in-procedure-2 labelname nargs body (new-label))))
 (define global-procedure-2
   (lambda (symbolname nargs body procedure-value-label)
-    (begin
       (define-global-variable symbolname procedure-value-label)
-      (built-in-procedure-labeled procedure-value-label nargs body))))
+      (built-in-procedure-labeled procedure-value-label nargs body)))
 ;; Add code to define a global procedure known by a certain global
 ;; variable name to the header
 (define define-global-procedure
@@ -444,38 +432,37 @@
                      (global-procedure-2 symbolname nargs body (new-label))))))
 
 ;; Emit code to fetch the Nth argument of the innermost procedure.
-(define get-procedure-arg
-  (lambda (n) (begin (asm-push tos)
-                     (mov (offset ebp (quadruple n)) tos))))
+(define get-procedure-arg (lambda (n) (asm-push tos)
+                                      (mov (offset ebp (quadruple n)) tos)))
 
 
 ;;; Memory management.
 
 (add-to-header
  (lambda () 
-   (begin (insn ".bss")
-          (label "the_arena")
-          (insn ".space 1048576")
-          (compile-global-variable "arena_pointer" "the_arena"))))
+   (insn ".bss")
+   (label "the_arena")
+   (insn ".space 1048576")
+   (compile-global-variable "arena_pointer" "the_arena")))
 
 ;; Emit code to bump a pointer in a register up, if necessary, to be
 ;; divisible by 4.
 (define align4
   (lambda (reg)
-    (begin (add (const "3") reg)
-           (asm-and (const "~3") reg))))
+    (add (const "3") reg)
+    (asm-and (const "~3") reg)))
 
 (define emit-malloc
   (lambda ()
-    (begin (comment "code to allocate memory; tagged number of bytes in %eax")
-           (ensure-integer)
-           (scheme-to-native-integer eax)
-           (align4 eax)
-           (mov (indirect "arena_pointer") ebx)
-           (add ebx eax)
-           (mov eax (indirect "arena_pointer"))
-           (mov ebx eax)
-           (comment "now %eax points to newly allocated memory"))))
+    (comment "code to allocate memory; tagged number of bytes in %eax")
+    (ensure-integer)
+    (scheme-to-native-integer eax)
+    (align4 eax)
+    (mov (indirect "arena_pointer") ebx)
+    (add ebx eax)
+    (mov eax (indirect "arena_pointer"))
+    (mov ebx eax)
+    (comment "now %eax points to newly allocated memory")))
 
 ;; XXX still need to implement deallocation and a GC
 
@@ -529,144 +516,140 @@
     (compile-literal-string-2 (constant-string contents))))
 
 (define-global-procedure 'make-string 1
-  (lambda () (begin (get-procedure-arg 0)
-                    (ensure-integer)
-                    (comment "we need 8 bytes more than the string length")
-                    (push-const (tagged-integer 8))
-                    (emit-integer-addition)
-                    (emit-malloc)
-                    (mov (const string-magic) (indirect tos))
-                    (mov tos ebx)
-                    (comment "push address to return, get string length and store it")
-                    (get-procedure-arg 0)
-                    (scheme-to-native-integer tos)
-                    (mov tos (offset ebx 4))
-                    (comment "fill string with Xes")
-                    (lea (offset ebx 8) edi)
-                    (mov tos ecx)
-                    (mov (const "'X") eax)
-                    (repstosb)
-                    (comment "now pop and return the address")
-                    (pop))))
+  (lambda () (get-procedure-arg 0)
+             (ensure-integer)
+             (comment "we need 8 bytes more than the string length")
+             (push-const (tagged-integer 8))
+             (emit-integer-addition)
+             (emit-malloc)
+             (mov (const string-magic) (indirect tos))
+             (mov tos ebx)
+             (comment "push address to return, get string length and store it")
+             (get-procedure-arg 0)
+             (scheme-to-native-integer tos)
+             (mov tos (offset ebx 4))
+             (comment "fill string with Xes")
+             (lea (offset ebx 8) edi)
+             (mov tos ecx)
+             (mov (const "'X") eax)
+             (repstosb)
+             (comment "now pop and return the address")
+             (pop)))
 
 (define check-array-bounds
   (lambda ()
-    (begin 
-      (comment "verify that tagged %eax is in [0, untagged NOS)")
-      (ensure-integer)
+    (comment "verify that tagged %eax is in [0, untagged NOS)")
+    (ensure-integer)
 
-      ;; Intel manual 253667 explains, "[The SUB instruction]
-      ;; evaluates the result for both signed and unsigned integer
-      ;; operands and sets the OF and CF flags to indicate an overflow
-      ;; in the signed or unsigned result, respectively. The SF flag
-      ;; indicates the sign of the signed result."  
+    ;; Intel manual 253667 explains, "[The SUB instruction]
+    ;; evaluates the result for both signed and unsigned integer
+    ;; operands and sets the OF and CF flags to indicate an overflow
+    ;; in the signed or unsigned result, respectively. The SF flag
+    ;; indicates the sign of the signed result."  
 
-      (scheme-to-native-integer eax)
-      ;; We can do this with a single unsigned comparison; negative
-      ;; array indices will look like very large positive numbers and
-      ;; therefore be out of bounds.
-      (comment "set flags by (unsigned array index - array max)")
-      (cmp nos tos)
-      (comment "now we expect unsigned overflow, i.e. borrow/carry.")
-      (jnb "index_out_of_bounds")
-      (comment "now discard both the index and the bound")
-      (pop) (pop))))
+    (scheme-to-native-integer eax)
+    ;; We can do this with a single unsigned comparison; negative
+    ;; array indices will look like very large positive numbers and
+    ;; therefore be out of bounds.
+    (comment "set flags by (unsigned array index - array max)")
+    (cmp nos tos)
+    (comment "now we expect unsigned overflow, i.e. borrow/carry.")
+    (jnb "index_out_of_bounds")
+    (comment "now discard both the index and the bound")
+    (pop) (pop)))
 
 (define-error-routine "index_out_of_bounds" "array index out of bounds")
 
 (define-global-procedure 'string-set! 3
   (lambda () 
-    (begin 
-      (comment "string-set! primitive procedure")
-      (get-procedure-arg 0)
-      (extract-string)
-      (get-procedure-arg 1)
-      (check-array-bounds)
-      (get-procedure-arg 1)
-      (scheme-to-native-integer tos)
-      (mov tos edi)
-      (comment "now retrieve the address of string bytes from the stack")
-      (pop)
-      (mov tos ebx)
-      (get-procedure-arg 2)
-      (ensure-character)
-      (scheme-to-native-character tos)
-      (movb al (indirect (index-register ebx edi 1)))
-      (comment "discard the character and base address")
-      (pop) (pop)
-      (comment "but we need a return value...")
-      (get-procedure-arg 0))))
+    (comment "string-set! primitive procedure")
+    (get-procedure-arg 0)
+    (extract-string)
+    (get-procedure-arg 1)
+    (check-array-bounds)
+    (get-procedure-arg 1)
+    (scheme-to-native-integer tos)
+    (mov tos edi)
+    (comment "now retrieve the address of string bytes from the stack")
+    (pop)
+    (mov tos ebx)
+    (get-procedure-arg 2)
+    (ensure-character)
+    (scheme-to-native-character tos)
+    (movb al (indirect (index-register ebx edi 1)))
+    (comment "discard the character and base address")
+    (pop) (pop)
+    (comment "but we need a return value...")
+    (get-procedure-arg 0)))
 
 (define-global-procedure 'string-ref 2
   (lambda ()
-    (begin
-      (comment "string-ref primitive procedure")
-      (get-procedure-arg 0)
-      (extract-string)
-      (get-procedure-arg 1)
-      (check-array-bounds)
-      (get-procedure-arg 1)
-      (scheme-to-native-character tos)
-      (comment "get base address of string data from stack")
-      (asm-pop ebx)
-      (movb (indirect (index-register tos ebx 1)) al)
-      (movsbl al tos)
-      (native-to-scheme-character tos))))
+    (comment "string-ref primitive procedure")
+    (get-procedure-arg 0)
+    (extract-string)
+    (get-procedure-arg 1)
+    (check-array-bounds)
+    (get-procedure-arg 1)
+    (scheme-to-native-character tos)
+    (comment "get base address of string data from stack")
+    (asm-pop ebx)
+    (movb (indirect (index-register tos ebx 1)) al)
+    (movsbl al tos)
+    (native-to-scheme-character tos)))
 
 (define-global-procedure 'string-length 1
   (lambda ()
-    (begin
-      (comment "string-length primitive procedure")
-      (get-procedure-arg 0)
-      (extract-string)
-      (asm-pop ebx)
-      (native-to-scheme-integer tos))))
+    (comment "string-length primitive procedure")
+    (get-procedure-arg 0)
+    (extract-string)
+    (asm-pop ebx)
+    (native-to-scheme-integer tos)))
 
 ;;; conses
 ;; They're 12 bytes: magic number, car, cdr.  That's all, folks.
 
 (define cons-magic "0x2ce11ed")
 (define ensure-cons (lambda () (call "ensure_cons")))
-(add-to-header (lambda () (begin (label "ensure_cons")
-                                 (test (const "3") tos)
-                                 (jnz "not_cons")
-                                 (cmp (const cons-magic) (indirect tos))
-                                 (jnz "not_cons")
-                                 (ret))))
+(add-to-header (lambda () (label "ensure_cons")
+                          (test (const "3") tos)
+                          (jnz "not_cons")
+                          (cmp (const cons-magic) (indirect tos))
+                          (jnz "not_cons")
+                          (ret)))
 (define-error-routine "not_cons" "not a cons")
 (define-global-procedure 'car 1
   (lambda ()
-    (begin (get-procedure-arg 0)
-           (ensure-cons)
-           (mov (offset tos 4) tos))))
+    (get-procedure-arg 0)
+    (ensure-cons)
+    (mov (offset tos 4) tos)))
 (define-global-procedure 'cdr 1
   (lambda ()
-    (begin (get-procedure-arg 0)
-           (ensure-cons)
-           (mov (offset tos 8) tos))))
+    (get-procedure-arg 0)
+    (ensure-cons)
+    (mov (offset tos 8) tos)))
 ;; We define a label here before the procedure prologue so that other
 ;; asm routines can call cons
 (add-to-header (lambda () (text) (label "cons")))
 (define-global-procedure 'cons 2
   (lambda ()
-    (begin (push-const (tagged-integer 12))
-           (emit-malloc)
-           (mov (const cons-magic) (indirect tos))
-           (mov tos ebx)
-           (get-procedure-arg 0)
-           (mov tos (offset ebx 4))
-           (pop)
-           (get-procedure-arg 1)
-           (mov tos (offset ebx 8))
-           (pop))))
+    (push-const (tagged-integer 12))
+    (emit-malloc)
+    (mov (const cons-magic) (indirect tos))
+    (mov tos ebx)
+    (get-procedure-arg 0)
+    (mov tos (offset ebx 4))
+    (pop)
+    (get-procedure-arg 1)
+    (mov tos (offset ebx 8))
+    (pop)))
 ;; Compile a quoted cons cell.
 (define compile-cons
   (lambda (car-contents cdr-contents labelname)
-    (begin (rodatum labelname)
-           (compile-word cons-magic)
-           (compile-word car-contents)
-           (compile-word cdr-contents)
-           (text))))
+    (rodatum labelname)
+    (compile-word cons-magic)
+    (compile-word car-contents)
+    (compile-word cdr-contents)
+    (text)))
 
 ;;; Symbols.
 ;; Just unique numbers with the low-order bits set to 11.
@@ -692,12 +675,11 @@
 ;; pointer underneath it, outputs the string.
 (define write_2
   (lambda ()
-    (begin
-      (mov tos edx)                     ; byte count in arg 3
-      (asm-pop ecx)                     ; byte string in arg 2
-      (mov (const "4") eax)             ; __NR_write
-      (mov (const "1") ebx)             ; fd 1: stdout
-      (syscall))))                      ; return value is in %eax
+    (mov tos edx)                       ; byte count in arg 3
+    (asm-pop ecx)                       ; byte string in arg 2
+    (mov (const "4") eax)               ; __NR_write
+    (mov (const "1") ebx)               ; fd 1: stdout
+    (syscall)))                         ; return value is in %eax
 
 ;; Emit code to output a string.
 ;; XXX this needs to have a reasonable return value, and it doesn't!
@@ -705,19 +687,18 @@
 ;; Emit code to output a newline.
 (define target-newline
   (lambda ()
-    (begin
-      (push-const "newline_string")
-      (target-display))))
+    (push-const "newline_string")
+    (target-display)))
 (add-to-header (lambda () (rodatum "newline_string") (constant-string "\n")))
 
 (define-global-procedure 'display 1
-  (lambda () (begin (get-procedure-arg 0)
-                    (target-display))))
+  (lambda () (get-procedure-arg 0)
+             (target-display)))
 (define-global-procedure 'newline 0 target-newline)
 (define-global-procedure 'eq? 2 
-  (lambda () (begin (get-procedure-arg 0)
-                    (get-procedure-arg 1)
-                    (target-eq?))))
+  (lambda () (get-procedure-arg 0)
+             (get-procedure-arg 1)
+             (target-eq?)))
 
 ;; Emit the code for the normal error-reporting routine
 (add-to-header (lambda ()
@@ -744,41 +725,37 @@
 (define ensure-integer (lambda () (call "ensure_integer")))
 (define assert-equal (lambda (a b) (if (= a b) #t (error "assert failed"))))
 ;; Emit code to add NOS to TOS; assumes they're already tag-checked
-(define emit-integer-addition
-  (lambda ()
-    (begin (asm-pop ebx)
-           (add ebx tos)
-           (dec tos))))                 ; fix up tag
+(define emit-integer-addition (lambda () (asm-pop ebx)
+                                         (add ebx tos)
+                                         (dec tos))) ; fix up tag
 
 (define integer-add
   (lambda (rands env)
-    (begin
-      (comment "integer add operands")
-      (assert-equal 2 (compile-args rands env))
-      (comment "now execute integer add")
-      (ensure-integer)
-      (swap)
-      (ensure-integer)
-      (emit-integer-addition))))
+    (comment "integer add operands")
+    (assert-equal 2 (compile-args rands env))
+    (comment "now execute integer add")
+    (ensure-integer)
+    (swap)
+    (ensure-integer)
+    (emit-integer-addition)))
 (define integer-sub
   (lambda (rands env)
-    (begin
-      (comment "integer subtract operands")
-      (assert-equal 2 (compile-args rands env))
-      (comment "now execute integer subtract")
-      (ensure-integer)
-      (swap)
-      (ensure-integer)
-      (sub tos nos)
-      (pop)
-      (inc tos))))                      ; fix up tag
+    (comment "integer subtract operands")
+    (assert-equal 2 (compile-args rands env))
+    (comment "now execute integer subtract")
+    (ensure-integer)
+    (swap)
+    (ensure-integer)
+    (sub tos nos)
+    (pop)
+    (inc tos)))                         ; fix up tag
 
 ;; Emit code to convert a native integer to a tagged integer.
 (define native-to-scheme-integer 
-  (lambda (reg) (begin (sal reg) (sal reg) (inc reg))))
+  (lambda (reg) (sal reg) (sal reg) (inc reg)))
 ;; Emit code to convert a tagged integer to a native integer.    
 (define scheme-to-native-integer 
-  (lambda (reg) (begin (sar reg) (sar reg))))
+  (lambda (reg) (sar reg) (sar reg)))
 
 ;; Emit code to divide procedure arg 0 by procedure arg 1
 ;; This merely zeroes out the tags rather than shifting them off.  The
@@ -803,14 +780,14 @@
     (idiv ebx)))
 
 (define-global-procedure 'remainder 2
-  (lambda () (begin (emit-division-code)
-                    (comment "remainder (<<2) is in %edx")
-                    (mov edx tos)
-                    (comment "put the tag back")
-                    (inc tos))))
+  (lambda () (emit-division-code)
+             (comment "remainder (<<2) is in %edx")
+             (mov edx tos)
+             (comment "put the tag back")
+             (inc tos)))
 (define-global-procedure 'quotient 2
-  (lambda () (begin (emit-division-code)
-                    (native-to-scheme-integer tos))))
+  (lambda () (emit-division-code)
+             (native-to-scheme-integer tos)))
 
 ;;; Booleans and other misc. types
 (define enum-tag "2")
@@ -827,20 +804,20 @@
 
 ;; Emit code to generate an error if TOS isn't a character.
 (define ensure-character
-  (lambda () (begin (test (const "1") tos)
-                    (jnz "not_a_character")
-                    (test (const "2") tos)
-                    (jz "not_a_character")
-                    ;; Intel manual 253666 says, "The comparison is
-                    ;; performed by subtracting the second operand
-                    ;; from the first operand and then setting the
-                    ;; status flags in the same manner as the SUB
-                    ;; instruction."  Here we're using AT&T syntax, so
-                    ;; that means "the first operand from the second
-                    ;; operand", so we expect to set the carry flag
-                    ;; here.
-                    (cmp (const (enum-value 256)) tos)
-                    (jnb "not_a_character"))))
+  (lambda () (test (const "1") tos)
+             (jnz "not_a_character")
+             (test (const "2") tos)
+             (jz "not_a_character")
+             ;; Intel manual 253666 says, "The comparison is
+             ;; performed by subtracting the second operand
+             ;; from the first operand and then setting the
+             ;; status flags in the same manner as the SUB
+             ;; instruction."  Here we're using AT&T syntax, so
+             ;; that means "the first operand from the second
+             ;; operand", so we expect to set the carry flag
+             ;; here.
+             (cmp (const (enum-value 256)) tos)
+             (jnb "not_a_character")))
 
 (define-error-routine "not_a_character" "not a character")
 
@@ -850,7 +827,7 @@
 ;; Emit code to convert from an unsigned native character to a tagged
 ;; character.
 (define native-to-scheme-character
-  (lambda (reg) (begin (sal reg) (inc reg) (sal reg))))
+  (lambda (reg) (sal reg) (inc reg) (sal reg)))
 
 ;; Emit code to push a boolean in place of the top two stack items.
 ;; It will be #t if they are equal, #f if they are not.
@@ -874,9 +851,9 @@
 
 (define add-new-global-variable-binding!
   (lambda (name label)
-    (begin (set! global-variable-labels 
-                 (cons (cons name label) global-variable-labels))
-           label)))
+    (set! global-variable-labels 
+          (cons (cons name label) global-variable-labels))
+    label))
 (define allocate-new-global-variable-label!
   (lambda (name) (add-new-global-variable-binding! name (new-label))))
 (define global-variable-label-2
@@ -892,11 +869,10 @@
 ;; a global variable, with a specific assembly label.
 (define compile-global-variable
   (lambda (varlabel initial)
-    (begin
-      (section ".data")
-      (label varlabel)
-      (compile-word initial)
-      (text))))
+    (section ".data")
+    (label varlabel)
+    (compile-word initial)
+    (text)))
 
 ;; Emit code to create a mutable labeled cell for use as a global
 ;; variable, bound to a specific identifier.
@@ -931,15 +907,14 @@
 
 (define compile-quote-3
   (lambda (expr labelname)
-    (begin
-      (if (string? expr) 
-          (constant-string-2 expr labelname)
-          (if (pair? expr)
-              (compile-cons (compile-quote-2 (car expr))
-                            (compile-quote-2 (cdr expr))
-                            labelname)
-              (error "unquotable" expr)))
-      labelname)))
+    (if (string? expr) 
+        (constant-string-2 expr labelname)
+        (if (pair? expr)
+            (compile-cons (compile-quote-2 (car expr))
+                          (compile-quote-2 (cdr expr))
+                          labelname)
+            (error "unquotable" expr)))
+    labelname))
 (define compile-quote-2
   (lambda (expr)
     (if (null? expr) nil-value
@@ -947,9 +922,8 @@
             (compile-quote-3 expr (new-label))))))
 (define compile-quote
   (lambda (expr env)
-    (begin
-      (assert-equal 1 (length expr))
-      (push-const (compile-quote-2 (car expr))))))
+    (assert-equal 1 (length expr))
+    (push-const (compile-quote-2 (car expr)))))
 
 (define compile-var-2
   (lambda (lookupval var)
@@ -968,9 +942,7 @@
 ;; compile an expression, discarding result, e.g. for toplevel
 ;; expressions
 (define compile-discarding
-  (lambda (expr env)
-    (begin (compile-expr expr env)
-           (pop))))
+  (lambda (expr env) (compile-expr expr env) (pop)))
 
 ;; Construct an environment binding the local variables of the lambda
 ;; to bits of code to fetch them.  Handles nesting very incorrectly.
@@ -981,20 +953,19 @@
               (lambda-environment env (cdr vars) (+ idx 1))))))
 (define compile-lambda-3
   (lambda (vars body env proclabel jumplabel nargs)
-    (begin (comment "jump past the body of the lambda")
-           (jmp jumplabel)
-           (built-in-procedure-labeled proclabel nargs
-             (lambda () (compile-begin body (lambda-environment env vars 0))))
-           (label jumplabel)
-           (push-const proclabel))))
+    (comment "jump past the body of the lambda")
+    (jmp jumplabel)
+    (built-in-procedure-labeled proclabel nargs
+      (lambda () (compile-begin body (lambda-environment env vars 0))))
+    (label jumplabel)
+    (push-const proclabel)))
 (define compile-lambda-2
   (lambda (vars body env)
     (if (pair? vars)
         (compile-lambda-3 vars body env (new-label) (new-label) (length vars))
         (compile-lambda-3 (list vars) body env (new-label) (new-label) '()))))
 (define compile-lambda
-  (lambda (rands env) 
-    (begin (compile-lambda-2 (car rands) (cdr rands) env))))
+  (lambda (rands env) (compile-lambda-2 (car rands) (cdr rands) env)))
 
 (define compile-begin
   (lambda (rands env)
@@ -1005,14 +976,13 @@
 
 (define compile-if-2
   (lambda (cond then else lab1 lab2 env)
-    (begin
-      (compile-expr cond env)
-      (jump-if-false lab1)
-      (compile-expr then env)
-      (jmp lab2)
-      (label lab1)
-      (compile-expr else env)
-      (label lab2))))
+    (compile-expr cond env)
+    (jump-if-false lab1)
+    (compile-expr then env)
+    (jmp lab2)
+    (label lab1)
+    (compile-expr else env)
+    (label lab2)))
 (define compile-if
   (lambda (rands env)
     (if (= (length rands) 3)
@@ -1022,11 +992,10 @@
 
 (define compile-application
   (lambda (rator env nargs)
-    (begin
-      (comment "get the procedure")
-      (compile-expr rator env)
-      (comment "now apply the procedure")
-      (compile-apply nargs))))
+    (comment "get the procedure")
+    (compile-expr rator env)
+    (comment "now apply the procedure")
+    (compile-apply nargs)))
 
 (define special-syntax-list
   (list (cons 'begin compile-begin)
@@ -1058,8 +1027,9 @@
 (define compile-expr
   (lambda (expr env) (compile-expr-2 expr env compilation-expr-list)))
 (define compile-args-2
-  (lambda (args env n) (begin (compile-expr (car args) env)
-                              (+ 1 n))))
+  (lambda (args env n)
+    (compile-expr (car args) env) 
+    (+ 1 n)))
 (define compile-args
   (lambda (args env)
     (if (null? args) 0
@@ -1133,22 +1103,21 @@
 
 (define compile-program
   (lambda (body)
-    (begin
-      (stuff-to-put-in-the-header)
+    (stuff-to-put-in-the-header)
 
-      (global-label "_start")         ; allow compiling with -nostdlib
-      (insn ".weak _start")     ; but also allow compiling with stdlib
-      (global-label "main")     ; with entry point of main, not _start
-      (mov (const "0x610ba1") ebp)      ; global-scope ebp
+    (global-label "_start")         ; allow compiling with -nostdlib
+    (insn ".weak _start")     ; but also allow compiling with stdlib
+    (global-label "main")     ; with entry point of main, not _start
+    (mov (const "0x610ba1") ebp)      ; global-scope ebp
 
-      (map compile-toplevel standard-library) ; XXX probably should be for-each
+    (map compile-toplevel standard-library) ; XXX probably should be for-each
 
-      (body)
+    (body)
 
-      (mov (const "1") eax)             ; __NR_exit
-      (mov (const "0") ebx)             ; exit code
-      (syscall)
-      (assert-no-undefined-global-variables))))
+    (mov (const "1") eax)             ; __NR_exit
+    (mov (const "0") ebx)             ; exit code
+    (syscall)
+    (assert-no-undefined-global-variables)))
 
 (define read-compile-loop
   (lambda ()
