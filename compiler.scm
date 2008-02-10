@@ -40,7 +40,7 @@
 ;; D lexically-scoped local variables with lexical scope
 ;; - nested scopes and closures
 ;; - set! for global and local variables
-;; - top-level define of a variable (not a function)
+;; D top-level define of a variable (not a function)
 ;; - read, for proper lists, symbols, strings, integers, #t and #f,
 ;;   and '
 ;; - eof-object?
@@ -1012,6 +1012,8 @@
     (comment "now apply the procedure")
     (compile-apply nargs)))
 
+;; Things that are treated as special forms.  if, lambda, quote, and
+;; set! are the standard Scheme set.
 (define special-syntax-list
   (list (cons 'begin compile-begin)
         (cons 'if compile-if)
@@ -1063,6 +1065,7 @@
 
 (define compile-toplevel
   (lambda (expr)
+    ;; XXX missing case where it's an atom
     (if (eq? (car expr) 'define) 
         (compile-toplevel-define (cadr expr) (caddr expr) global-env)
         (compile-discarding expr global-env))))
