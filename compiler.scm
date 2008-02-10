@@ -30,8 +30,8 @@
 ;; D car, cdr, cons
 ;; D null?
 ;; D booleans
-;; - boolean?, string?, procedure?, char?
-;; D eq?, pair?, null?, symbol?, integer?
+;; - string?, procedure?, char?
+;; D eq?, pair?, null?, symbol?, integer?, boolean?
 ;; D if (with three arguments)
 ;; D lambda (with fixed numbers of arguments or with a single argument
 ;;   that gets bound to the argument list (lambda <var> <body>)
@@ -1134,6 +1134,7 @@
     ;; because chars are unboxed, char=? is eq?
     (define char=? eq?)
     (define null? (lambda (x) (eq? x '())))
+    (define boolean? (lambda (x) (if (eq? x #t) #t (eq? x #f))))
     (define for-each
       (lambda (proc list) (if (null? list) #f
                               (begin
