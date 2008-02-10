@@ -5,7 +5,8 @@ set -e
 # But ELK is the fastest of bigloo, guile, mzscheme, SCM, and ELK for
 # this purpose:
 # : ${refscheme:="elk -l"}
-trap '/bin/rm -f refscheme.out newcompiler.out runtest.s runtest' EXIT
+status='echo ERROR: FAILED'
+trap '/bin/rm -f refscheme.out newcompiler.out runtest.s runtest; $status' EXIT
 runtest () {
         prog="${1?runtest needs an argument}"
         echo "running $prog"
@@ -17,3 +18,4 @@ runtest () {
 }
 if [ $# -eq 0 ] ; then set test.*.scm; fi
 for test in "$@"; do runtest "$test"; done
+status='echo PASSED'
