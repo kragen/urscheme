@@ -510,11 +510,6 @@
     (asm-push ebx)
     (mov (offset tos 4) tos)))          ; string length
 
-(define compile-literal-string-2 (lambda (label) (push-const label)))
-(define compile-literal-string
-  (lambda (contents env)
-    (compile-literal-string-2 (constant-string contents))))
-
 (define-global-procedure 'make-string 1
   (lambda () (get-procedure-arg 0)
              (ensure-integer)
@@ -935,8 +930,6 @@
 (define compile-quote-3
   (lambda (expr labelname)
     (if (string? expr) 
-        ;; XXX does this mean we can eliminate constant-string and
-        ;; friends?
         (constant-string-2 expr labelname)
         (if (pair? expr)
             (compile-cons (compile-quote-2 (car expr))
@@ -951,10 +944,12 @@
             (if (number? expr) (tagged-integer expr)
                 (if (boolean? expr) (if expr true-value false-value)
                     (compile-quote-3 expr (new-label))))))))
+(define compile-quotable 
+  (lambda (obj env) (push-const (compile-quote-2 obj))))
 (define compile-quote
   (lambda (expr env)
     (assert-equal 1 (length expr))
-    (push-const (compile-quote-2 (car expr)))))
+    (compile-quotable (car expr) env)))
 
 (define compile-var-2
   (lambda (lookupval var)
@@ -963,12 +958,6 @@
 (define compile-var
   (lambda (var env)
     (compile-var-2 (assq var env) var)))
-
-(define compile-literal-boolean
-  (lambda (b env) (push-const (if b true-value false-value))))
-
-(define compile-literal-integer
-  (lambda (int env) (push-const (tagged-integer int))))
 
 ;; compile an expression, discarding result, e.g. for toplevel
 ;; expressions
@@ -1049,9 +1038,9 @@
 (define compilation-expr-list
   (list (cons pair? compile-pair)
         (cons symbol? compile-var)
-        (cons string? compile-literal-string)
-        (cons boolean? compile-literal-boolean)
-        (cons integer? compile-literal-integer)))
+        (cons string? compile-quotable)
+        (cons boolean? compile-quotable)
+        (cons integer? compile-quotable)))
 (define compile-expr-2
   (lambda (expr env handlers)
     (if (null? handlers) (error expr)
