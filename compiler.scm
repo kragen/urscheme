@@ -57,7 +57,7 @@
 ;; - error
 ;; D several other standard procedures: list, length, assq, caar,
 ;;   cdar, cadr, caddr, not, string-append, for-each (in a limited fashion)
-;; - tail-call optimization
+;; D tail-call optimization
 
 ;; All of this would be a little simpler if strings were just lists
 ;; of small integers.
