@@ -30,8 +30,8 @@
 ;; D car, cdr, cons
 ;; D null?
 ;; D booleans
-;; - symbol?, boolean?, pair?, string?, procedure?, integer?, char?
-;; D eq?
+;; - symbol?, boolean?, string?, procedure?, integer?, char?
+;; D eq?, pair?, null?
 ;; D if (with three arguments)
 ;; D lambda (with fixed numbers of arguments or with a single argument
 ;;   that gets bound to the argument list (lambda <var> <body>)
@@ -62,7 +62,7 @@
 ;; of small integers.
 
 ;; Next to implement:
-;; - pair?
+;; ???
 
 ;; There were a bunch of parts of standard Scheme that I implemented
 ;; at the top of the compiler, which was a little bit silly --- any
@@ -651,6 +651,21 @@
     (compile-word cdr-contents)
     (text)))
 
+(define-global-procedure 'pair? 1
+  (lambda ()
+    (get-procedure-arg 0)
+    (test (const "3") tos)
+    (jnz "return_false")
+    (cmp (const cons-magic) (indirect tos))
+    (jnz "return_false")
+    (label "return_true")
+    (mov (const true-value) tos)))
+(add-to-header 
+ (lambda ()
+   (label "return_false")
+   (mov (const false-value) tos)
+   (compile-procedure-epilogue)))
+
 ;;; Symbols.
 ;; Just unique numbers with the low-order bits set to 11.
 (define interned-symbol-list '())
@@ -1097,7 +1112,12 @@
     (define = eq?)
     ;; because chars are unboxed, char=? is eq?
     (define char=? eq?)
-    (define null? (lambda (x) (eq? x '())))))
+    (define null? (lambda (x) (eq? x '())))
+    (define for-each
+      (lambda (proc list) (if (null? list) #f
+                              (begin
+                                (proc (car list))
+                                (for-each proc (cdr list))))))))
 
 ;;; Main Program
 
