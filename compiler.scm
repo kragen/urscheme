@@ -791,7 +791,7 @@
                                          (dec tos))) ; fix up tag
 
 (define integer-add
-  (lambda (rands env)
+  (lambda (rands env tail?)
     (comment "integer add operands")
     (assert-equal 2 (compile-args rands env))
     (comment "now execute integer add")
@@ -800,7 +800,7 @@
     (ensure-integer)
     (emit-integer-addition)))
 (define integer-sub
-  (lambda (rands env)
+  (lambda (rands env tail?)
     (comment "integer subtract operands")
     (assert-equal 2 (compile-args rands env))
     (comment "now execute integer subtract")
@@ -1000,9 +1000,9 @@
 (define compile-quotable 
   (lambda (obj env tail?) (push-const (compile-quote-2 obj))))
 (define compile-quote
-  (lambda (expr env)
+  (lambda (expr env tail?)
     (assert-equal 1 (length expr))
-    (compile-quotable (car expr) env #f))) ; XXX wrong?
+    (compile-quotable (car expr) env tail?)))
 
 (define compile-var-2
   (lambda (lookupval var)
@@ -1029,7 +1029,7 @@
     (comment "jump past the body of the lambda")
     (jmp jumplabel)
     (built-in-procedure-labeled proclabel nargs
-      (lambda () (compile-begin-2 body (lambda-environment env vars 0) #t)))
+      (lambda () (compile-begin body (lambda-environment env vars 0) #t)))
     (label jumplabel)
     (push-const proclabel)))
 (define compile-lambda-2
@@ -1038,16 +1038,14 @@
         (compile-lambda-3 (list vars) body env (new-label) (new-label) '())
         (compile-lambda-3 vars body env (new-label) (new-label) (length vars)))))
 (define compile-lambda
-  (lambda (rands env) (compile-lambda-2 (car rands) (cdr rands) env)))
+  (lambda (rands env tail?) (compile-lambda-2 (car rands) (cdr rands) env)))
 
-(define compile-begin-2
+(define compile-begin
   (lambda (rands env tail?)
     (if (null? rands) (push-const "31") ; XXX do something reasonable
         (if (null? (cdr rands)) (compile-expr (car rands) env tail?)
             (begin (compile-discarding (car rands) env)
-                   (compile-begin-2 (cdr rands) env tail?))))))
-(define compile-begin
-  (lambda (rands env) (compile-begin-2 rands env #f)))
+                   (compile-begin (cdr rands) env tail?))))))
 
 (define compile-if-2
   (lambda (cond then else lab1 lab2 env)
@@ -1059,7 +1057,7 @@
     (compile-expr else env #f)          ; XXX wrong
     (label lab2)))
 (define compile-if
-  (lambda (rands env)
+  (lambda (rands env tail?)
     (if (= (length rands) 3)
         (compile-if-2 (car rands) (cadr rands) (caddr rands)
                       (new-label) (new-label) env)
@@ -1084,7 +1082,7 @@
         (cons '- integer-sub)))
 (define compile-combination-2
   (lambda (rator rands env handler tail?)
-    (if handler ((cdr handler) rands env)
+    (if handler ((cdr handler) rands env tail?)
         (compile-application rator env (compile-args rands env) tail?))))
 (define compile-combination
   (lambda (rator rands env tail?)
