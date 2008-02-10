@@ -1093,12 +1093,12 @@
         (cons boolean? compile-quotable)
         (cons integer? compile-quotable)))
 (define compile-expr-2
-  (lambda (expr env handlers)
+  (lambda (expr env handlers tail?)
     (if (null? handlers) (error expr)
         (if ((caar handlers) expr) ((cdar handlers) expr env)
-            (compile-expr-2 expr env (cdr handlers))))))
+            (compile-expr-2 expr env (cdr handlers) tail?)))))
 (define compile-expr
-  (lambda (expr env tail?) (compile-expr-2 expr env compilation-expr-list)))
+  (lambda (expr env tail?) (compile-expr-2 expr env compilation-expr-list tail?)))
 (define compile-args-2
   (lambda (args env n)
     (compile-expr (car args) env #f)    ; XXX tail? wrong?
