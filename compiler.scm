@@ -1009,9 +1009,9 @@
     (push-const proclabel)))
 (define compile-lambda-2
   (lambda (vars body env)
-    (if (list? vars)
-        (compile-lambda-3 vars body env (new-label) (new-label) (length vars))
-        (compile-lambda-3 (list vars) body env (new-label) (new-label) '()))))
+    (if (symbol? vars)
+        (compile-lambda-3 (list vars) body env (new-label) (new-label) '())
+        (compile-lambda-3 vars body env (new-label) (new-label) (length vars)))))
 (define compile-lambda
   (lambda (rands env) (compile-lambda-2 (car rands) (cdr rands) env)))
 
@@ -1156,9 +1156,6 @@
         (if (null? list) #f 
             (if (eq? obj (car list)) list
                 (memq obj (cdr list))))))
-    ;; Is x a list?
-    (define list? 
-      (lambda (x) (if (null? x) #t (if (pair? x) (list? (cdr x)) #f))))
 
     (define for-each
       (lambda (proc list) (if (null? list) #f
