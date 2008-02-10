@@ -197,7 +197,7 @@
   (lambda (mnemonic) (lambda (src dest) (insn mnemonic " " src ", " dest))))
 ;; For example:
 (define mov (twoarg "movl"))  (define movb (twoarg "movb"))
-(define movsbl (twoarg "movsbl"))
+(define movzbl (twoarg "movzbl"))
 (define test (twoarg "test")) (define cmp (twoarg "cmpl"))
 (define lea (twoarg "lea"))
 (define add (twoarg "add"))   (define sub (twoarg "sub"))
@@ -589,8 +589,7 @@
     (scheme-to-native-character tos)
     (comment "get base address of string data from stack")
     (asm-pop ebx)
-    (movb (indirect (index-register tos ebx 1)) al)
-    (movsbl al tos)
+    (movzbl (indirect (index-register tos ebx 1)) tos)
     (native-to-scheme-character tos)))
 
 (define-global-procedure 'string-length 1
