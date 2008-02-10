@@ -1,9 +1,9 @@
 ;;; A compiler from a subset of R5RS Scheme to x86 assembly, written in itself.
-;; Kragen Javier Sitaker, 2008-01-03, 04, 05, and 06, 07, and 08
+;; Kragen Javier Sitaker, 2008-01-03 through 10
 
 ;; From the Scheme 9 From Empty Space page:
-;; Why in earth write another half-baked implementation of Scheme?
-;; It is better than getting drunk at a bar.
+;;     Why in earth write another half-baked implementation of Scheme?
+;;     It is better than getting drunk at a bar.
 
 ;; I had been working on this for a couple of days now when I ran across
 ;http://www.iro.umontreal.ca/%7Eboucherd/mslug/meetings/20041020/minutes-en.html
@@ -37,7 +37,7 @@
 ;;   that gets bound to the argument list (lambda <var> <body>)
 ;; D begin
 ;; D global variables
-;; D lexically-scoped local variables with lexical scope
+;; D lexically-scoped local variables
 ;; - nested scopes and closures
 ;; - set! for global and local variables
 ;; D top-level define of a variable (not a function)
