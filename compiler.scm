@@ -934,6 +934,8 @@
 (define compile-quote-3
   (lambda (expr labelname)
     (if (string? expr) 
+        ;; XXX does this mean we can eliminate constant-string and
+        ;; friends?
         (constant-string-2 expr labelname)
         (if (pair? expr)
             (compile-cons (compile-quote-2 (car expr))
@@ -945,7 +947,8 @@
   (lambda (expr)
     (if (null? expr) nil-value
         (if (symbol? expr) (symbol-value expr)
-            (compile-quote-3 expr (new-label))))))
+            (if (number? expr) (tagged-integer expr)
+                (compile-quote-3 expr (new-label)))))))
 (define compile-quote
   (lambda (expr env)
     (assert-equal 1 (length expr))
