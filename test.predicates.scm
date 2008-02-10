@@ -1,6 +1,6 @@
 (define predicates (list (cons "pair?" pair?) (cons "null?" null?) 
-                         (cons "symbol?" symbol?)))
-(define values '(("()" ()) ("(hello)" (hello)) ("hello" hello)))
+                         (cons "symbol?" symbol?) (cons "integer?" integer?)))
+(define values '(("()" ()) ("(hello)" (hello)) ("hello" hello) ("39" 39)))
 (define testpreds 
   (lambda (preds value)
     (if (not (null? preds))

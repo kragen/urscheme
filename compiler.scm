@@ -30,8 +30,8 @@
 ;; D car, cdr, cons
 ;; D null?
 ;; D booleans
-;; - boolean?, string?, procedure?, integer?, char?
-;; D eq?, pair?, null?, symbol?
+;; - boolean?, string?, procedure?, char?
+;; D eq?, pair?, null?, symbol?, integer?
 ;; D if (with three arguments)
 ;; D lambda (with fixed numbers of arguments or with a single argument
 ;;   that gets bound to the argument list (lambda <var> <body>)
@@ -319,6 +319,14 @@
          (jmp "report_error"))
        (constant-string (string-append "error: " 
                                        (string-append message "\n"))))))))
+
+(define compile-tag-check-procedure
+  (lambda (desired-tag)
+    (get-procedure-arg 0)
+    (asm-and (const "3") tos)
+    (cmp (const desired-tag) tos)
+    (je "return_true")
+    (jmp "return_false")))
 
 
 ;;; Procedure calls.
@@ -663,6 +671,9 @@
 
 ;;; Symbols.
 ;; Just unique numbers with the low-order bits set to 11.
+(define symbol-tag "3")
+(define-global-procedure 'symbol? 1
+  (lambda () (compile-tag-check-procedure symbol-tag)))
 (define interned-symbol-list '())
 (define intern
   (lambda (symbol)
@@ -677,13 +688,6 @@
             (interning symbol (cdr symlist))))))
 (define symbol-value
   (lambda (symbol) (list "3 + " (tagshift (intern symbol)))))
-(define-global-procedure 'symbol? 1
-  (lambda ()
-    (get-procedure-arg 0)
-    (asm-and (const "3") tos)
-    (cmp (const "3") tos)
-    (je "return_true")
-    (jmp "return_false")))
 
 ;;; Other miscellaneous crap that needs reorganizing
 
@@ -728,6 +732,8 @@
 ;;; Integers
 (define tagshift (lambda (str) (list (number->string str) "<<2")))
 (define integer-tag "1")
+(define-global-procedure 'integer? 1 
+  (lambda () (compile-tag-check-procedure integer-tag)))
 (define tagged-integer (lambda (int) (list integer-tag " + " (tagshift int))))
 (add-to-header (lambda ()
     (label "ensure_integer")
