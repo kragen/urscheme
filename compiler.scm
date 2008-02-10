@@ -620,10 +620,7 @@
 (define cons-magic "0x2ce11ed")
 (define ensure-cons (lambda () (call "ensure_cons")))
 (add-to-header (lambda () (label "ensure_cons")
-                          (test (const "3") tos)
-                          (jnz "not_cons")
-                          (cmp (const cons-magic) (indirect tos))
-                          (jnz "not_cons")
+                          (if-not-right-magic-jump cons-magic "not_cons")
                           (ret)))
 (define-error-routine "not_cons" "not a cons")
 (define-global-procedure 'car 1
