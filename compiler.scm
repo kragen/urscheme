@@ -30,8 +30,8 @@
 ;; D car, cdr, cons
 ;; D null?
 ;; D booleans
-;; - string?, procedure?, char?
-;; D eq?, pair?, null?, symbol?, integer?, boolean?
+;; - procedure?, char?
+;; D eq?, pair?, null?, symbol?, integer?, boolean?, string?
 ;; D if (with three arguments)
 ;; D lambda (with fixed numbers of arguments or with a single argument
 ;;   that gets bound to the argument list (lambda <var> <body>)
@@ -498,18 +498,29 @@
 
 (define-error-routine "notstring" "not a string")
 
-(add-to-header (lambda ()
-    (label "ensure_string")
-    (comment "ensures that %eax is a string")
+(define if-not-string-jump
+  (lambda (destlabel)
+    (comment "test whether %eax is a string")
     (comment "first, ensure that it's a pointer, not something unboxed")
     (test (const "3") tos)              ; test low two bits
-    (jnz "notstring")
+    (jnz destlabel)
     (comment "now, test its magic number")
     (cmp (const string-magic) (indirect tos))
-    (jnz "notstring")
+    (jnz destlabel)))
+
+(add-to-header (lambda ()
+    (label "ensure_string")
+    (if-not-string-jump "notstring")
     (ret)))
 ;; Emit code to ensure that %eax is a string
 (define ensure-string (lambda () (call "ensure_string")))
+
+(define-global-procedure 'string? 1
+  (lambda ()
+    (get-procedure-arg 0)
+    (if-not-string-jump "return_false")
+    (jmp "return_true")))
+
 ;; Emit code to pull the string pointer and count out of a string
 ;; being pointed to and push them on the abstract stack
 (define extract-string
