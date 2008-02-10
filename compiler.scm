@@ -355,10 +355,10 @@
       (call (absolute ebx))))
 (define compile-tail-apply
   (lambda (nargs)
-    (comment "Tail call.")
+    (comment "Tail call; nargs = " (number->string nargs))
     (comment "Note %esp points at the last thing pushed,")
     (comment "not the next thing to push.  So for 1 arg, we want %ebx=%esp")
-    (lea (offset esp (- nargs 1)) ebx)
+    (lea (offset esp (quadruple (- nargs 1))) ebx)
     (pop-stack-frame edx)
     (copy-args ebx nargs 0)
     (asm-push edx)
@@ -369,7 +369,7 @@
 (define copy-args
   (lambda (basereg nargs i)
     (if (= nargs i) '()
-        (begin (push (offset basereg i))
+        (begin (asm-push (offset basereg (- 0 (quadruple i))))
                (copy-args basereg nargs (+ i 1))))))
 
 ;; package up variadic arguments into a list.  %ebp is fully set up,
@@ -1029,7 +1029,7 @@
     (comment "jump past the body of the lambda")
     (jmp jumplabel)
     (built-in-procedure-labeled proclabel nargs
-      (lambda () (compile-begin body (lambda-environment env vars 0))))
+      (lambda () (compile-begin-2 body (lambda-environment env vars 0) #t)))
     (label jumplabel)
     (push-const proclabel)))
 (define compile-lambda-2
@@ -1040,12 +1040,14 @@
 (define compile-lambda
   (lambda (rands env) (compile-lambda-2 (car rands) (cdr rands) env)))
 
-(define compile-begin
-  (lambda (rands env)
+(define compile-begin-2
+  (lambda (rands env tail?)
     (if (null? rands) (push-const "31") ; XXX do something reasonable
-        (if (null? (cdr rands)) (compile-expr (car rands) env #f) ; XXX wrong
+        (if (null? (cdr rands)) (compile-expr (car rands) env tail?)
             (begin (compile-discarding (car rands) env)
-                   (compile-begin (cdr rands) env))))))
+                   (compile-begin-2 (cdr rands) env tail?))))))
+(define compile-begin
+  (lambda (rands env) (compile-begin-2 rands env #f)))
 
 (define compile-if-2
   (lambda (cond then else lab1 lab2 env)
@@ -1068,7 +1070,8 @@
     (comment "get the procedure")
     (compile-expr rator env #f)
     (comment "now apply the procedure")
-    (compile-apply nargs)))
+    (if tail? (compile-tail-apply nargs)
+        (compile-apply nargs))))
 
 ;; Things that are treated as special forms.  if, lambda, quote, and
 ;; set! are the standard Scheme set.
@@ -1198,6 +1201,7 @@
     (mov (const "0x610ba1") ebp)      ; global-scope ebp
 
     (for-each compile-toplevel standard-library)
+    (comment "(end of standard library prologue)")
 
     (body)
 
