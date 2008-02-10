@@ -150,17 +150,18 @@
     (char->string-2 (make-string 1) char)))
 (define string-digit
   (lambda (digit) (char->string (string-ref "0123456789" digit))))
-(define number->list-2
+(define number->string-2
   (lambda (num tail)
     (if (= num 0) tail
-        (number->list-2 (quotient num 10)
-                        (cons (string-digit (remainder num 10)) tail)))))
-;; Converts a number into a list of one-digit strings, similar to
-;; standard number->string.
-(define number->list
+        (number->string-2 (quotient num 10)
+                          (string-append (string-digit (remainder num 10)) 
+                                         tail)))))
+;; Converts a number into a string of digits.
+(define number->string                  ; same as standard
   (lambda (num) (if (= num 0) "0" 
-                    (if (< num 0) (cons "-" (number->list-2 (- 0 num) '()))
-                        (number->list-2 num '())))))
+                    (if (< num 0) 
+                        (string-append "-" (number->string-2 (- 0 num) ""))
+                        (number->string-2 num "")))))
 
 ;; Boy, it sure causes a lot of hassle that Scheme has different types
 ;; for strings and chars.
@@ -230,11 +231,11 @@
 (define const (lambda (x) (list "$" x)))
 (define indirect (lambda (x) (list "(" x ")")))
 (define offset 
-  (lambda (x offset) (list (number->list offset) (indirect x))))
+  (lambda (x offset) (list (number->string offset) (indirect x))))
 (define absolute (lambda (x) (list "*" x)))
 ;; Use this one inside of "indirect" or "offset".
 (define index-register
-  (lambda (base index size) (list base "," index "," (number->list size))))
+  (lambda (base index size) (list base "," index "," (number->string size))))
 
 (define syscall (lambda () (int (const "0x80"))))
 
@@ -252,7 +253,7 @@
 ;; new-label: Allocate a new label (e.g. for a constant) and return it.
 (define constcounter 0)
 (define new-label (lambda () (set! constcounter (+ constcounter 1))
-                             (list "k_" (number->list constcounter))))
+                             (list "k_" (number->string constcounter))))
 
 ;; stuff to output a Lisp string safely for assembly language
 (define dangerous '("\\" "\n" "\""))
@@ -346,7 +347,7 @@
   (lambda (nargs)
       (ensure-procedure)
       (mov (offset tos 4) ebx)          ; address of actual procedure
-      (mov (const (number->list nargs)) edx)
+      (mov (const (number->string nargs)) edx)
       (call (absolute ebx))))
 
 ;; package up variadic arguments into a list.  %ebp is fully set up,
@@ -390,7 +391,7 @@
     (if (null? nargs)
         (call "package_up_variadic_args")
         (begin
-          (cmp (const (number->list nargs)) edx)
+          (cmp (const (number->string nargs)) edx)
           (jnz "argument_count_wrong")))))
 (define compile-procedure-epilogue
   (lambda ()
@@ -478,7 +479,7 @@
   (lambda (contents labelname)
     (rodatum labelname)
     (compile-word string-magic)
-    (compile-word (number->list (string-length contents)))
+    (compile-word (number->string (string-length contents)))
     (ascii contents)
     (text)
     labelname))                         ; XXX do we really need this?
@@ -720,7 +721,7 @@
 
 
 ;;; Integers
-(define tagshift (lambda (str) (list (number->list str) "<<2")))
+(define tagshift (lambda (str) (list (number->string str) "<<2")))
 (define integer-tag "1")
 (define tagged-integer (lambda (int) (list integer-tag " + " (tagshift int))))
 (add-to-header (lambda ()
@@ -1108,6 +1109,7 @@
               (string-set! buf idx (string-ref s1 idx))
               (string-append-2 s1 s2 buf (+ idx 1))))))
     ;; XXX we could get rid of this if we weren't using it for creating error msgs
+    ;; (and now, again, number->string)
     (define string-append               ; standard
       (lambda (s1 s2)
         (string-append-2 s1 s2 (make-string (+ (string-length s1) 
