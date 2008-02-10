@@ -806,6 +806,7 @@
 
 (define-global-procedure '< 2
   (lambda ()
+    (comment "procedure <: (< x y) returns true if x < y")
     (get-procedure-arg 0)
     (ensure-integer)
     (get-procedure-arg 1)
