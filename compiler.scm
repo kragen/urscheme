@@ -700,7 +700,7 @@
   (lambda ()
     (push-const "newline_string")
     (target-display)))
-(add-to-header (lambda () (rodatum "newline_string") (constant-string "\n")))
+(add-to-header (lambda () (constant-string-2 "\n" "newline_string")))
 
 (define-global-procedure 'display 1
   (lambda () (get-procedure-arg 0)
