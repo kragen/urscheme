@@ -706,12 +706,16 @@
     (mov tos edx)                       ; byte count in arg 3
     (asm-pop ecx)                       ; byte string in arg 2
     (mov (const "4") eax)               ; __NR_write
-    (mov (const "1") ebx)               ; fd 1: stdout
     (syscall)))                         ; return value is in %eax
 
 ;; Emit code to output a string.
 ;; XXX this needs to have a reasonable return value, and it doesn't!
-(define target-display (lambda () (extract-string) (write_2)))
+(define target-display 
+  (lambda () 
+    (extract-string)
+    (comment "fd 1: stdout")
+    (mov (const "1") ebx)
+    (write_2)))
 ;; Emit code to output a newline.
 (define target-newline
   (lambda ()
@@ -731,7 +735,10 @@
 ;; Emit the code for the normal error-reporting routine
 (add-to-header (lambda ()
     (label "report_error")
-    (target-display)                    ; print out whatever is in %eax
+    (extract-string)
+    (comment "fd 2: stderr")
+    (mov (const "2") ebx)
+    (write_2)
     (mov (const "1") ebx)               ; exit code of program
     (mov (const "1") eax)               ; __NR_exit
     (syscall)))                         ; make system call to exit
