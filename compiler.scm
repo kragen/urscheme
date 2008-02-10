@@ -190,7 +190,7 @@
 
 ;; Emit an indented instruction
 (define insn (lambda insn (emit (cons "        " insn))))
-(define comment (lambda (comment) (insn "# " comment)))
+(define comment (lambda comment (insn "# " comment)))
 
 ;; Emit a two-argument instruction
 (define twoarg 
@@ -343,12 +343,7 @@
 (define procedure-magic "0xca11ab1e")
 (add-to-header (lambda ()
       (label "ensure_procedure")
-      (comment "make sure procedure value is not unboxed")
-      (test (const "3") tos)
-      (jnz "not_procedure")
-      (comment "now test its magic number")
-      (cmp (const procedure-magic) (indirect tos))
-      (jnz "not_procedure")
+      (if-not-right-magic-jump procedure-magic "not_procedure")
       (ret)))
 (define ensure-procedure (lambda () (call "ensure_procedure")))
 (define compile-apply
@@ -498,19 +493,19 @@
 
 (define-error-routine "notstring" "not a string")
 
-(define if-not-string-jump
-  (lambda (destlabel)
-    (comment "test whether %eax is a string")
+(define if-not-right-magic-jump
+  (lambda (magic destlabel)
+    (comment "test whether %eax has magic: " magic)
     (comment "first, ensure that it's a pointer, not something unboxed")
     (test (const "3") tos)              ; test low two bits
     (jnz destlabel)
     (comment "now, test its magic number")
-    (cmp (const string-magic) (indirect tos))
+    (cmp (const magic) (indirect tos))
     (jnz destlabel)))
 
 (add-to-header (lambda ()
     (label "ensure_string")
-    (if-not-string-jump "notstring")
+    (if-not-right-magic-jump string-magic "notstring")
     (ret)))
 ;; Emit code to ensure that %eax is a string
 (define ensure-string (lambda () (call "ensure_string")))
@@ -518,7 +513,7 @@
 (define-global-procedure 'string? 1
   (lambda ()
     (get-procedure-arg 0)
-    (if-not-string-jump "return_false")
+    (if-not-right-magic-jump string-magic "return_false")
     (jmp "return_true")))
 
 ;; Emit code to pull the string pointer and count out of a string
