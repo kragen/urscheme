@@ -398,11 +398,12 @@
           (jnz "argument_count_wrong")))))
 (define compile-procedure-epilogue
   (lambda ()
-    (asm-pop ebp) ; return val in %eax has pushed saved %ebp onto stack
-    (asm-pop ebx)                       ; value to restore %esp to
-    (asm-pop edx)                       ; saved return address
-    (mov ebx esp)
-    (jmp (absolute edx))))              ; return via indirect jump
+    (comment "procedure epilogue")
+    (comment "get return address")
+    (mov (offset ebp -4) edx)
+    (mov (offset ebp -8) esp)
+    (mov (offset ebp -12) ebp)
+    (jmp (absolute edx))))
 
 (define-error-routine "not_procedure" "not a procedure")
 (define-error-routine "argument_count_wrong" "wrong number of arguments")
