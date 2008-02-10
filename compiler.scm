@@ -949,7 +949,8 @@
     (if (null? expr) nil-value
         (if (symbol? expr) (symbol-value expr)
             (if (number? expr) (tagged-integer expr)
-                (compile-quote-3 expr (new-label)))))))
+                (if (boolean? expr) (if expr true-value false-value)
+                    (compile-quote-3 expr (new-label))))))))
 (define compile-quote
   (lambda (expr env)
     (assert-equal 1 (length expr))

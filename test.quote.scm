@@ -24,3 +24,4 @@
 
 (define add (lambda (x) (+ (car x) (cadr x))))
 (display (number->string (add '(3 4)))) (newline)
+(display (if (car '(#t #f)) "hi" "bad")) (newline)
