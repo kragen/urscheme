@@ -56,7 +56,8 @@
 ;; D display, for strings, and newline
 ;; - error
 ;; D several other standard procedures: list, length, assq, caar,
-;;   cdar, cadr, caddr, not, string-append, map (in a limited fashion)
+;;   cdar, cadr, caddr, not, string-append, for-each (in a limited fashion)
+;; - tail-call optimization
 
 ;; All of this would be a little simpler if strings were just lists
 ;; of small integers.
@@ -1142,10 +1143,6 @@
         (string-append-2 s1 s2 (make-string (+ (string-length s1) 
                                                (string-length s2)))
                          0)))
-    (define map                     ; subset of standard: one arg only
-      (lambda (fn lst)
-        (if (null? lst) '()
-            (cons (fn (car lst)) (map fn (cdr lst))))))
     (define = eq?)
     ;; because chars are unboxed, char=? is eq?
     (define char=? eq?)
@@ -1157,7 +1154,7 @@
             (if (eq? obj (car list)) list
                 (memq obj (cdr list))))))
 
-    (define for-each
+    (define for-each                ; subset of standard: one arg only
       (lambda (proc list) (if (null? list) #f
                               (begin
                                 (proc (car list))
@@ -1174,7 +1171,7 @@
     (global-label "main")     ; with entry point of main, not _start
     (mov (const "0x610ba1") ebp)      ; global-scope ebp
 
-    (map compile-toplevel standard-library) ; XXX probably should be for-each
+    (for-each compile-toplevel standard-library)
 
     (body)
 
