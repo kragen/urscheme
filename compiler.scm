@@ -995,19 +995,21 @@
             (if (integer? expr) (tagged-integer expr)
                 (if (boolean? expr) (if expr true-value false-value)
                     (compile-quote-3 expr (new-label))))))))
+;; XXX is compile-quotable going to be sad about its responsibility to
+;; compile tail calls?
 (define compile-quotable 
-  (lambda (obj env) (push-const (compile-quote-2 obj))))
+  (lambda (obj env tail?) (push-const (compile-quote-2 obj))))
 (define compile-quote
   (lambda (expr env)
     (assert-equal 1 (length expr))
-    (compile-quotable (car expr) env)))
+    (compile-quotable (car expr) env #f))) ; XXX wrong?
 
 (define compile-var-2
   (lambda (lookupval var)
     (if lookupval ((cdr lookupval)) 
         (fetch-global-variable (global-variable-label var)))))
 (define compile-var
-  (lambda (var env)
+  (lambda (var env tail?)
     (compile-var-2 (assq var env) var)))
 
 ;; compile an expression, discarding result, e.g. for toplevel
@@ -1085,7 +1087,7 @@
   (lambda (rator rands env)
     (compile-combination-2 rator rands env (assq rator special-syntax-list))))
 (define compile-pair
-  (lambda (expr env) (compile-combination (car expr) (cdr expr) env)))
+  (lambda (expr env tail?) (compile-combination (car expr) (cdr expr) env)))
 (define compilation-expr-list
   (list (cons pair? compile-pair)
         (cons symbol? compile-var)
@@ -1095,7 +1097,7 @@
 (define compile-expr-2
   (lambda (expr env handlers tail?)
     (if (null? handlers) (error expr)
-        (if ((caar handlers) expr) ((cdar handlers) expr env)
+        (if ((caar handlers) expr) ((cdar handlers) expr env tail?)
             (compile-expr-2 expr env (cdr handlers) tail?)))))
 (define compile-expr
   (lambda (expr env tail?) (compile-expr-2 expr env compilation-expr-list tail?)))
