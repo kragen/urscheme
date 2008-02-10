@@ -208,7 +208,7 @@
 (define asm-push (onearg "push")) (define asm-pop (onearg "pop"))
 (define jmp (onearg "jmp"))       (define jnz (onearg "jnz"))
 (define je (onearg "je"))         (define jz je)
-(define jnb (onearg "jnb"))
+(define jnb (onearg "jnb"))       (define jg (onearg "jg"))
 (define call (onearg "call"))     (define int (onearg "int"))
 (define inc (onearg "inc"))       (define dec (onearg "dec"))
 (define idiv (onearg "idiv"))
@@ -803,6 +803,17 @@
 (define-global-procedure 'quotient 2
   (lambda () (emit-division-code)
              (native-to-scheme-integer tos)))
+
+(define-global-procedure '< 2
+  (lambda ()
+    (get-procedure-arg 0)
+    (ensure-integer)
+    (get-procedure-arg 1)
+    (ensure-integer)
+    (cmp tos nos)
+    (pop)
+    (jg "return_false")
+    (jmp "return_true")))
 
 ;;; Booleans and other misc. types
 (define enum-tag "2")
