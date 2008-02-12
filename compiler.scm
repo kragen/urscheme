@@ -1068,7 +1068,7 @@
     (if (= (length rands) 3)
         (compile-if-2 (car rands) (cadr rands) (caddr rands)
                       (new-label) (new-label) env tail?)
-        (error "if arguments length != 3"))))
+        (error "if arguments length " (length rands) "!= 3"))))
 
 (define compile-application
   (lambda (rator env nargs tail?)
