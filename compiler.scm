@@ -1188,7 +1188,7 @@
             (if (eq? obj (car list)) list
                 (memq obj (cdr list))))))
 
-    (define for-each                ; subset of standard: one arg only
+    (define for-each               ; subset of standard: one list only
       (lambda (proc list) (if (null? list) #f
                               (begin
                                 (proc (car list))
