@@ -407,10 +407,11 @@
     (comment "compute desired %esp on return in %ebx and push it")
     (lea (offset (index-register esp edx 4) 4) ebx)
     (asm-push ebx)                    ; push restored %esp on stack
+    (asm-push ebp)                      ; save old %ebp
+    (lea (offset esp 12) ebp)   ; 12 bytes to skip saved %ebx, %eip,
+				; %ebp
     ;; At this point, if we were a closure, we would be doing
     ;; something clever with the procedure value pointer in %eax.
-    (mov ebp tos)                     ; save old %ebp --- in %eax!
-    (lea (offset esp 8) ebp)   ; 8 bytes to skip saved %ebx and %eip
     (if (null? nargs)
         (call "package_up_variadic_args")
         (begin
