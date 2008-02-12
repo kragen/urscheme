@@ -385,18 +385,21 @@
    (comment "saved %ebp in %eax.  zero-iterations case: return nil")
    (push-const nil-value)
    (label "variadic_loop")
+   (test edx edx)
+   (jz "variadic_loop_end")
+   (dec edx)
    (comment "calling cons clobbers registers, so push %edx")
    (asm-push edx)
    (comment "now push args for cons")
    (asm-push eax)
-   (asm-push (offset (index-register ebp edx 4) -4))
+   (asm-push (offset (index-register ebp edx 4) 4))
    (comment "give cons its argument count")
    (mov (const "2") edx)
    (call "cons")
    (comment "now the args are popped and we have new list in %eax")
    (asm-pop edx)
-   (dec edx)
-   (jnz "variadic_loop")
+   (jmp "variadic_loop")
+   (label "variadic_loop_end")
    (comment "now we pretend procedure was called with the list as first arg")
    (mov eax (indirect ebp))
    (comment "restore %eax to value on entry to package_up_variadic_args")
@@ -404,9 +407,19 @@
    (ret)))
 (define compile-procedure-prologue
   (lambda (nargs)
-    (comment "compute desired %esp on return in %ebx and push it")
-    (lea (offset (index-register esp edx 4) 4) ebx)
-    (asm-push ebx)                    ; push restored %esp on stack
+    (if (null? nargs)
+        (begin
+          (comment "make space for variadic argument list")
+          (asm-pop ebx)
+          (asm-push ebx)
+          (asm-push ebx)
+          (comment "push desired %esp on return")
+          (lea (offset (index-register esp edx 4) 8) ebx)
+          (asm-push ebx))
+        (begin
+          (comment "compute desired %esp on return in %ebx and push it")
+          (lea (offset (index-register esp edx 4) 4) ebx)
+          (asm-push ebx)))
     (asm-push ebp)                      ; save old %ebp
     (lea (offset esp 12) ebp)   ; 12 bytes to skip saved %ebx, %eip,
 				; %ebp
