@@ -330,10 +330,12 @@
 
 
 ;;; Procedure calls.
-;; Procedure values are 8 bytes:
+;; Procedure values are at least 12 bytes:
 ;; - 4 bytes: procedure magic number 0xca11ab1e
 ;; - 4 bytes: pointer to procedure machine code
-;; At some point I'll have to add a context pointer.
+;; - 4 bytes: number of closed-over variables --- zero for top-level
+;;   procedures.  This is not needed by the code inside the closure.
+;; Pointers to any closed-over variables follow.
 ;; 
 ;; The number of arguments is passed in %edx; on the machine stack is
 ;; the return address, with the arguments underneath it; the address
@@ -435,6 +437,7 @@
     (rodatum labelname)
     (compile-word procedure-magic)
     (compile-word bodylabel)
+    (compile-word "0")                  ; no closure args
     (text)
     (label bodylabel)
     (compile-procedure-prologue nargs)
