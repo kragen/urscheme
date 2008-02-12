@@ -1,4 +1,4 @@
-;;; A compiler from a subset of R5RS Scheme to x86 assembly, written in itself.
+;;; UrScheme: A self-hosting compiler for a subset of R5RS Scheme to x86 asm
 ;; Kragen Javier Sitaker, 2008-01-03 through 10
 
 ;; From the Scheme 9 From Empty Space page:
