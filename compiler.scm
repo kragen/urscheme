@@ -1047,7 +1047,11 @@
   (lambda (rands env tail?)
     (if (null? rands) (push-const "31") ; XXX do something reasonable
         (if (null? (cdr rands)) (compile-expr (car rands) env tail?)
-            (begin (compile-discarding (car rands) env)
+            ;; hey, we can avoid discarding the results from
+            ;; intermediate expressions if we're at the top level of a
+            ;; function...
+            (begin (if tail? (compile-expr (car rands) env #f)
+                       (compile-discarding (car rands) env))
                    (compile-begin (cdr rands) env tail?))))))
 
 (define compile-if-2
