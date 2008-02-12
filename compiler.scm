@@ -30,8 +30,8 @@
 ;; D car, cdr, cons
 ;; D null?
 ;; D booleans
-;; - char?
-;; D eq?, pair?, null?, symbol?, integer?, boolean?, string?, procedure?
+;; D eq?, pair?, null?, symbol?, integer?, boolean?, string?, procedure? 
+;;   (but not char?)
 ;; D if (with three arguments)
 ;; D lambda (with fixed numbers of arguments or with a single argument
 ;;   that gets bound to the argument list (lambda <var> <body>)
@@ -46,9 +46,8 @@
 ;; - eof-object?
 ;; - garbage collection
 ;; D strings, with string-set!, string-ref, string literals,
-;;   string-length, and make-string with one argument
+;;   string-length, and make-string with one argument; but not string=?
 ;; D which unfortunately requires characters; char=?
-;; - string=?
 ;; D very basic arithmetic: two-argument +, -, quotient, remainder,
 ;;   and = for integers, and decimal numeric constants
 ;; D < for integers
