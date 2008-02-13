@@ -374,6 +374,11 @@
         (begin (asm-push (offset basereg (- 0 (quadruple i))))
                (copy-args basereg nargs (+ i 1))))))
 
+(define push-closed-variables
+  (lambda (nclosed-variables)
+    ;; XXX implement me!
+    2))
+
 ;; package up variadic arguments into a list.  %ebp is fully set up,
 ;; so we can index off of it to find each argument, and %edx is the
 ;; total number of arguments.  Only trouble is that we have to push
@@ -406,29 +411,36 @@
    (comment "restore %eax to value on entry to package_up_variadic_args")
    (pop)
    (ret)))
+(define compile-variadic-prologue
+  (lambda (nclosed-variables)
+    (comment "make space for variadic argument list")
+    (asm-pop ebx)
+    (asm-push ebx)
+    (asm-push ebx)
+    (comment "push desired %esp on return")
+    (lea (offset (index-register esp edx 4) 8) ebx)
+    (asm-push ebx)
+
+    (asm-push ebp)                      ; save old %ebp
+    (lea (offset esp 12) ebp) ; 12 bytes to skip saved %ebp, %ebx, %eip
+
+    (push-closed-variables nclosed-variables)
+
+    (call "package_up_variadic_args")))
+    
 (define compile-procedure-prologue
-  (lambda (nargs)
-    (if (null? nargs)
-        (begin
-          (comment "make space for variadic argument list")
-          (asm-pop ebx)
-          (asm-push ebx)
-          (asm-push ebx)
-          (comment "push desired %esp on return")
-          (lea (offset (index-register esp edx 4) 8) ebx)
-          (asm-push ebx))
+  (lambda (nargs nclosed-variables)
+    (if (null? nargs) (compile-variadic-prologue nclosed-variables)
         (begin
           (comment "compute desired %esp on return in %ebx and push it")
           (lea (offset (index-register esp edx 4) 4) ebx)
-          (asm-push ebx)))
-    (asm-push ebp)                      ; save old %ebp
-    (lea (offset esp 12) ebp)   ; 12 bytes to skip saved %ebx, %eip,
-				; %ebp
-    ;; At this point, if we were a closure, we would be doing
-    ;; something clever with the procedure value pointer in %eax.
-    (if (null? nargs)
-        (call "package_up_variadic_args")
-        (begin
+          (asm-push ebx)
+
+          (asm-push ebp)                      ; save old %ebp
+          (lea (offset esp 12) ebp) ; 12 bytes to skip saved %ebp, %ebx, %eip
+
+          (push-closed-variables nclosed-variables)
+
           (cmp (const (number->string nargs)) edx)
           (jnz "argument_count_wrong")))))
 (define compile-procedure-epilogue
@@ -455,20 +467,20 @@
     (compile-word "0")                  ; no closure args
     (text)
     (label bodylabel)
-    (compile-procedure-prologue nargs)
+    (compile-procedure-prologue nargs 0)
     (body)
     (compile-procedure-epilogue)))   ; maybe we should just centralize
                                      ; that and jump to it? :)
 ;; Define a built-in procedure so we can refer to it by label and
 ;; push-const that label, then expect to be able to compile-apply to
 ;; it later.
-(define built-in-procedure-labeled
+(define compile-procedure-labeled
   (lambda (labelname nargs body)
     (built-in-procedure-2 labelname nargs body (new-label))))
 (define global-procedure-2
   (lambda (symbolname nargs body procedure-value-label)
       (define-global-variable symbolname procedure-value-label)
-      (built-in-procedure-labeled procedure-value-label nargs body)))
+      (compile-procedure-labeled procedure-value-label nargs body)))
 ;; Add code to define a global procedure known by a certain global
 ;; variable name to the header
 (define define-global-procedure
@@ -485,6 +497,140 @@
     (get-procedure-arg 0)
     (if-not-right-magic-jump procedure-magic "return_false")
     (jmp "return_true")))
+
+
+;;; Closures and closure handling.
+;; If a particular variable is captured by some nested
+;; lambda-expression, we heap-allocate that variable.  But that
+;; requires knowing which variables are so captured.
+
+;; First, some basic set arithmetic.
+(define set-subtract (lambda (a b) (filter (lambda (x) (not (memq x b))) a)))
+(define set-equal (lambda (a b) (eq? (set-subtract a b) (set-subtract b a))))
+(define add-if-not-present 
+  (lambda (obj set) (if (memq obj set) set (cons obj set))))
+(define set-union 
+  (lambda (a b) (if (null? b) a 
+                    (add-if-not-present (car b) (set-union (cdr b) a)))))
+(define set-intersect (lambda (a b) (filter (lambda (x) (memq x b)) a)))
+
+(define assert (lambda (x why) (if (not x) (error "surprise! error" why))))
+(assert (set-equal '() '()) "empty set equality")
+(assert (set-equal '(a) '(a)) "set equality with one item")
+(assert (not (set-equal '(a) '(b))) "set inequality with one item")
+(assert (not (set-equal '() '(a))) "set inequality () (a)")
+(assert (not (set-equal '(a) '())) "set inequality (a) ()")
+(assert (set-equal '(a a) '(a)) "set equality (a a) (a)")
+(assert (set-equal '(a b) '(b a)) "set equality sequence varies")
+(assert (= (length (add-if-not-present 'a '())) 1) "add to empty set")
+(assert (= (length (add-if-not-present 'a '(a))) 1) "redundant add")
+(assert (= (length (add-if-not-present 'a '(b))) 2) "nonredundant add")
+(define sample-abcd (set-union '(a b c) '(b c d)))
+(assert (= (length sample-abcd) 4) "set union")
+(assert (memq 'a sample-abcd) "member from set 1")
+(assert (memq 'd sample-abcd) "member from set 2")
+(assert (not (memq '() sample-abcd)) "nil not in set")
+
+(define assert-set-equal 
+  (lambda (a b) (assert (set-equal a b) (list 'set-equal a b))))
+(assert-set-equal (set-intersect '(a b c) '(b c d)) '(b c))
+
+
+;; Returns vars captured by some lambda inside expr, i.e. vars that
+;; occurs free inside a lambda inside expr.
+(define captured-vars
+  (lambda (expr)
+    (if (not (pair? expr)) '()
+        (if (eq? (car expr) 'lambda) (free-vars-lambda (cdr expr))
+            (if (eq? (car expr) 'if) (all-captured-vars (cdr expr))
+                (if (eq? (car expr) 'begin) (all-captured-vars (cdr expr))
+                    (if (eq? (car expr) 'quote) '()
+                        (all-captured-vars expr))))))))
+
+;; Returns true if var is captured by a lambda inside any of exprs.
+(define all-captured-vars
+  (lambda (exprs) (if (null? exprs) '()
+                      (set-union (captured-vars (car exprs))
+                                 (all-captured-vars (cdr exprs))))))
+
+;; Returns vars that occur free inside a lambda-abstraction whose
+;; arguments and body are consed together in rands.
+(define free-vars-lambda
+  (lambda (rands) (free-vars-lambda-2 (car rands) (cdr rands))))
+
+;; Returns a list of the vars that are bound by a particular lambda arg list.
+(define vars-bound (lambda (args) (if (symbol? args) (list args) args)))
+
+;; Returns vars that occur free inside a lambda-abstraction with given
+;; args and body.
+(define free-vars-lambda-2
+  (lambda (args body) (set-subtract (all-free-vars body) (vars-bound args))))
+
+;; Returns vars that occur free inside of expr.
+(define free-vars
+  (lambda (expr)
+    (if (symbol? expr) (list expr)
+        (if (not (pair? expr)) '()
+            (if (eq? (car expr) 'lambda) (free-vars-lambda (cdr expr))
+                (if (eq? (car expr) 'if) (all-free-vars (cdr expr))
+                    (if (eq? (car expr) 'begin) (all-free-vars (cdr expr))
+                        (if (eq? (car expr) 'quote) '()
+                            (all-free-vars expr)))))))))
+;; Returns vars that occur free inside of any of exprs.
+(define all-free-vars
+  (lambda (exprs) (if (null? exprs) '()
+                      (set-union (free-vars (car exprs))
+                                 (all-free-vars (cdr exprs))))))
+
+;; Some basic unit tests for closure handling.
+
+(define sample-closure-expression    
+  '(lambda (a b)
+     (lambda (c d)
+       (lambda (e f) (+ e f c a)))))
+
+(assert-set-equal (free-vars sample-closure-expression) '(+))
+(assert-set-equal (captured-vars sample-closure-expression) '(+))
+
+(define sample-inner-lambda-1 (caddr sample-closure-expression))
+(assert-set-equal (free-vars sample-inner-lambda-1) '(a +))
+(assert-set-equal (captured-vars sample-inner-lambda-1) '(a +))
+
+(define sample-inner-lambda-2 (caddr sample-inner-lambda-1))
+(assert-set-equal (free-vars sample-inner-lambda-2) '(a c +))
+(assert-set-equal (captured-vars sample-inner-lambda-2) '(a c +))
+
+;; Some tests for the other cases.
+(define sample-quoted-expr '(foo bar '(a b c)))
+(assert-set-equal (free-vars sample-quoted-expr) '(foo bar))
+(assert-set-equal (captured-vars sample-quoted-expr) '())
+
+(define sample-if-expr '(if a b c))
+(assert-set-equal (free-vars sample-if-expr) '(a b c))
+(assert-set-equal (captured-vars sample-if-expr) '())
+
+(define sample-begin-expr '(if a b c))
+(assert-set-equal (free-vars sample-begin-expr) '(a b c))
+(assert-set-equal (captured-vars sample-begin-expr) '())
+
+;; In particular, multiple expressions in a lambda body here.
+(assert-set-equal (captured-vars '(begin (if x (lambda (y) (z a) (y c)) d) e))
+                  '(z a c))
+
+(assert-set-equal (captured-vars '(lambda x (x y z))) '(y z))
+
+(define vars-needing-heap-allocation
+  (lambda (expr)
+    (assert (eq? (car expr) 'lambda) 
+            (list "vars-needing-heap-allocation needs lambda only" expr))
+    (set-intersect (vars-bound (cadr expr)) (all-captured-vars (cddr expr)))))
+
+(assert-set-equal '(a) (vars-needing-heap-allocation sample-closure-expression))
+(assert-set-equal '(c) (vars-needing-heap-allocation sample-inner-lambda-1))
+(assert-set-equal '() (vars-needing-heap-allocation sample-inner-lambda-2))
+(assert-set-equal '(message) (vars-needing-heap-allocation 
+  '(lambda (message) 
+     (lambda (message2) (display message) (display message2) (newline)))))
 
 
 ;;; Memory management.
@@ -1043,9 +1189,10 @@
               (lambda-environment env (cdr vars) (+ idx 1))))))
 (define compile-lambda-3
   (lambda (vars body env proclabel jumplabel nargs)
+    (assert-set-equal '() (vars-needing-heap-allocation (list 'lambda vars body)))
     (comment "jump past the body of the lambda")
     (jmp jumplabel)
-    (built-in-procedure-labeled proclabel nargs
+    (compile-procedure-labeled proclabel nargs
       (lambda () (compile-begin body (lambda-environment env vars 0) #t)))
     (label jumplabel)
     (push-const proclabel)))
