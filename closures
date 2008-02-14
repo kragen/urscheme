@@ -1,0 +1,249 @@
+So, closures.
+
+The Lua 5.0 paper says:
+
+    The implementation of closures : Lua 5.0 supports first-class
+    functions with lexical scoping. This mechanism poses a well-known
+    difficulty for languages that use an array-based stack to store
+    activation records. Lua uses a novel approach to function closures
+    that keeps local variables in the (array-based) stack and only
+    moves them to the heap if they go out of scope while being
+    referred by nested functions. The implementation of closures is
+    discussed in Section 5.
+
+    ...
+
+    Each closure has a reference to its corresponding prototype, a
+    reference to its environment (a table wherein it looks for global
+    variables), and an array of references to upvalues, which are used
+    to access outer local variables.
+
+    Lua uses a structure called an upvalue to implement closures. Any
+    outer local variable is accessed indirectly through an
+    upvalue. The upvalue originally points to the stack slot wherein
+    the variable lives (Figure 4, left). When the variable goes out of
+    scope, it migrates into a slot inside the upvalue itself (Figure
+    4, right). Because access is indirect through a pointer in the
+    upvalue, this migration is transparent to any code that reads or
+    writes the variable. Unlike its inner functions, the function that
+    declares the variable accesses it as it accesses its own local
+    variables: directly in the stack.
+
+    Mutable state is shared correctly among closures by creating at
+    most one upvalue per variable and reusing it as needed. To ensure
+    this uniqueness, Lua keeps a linked list with all open upvalues
+    (that is, those that still point to the stack) of a stack (the
+    pending vars list in Figure 4). When Lua creates a new closure, it
+    goes through all its outer local variables. For each one, if it
+    can find an open upvalue in the list, it reuses that
+    upvalue. Otherwise, Lua creates a new upvalue and links it in the
+    list. Notice that the list search typically probes only a few
+    nodes, because the list contains at most one entry for each local
+    variable that is used by a nested function. Once a closed upvalue
+    is no longer referred by any closure, it is eventually garbage
+    collected.
+
+    It is possible for a function to access an outer local variable
+    that does not belong to its immediately enclosing function, but to
+    an outer function. In that case, even by the time the closure is
+    created, the variable may no longer exist in the stack. Lua solves
+    this case by using flat closures [5]. With flat closures, whenever
+    a function accesses an outer variable that is not local to its
+    enclosing function, the variable also goes to the closure of the
+    enclosing function. Thus, when a function is instantiated, all
+    variables that go into its closure are either in the enclosing
+    function's stack or in the enclosing function's closure.
+
+[5] is L. Cardelli. Compiling a functional language. In LISP and
+Functional Programming, pages 208--217, 1984.
+
+If the outermost function also used the upvalue to access the
+variable, there would be no need to copy the upvalue's value into the
+stack at function exit time.  I hadn't previously considered putting
+each closed-over value into the heap separately, rather than together
+in a single record, but it's clear that it's a better idea.  To
+illustrate, here's a simple program:
+
+    (lambda (a b)
+      (lambda (c d)
+        (lambda (e f) (+ e f c a))))
+
+I was thinking of something like this:
+
+    function activation record
+    [ local var e ]
+    [ local var f ]
+    [  parent ptr ] -> function activation record
+                       [ local var c ]
+                       [ local var d ] 
+                       [  parent ptr ] -> function activation record
+                                          [ local var a ]
+                                          [ local var b ]
+
+The "parent ptr" pointers point to the activation record for the
+lexically enclosing function.  So accessing a closed-over variable
+could involve chasing several pointers.  There are also problems with
+garbage collection precision with this approach: if there's a variable
+that isn't captured by any closures, you can avoid copying it to the
+heap, but if you have multiple overlapping closures in the same outer
+scope, the survival of one of them may result in retaining references
+to the variables the others use as well.  However, it has the nice
+approach that closure values are small and all the same size.
+
+The approach contemplated by the Intel x86 ENTER instruction is
+fairly similar:
+
+    function activation record
+    [ local var e ]
+    [ local var f ]
+    [  parent ptr ] -> function activation record
+    [ grandpa ptr ] -  [ local var c ]  ---
+                    |  [ local var d ]  | |
+                    |  [  parent ptr ] -- V    
+                    --------------------> function activation record  
+                                          [ local var a ]            
+                                          [ local var b ]            
+
+This avoids the need to chase several pointers.  (As implemented by
+the ENTER instruction, it also assumes the activation records are on
+the stack.)
+                                               
+The upvalue approach instead looks like this:
+
+    function activation record
+    [ local var e ]
+    [ local var f ]
+    [ upvalue ptr ] ------------------------------------> [ local var a ]
+    [ upvalue ptr ] -----------------> [ local var c ]        ^ ^ 
+    function activation record            ^                   | | 
+    [ local var d ]                       |                   | |
+    [ upvalue ptr ] -----------------------                   | |
+    [ upvalue ptr ] ------------------------------------------- |
+    function activation record                                  |
+    [ local var b ]                                             |
+    [ upvalue ptr ] ---------------------------------------------
+
+Here the "function activation record"s can all be stack-allocated
+rather than heap-allocated.  The middle function carries a reference
+to "local var a" merely because its inner function does.  Now all
+closed-over values are accessed in the same way.
+
+Other Approaches
+----------------
+
+C# 2.0 creates anonymous classes whose instances correspond to
+the closed-over part of function activation records:
+> http://www.thinkingms.com/pensieve/CommentView,guid,9fe42970-09e3-44e2-a4d0-32d63139351a.aspx
+
+Analysis Necessary
+------------------
+
+Variables must be classified into four types with regard to each
+lambda: global variables, stack-allocated arguments, heap-allocated
+arguments, and variables inherited from an outer scope.
+
+Stack-allocated arguments are arguments that do not occur free in any
+nested lambda; heap-allocated arguments are those that occur free in
+some nested lambda; variables inherited from an outer scope are
+lexically-bound variables that are not arguments; and global variables
+are variables that are none of the above.
+
+Heap-allocated arguments and variables inherited from an outer scope
+are collectively "heap variables".  In Lua, these would be variables
+for which upvalues exist; but the approach I'm going to take is a
+little bit simpler than the upvalue approach.  I'm just going to
+allocate them on the heap on entry to the scope that binds them, in
+which they are heap-allocated arguments.
+
+About Instruction Sequences
+---------------------------
+
+I'm currently writing a toy Scheme compiler; it stores its current
+top-of-stack in %eax and a pointer to the current procedure's
+arguments in %ebp.  If I use this approach, I'll push the upvalue
+pointers somewhere near %ebp.
+
+Now there are just two instruction sequences to access a local
+variable; for a variable actually in the stack:
+
+        mov 8(%ebp), %eax
+
+and for a variable accessed through an upvalue:
+
+        mov -16(%ebp), %ebx
+        mov 4(%ebx), %eax
+
+On procedure entry, we push pointers to all heap variables --- whether
+heap-allocated arguments or variables inherited from an outer scope
+--- so that we can access them uniformly in the above fashion.
+
+One cost is that the sizes of closure values vary --- they may need to
+contain an arbitrary number of heap-variable pointers --- and to get
+the two-instruction upvalue access above, all those heap-variable
+pointers have to be copied from the closure into the stack at
+procedure entry time.  The alternative to copying all of them is using
+another instruction on each access:
+
+        mov -8(%ebp), %ebx      # fetch closure pointer
+        mov 12(%ebx), %ebx      # fetch heap-variable pointer
+        mov 4(%ebx), %eax       # fetch contained value
+
+But that doesn't help with the problem of heap-allocated arguments.
+
+Copying from the closure into the stack isn't terribly expensive in
+code; upon procedure entry, the pointer to the closure value is in
+%eax:
+
+        push 12(%eax)           # push first heap-variable pointer
+        push 16(%eax)           # push second heap-variable pointer
+
+(Each of the above instructions happens to be three bytes.)
+
+Heap-allocated arguments are slightly trickier; each one must be
+copied into a heap variable during the procedure entry, and then the
+pointer to it must be pushed.
+
+        mov 8(%ebp), %eax       # get argument value
+        call allocate_heap_variable
+        push %eax
+
+allocate_heap_variable looks something like this:
+
+allocate_heap_variable:
+        push %eax
+        mov $1 + 8<<2, %eax
+        # memory allocation code goes here, leaves pointer in %eax
+        mov $0x1abe11ed, (%eax)
+        pop 4(%eax)
+        ret
+
+Then at procedure exit time, all the heap-varible pointers must be
+popped off, but that's going to be handled by restoring %esp, so it
+doesn't take any extra instructions.
+
+Representation of Lexical Environments
+--------------------------------------
+
+Up to now, I've represented lexical environments simply as an alist of
+getters --- code to generate assembly code to fetch the value of the
+name.  But now I need to be able to do three different things with
+names in the lexical environment:
+- (generate code to) fetch the value;
+- (generate code to) initialize the value at procedure entry time;
+- come up with an element of the lexical environment for an inner
+  scope.  Stack-allocated arguments can't do this; heap-allocated
+  arguments become variables captured from an outer scope; and
+  variables captured from an outer scope remain variables captured
+  from an outer scope.
+
+I could probably write something like this:
+
+(define initialize-value
+  (lambda (description)
+    (if (eq? (car description) 'stack) (get-argument (cdr description))
+        (if (eq? (car description) 'heaparg) (get-heap-var (cdr description))
+            (if (eq? (car description) 'capturedvar) 
+                (get-heap-var (cdr description)))))))
+
+It's a little hairier because you can't write xlate-for-inner-scope in
+the same way.  You need 
