@@ -168,11 +168,14 @@
 ;; Boy, it sure causes a lot of hassle that Scheme has different types
 ;; for strings and chars.
 
+(define 1+ (lambda (x) (+ x 1)))
+(define 1- (lambda (x) (- x 1)))
+
 (define string-idx-2
   (lambda (string char idx)
     (if (= idx (string-length string)) #f
         (if (char=? (string-ref string idx) char) idx
-            (string-idx-2 string char (+ idx 1))))))
+            (string-idx-2 string char (1+ idx))))))
 (define string-idx                      ; returns #f or index into string
   (lambda (string char) (string-idx-2 string char 0)))
 
@@ -255,7 +258,7 @@
 
 ;; new-label: Allocate a new label (e.g. for a constant) and return it.
 (define constcounter 0)
-(define new-label (lambda () (set! constcounter (+ constcounter 1))
+(define new-label (lambda () (set! constcounter (1+ constcounter))
                              (list "k_" (number->string constcounter))))
 
 ;; stuff to output a Lisp string safely for assembly language
@@ -270,7 +273,7 @@
   (lambda (string idx)
     (if (= idx (string-length string)) '("\"")
         (cons (backslashify-char (string-ref string idx) dangerous escapes)
-              (backslashify string (+ idx 1))))))
+              (backslashify string (1+ idx))))))
 ;; Represent a string appropriately for the output assembly language file.
 (define asm-represent-string 
   (lambda (string) (cons "\"" (backslashify string 0))))
@@ -363,7 +366,7 @@
     (comment "Tail call; nargs = " (number->string nargs))
     (comment "Note %esp points at the last thing pushed,")
     (comment "not the next thing to push.  So for 1 arg, we want %ebx=%esp")
-    (lea (offset esp (quadruple (- nargs 1))) ebx)
+    (lea (offset esp (quadruple (1- nargs))) ebx)
     (pop-stack-frame edx)
     (copy-args ebx nargs 0)
     (asm-push edx)
@@ -375,7 +378,7 @@
   (lambda (basereg nargs i)
     (if (= nargs i) '()
         (begin (asm-push (offset basereg (- 0 (quadruple i))))
-               (copy-args basereg nargs (+ i 1))))))
+               (copy-args basereg nargs (1+ i))))))
 
 (define push-closed-variables
   (lambda (nclosed-variables)
@@ -1192,7 +1195,7 @@
   (lambda (env vars idx)
     (if (null? vars) '()
         (cons (list (car vars) 'stack idx)
-              (lambda-environment env (cdr vars) (+ idx 1))))))
+              (lambda-environment env (cdr vars) (1+ idx))))))
 (define compile-lambda-3
   (lambda (vars body env proclabel jumplabel nargs)
     (assert-set-equal '() (vars-needing-heap-allocation (list 'lambda vars body)))
@@ -1281,7 +1284,7 @@
 (define compile-args-2
   (lambda (args env n)
     (compile-expr (car args) env #f)    ; XXX tail? wrong?
-    (+ 1 n)))
+    (1+ n)))
 (define compile-args
   (lambda (args env)
     (if (null? args) 0
@@ -1308,9 +1311,11 @@
 ;;; Library of (a few) standard Scheme procedures defined in Scheme
 
 (define standard-library 
-  '((define list (lambda args args))    ; standard
+  '((define 1+ (lambda (x) (+ x 1)))
+    (define 1- (lambda (x) (- x 1)))
+    (define list (lambda args args))    ; standard
     (define length                      ; standard
-      (lambda (list) (if (null? list) 0 (+ 1 (length (cdr list))))))
+      (lambda (list) (if (null? list) 0 (1+ (length (cdr list))))))
     (define assq                        ; standard
       (lambda (obj alist)
         (if (null? alist) #f
@@ -1329,14 +1334,14 @@
         (if (= idx (string-length buf)) buf
             (begin
               (string-set! buf idx (string-ref s2 (- idx length)))
-              (string-append-3 length s2 buf (+ idx 1))))))
+              (string-append-3 length s2 buf (1+ idx))))))
     (define string-append-2
       (lambda (s1 s2 buf idx)
         (if (= idx (string-length s1)) 
             (string-append-3 (string-length s1) s2 buf idx)
             (begin
               (string-set! buf idx (string-ref s1 idx))
-              (string-append-2 s1 s2 buf (+ idx 1))))))
+              (string-append-2 s1 s2 buf (1+ idx))))))
     ;; XXX we could get rid of this if we weren't using it for creating error msgs
     ;; (and now, again, number->string)
     (define string-append               ; standard
