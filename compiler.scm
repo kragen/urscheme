@@ -1391,6 +1391,9 @@
           (begin
             (proc (car list))
             (for-each proc (cdr list)))))
+    (define (map proc list)        ; subset of standard: one list only
+      (if (null? list) '()
+          (cons (proc (car list)) (map proc (cdr list)))))
     (define (string->list string)
       (string->list-2 string (string-length string) '()))
     (define (string->list-2 string n rest)
