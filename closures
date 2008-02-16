@@ -148,44 +148,49 @@ some nested lambda; variables inherited from an outer scope are
 lexically-bound variables that are not arguments; and global variables
 are variables that are none of the above.
 
-Heap-allocated arguments and variables inherited from an outer scope
-are collectively "heap variables".  In Lua, these would be variables
-for which upvalues exist; but the approach I'm going to take is a
-little bit simpler than the upvalue approach.  I'm just going to
-allocate them on the heap on entry to the scope that binds them, in
-which they are heap-allocated arguments.
+There's a term "captured variable" but it's ambiguous as to context
+--- it could mean a heap-allocated argument or a variable inherited
+from an outer scope.  Consequently I will invent the term "artifact"
+to mean "variable inherited from an outer scope".
+
+Heap-allocated arguments and artifacts are collectively "heap
+variables".  In Lua, these would be variables for which upvalues
+exist; but the approach I'm going to take is a little bit simpler than
+the upvalue approach.  I'm just going to allocate them on the heap on
+entry to the scope where they are heap-allocated arguments, and access
+them indirectly thereafter.
 
 About Instruction Sequences
 ---------------------------
 
 I'm currently writing a toy Scheme compiler; it stores its current
 top-of-stack in %eax and a pointer to the current procedure's
-arguments in %ebp.  If I use this approach, I'll push the upvalue
-pointers somewhere near %ebp.
+arguments in %ebp.  If I use this approach, I'll push the
+heap-variable pointers somewhere near %ebp.
 
 Now there are just two instruction sequences to access a local
 variable; for a variable actually in the stack:
 
         mov 8(%ebp), %eax
 
-and for a variable accessed through an upvalue:
+and for a heap variable:
 
         mov -16(%ebp), %ebx
         mov 4(%ebx), %eax
 
 On procedure entry, we push pointers to all heap variables --- whether
-heap-allocated arguments or variables inherited from an outer scope
---- so that we can access them uniformly in the above fashion.
+heap-allocated arguments or artifacts --- so that we can access them
+uniformly in the above fashion.
 
 One cost is that the sizes of closure values vary --- they may need to
-contain an arbitrary number of heap-variable pointers --- and to get
-the two-instruction upvalue access above, all those heap-variable
+contain an arbitrary number of artifact pointers --- and to get the
+two-instruction heap-variable access above, all those artifact
 pointers have to be copied from the closure into the stack at
 procedure entry time.  The alternative to copying all of them is using
 another instruction on each access:
 
         mov -8(%ebp), %ebx      # fetch closure pointer
-        mov 12(%ebx), %ebx      # fetch heap-variable pointer
+        mov 12(%ebx), %ebx      # fetch artifact pointer
         mov 4(%ebx), %eax       # fetch contained value
 
 But that doesn't help with the problem of heap-allocated arguments.
@@ -236,14 +241,183 @@ names in the lexical environment:
   variables captured from an outer scope remain variables captured
   from an outer scope.
 
+So the representation of an environment could be something like 
+'((foo stack 0) (bar heaparg 1 0) (baz artifact 1)).
+
 I could probably write something like this:
 
-(define initialize-value
+(define get-value
   (lambda (description)
-    (if (eq? (car description) 'stack) (get-argument (cdr description))
-        (if (eq? (car description) 'heaparg) (get-heap-var (cdr description))
-            (if (eq? (car description) 'capturedvar) 
-                (get-heap-var (cdr description)))))))
+    (if (eq? (car description) 'stack) (get-argument (cadr description))
+        (if (eq? (car description) 'heaparg) (get-heap-var (caddr description))
+            (if (eq? (car description) 'artifact) 
+                (get-heap-var (cadr description)))))))
 
 It's a little hairier because you can't write xlate-for-inner-scope in
-the same way.  You need 
+the same way.  The numbers in the cdrs of the heaparg and artifact
+need to be assigned inside each particular lambda so they don't
+collide with one another and don't leave empty spaces.
+
+So compute-inner-environment, in order to sort variables among the
+four categories and nonexistence, would need the enclosing lexical
+environment to distinguish between global variables and artifacts; in
+order to distinguish between arguments and artifacts or global
+variables, would need the argument list; in order to distinguish
+between stack-allocated and heap-allocated arguments, would need to
+know which variables are captured by inner lambdas; in order to
+distinguish between artifacts and variables not used, would need to
+know the variables that occur free within the body of the lambda; and
+in order to assign heap-pointer and argument slots, would need to know
+how the number of slots it has reserved so far.  Whew.  It's probably
+possible to write that function, but it isn't very appealing.
+
+However, we don't need all that information at any given place, do we?
+At a variable reference, we only need to know whether the variable is
+heap, stack, or global, and what its slot number is; when computing
+the result of a lambda expression, we only need to know which
+variables it captures (and can use the normal variable reference
+apparatus to look them up); when compiling a procedure prologue, we
+need to know which variables are heap arguments (and what slot they go
+into, and what argument index they come from) and which variables are
+artifacts (and what slot they go into).
+
+So the procedure prologue is probably the hardest case.  Ideally we'd
+like to write it like this:
+
+(define push-heap-var-pointers
+  (lambda (args artifacts heap-args) 
+    (push-heap-var-pointers-2 args artifacts heap-args 0)))
+(define push-heap-var-pointers-2
+  (lambda (artifacts heap-args slot-num)
+    (if (null? artifacts) (push-heap-args args heap-args slot-num)
+        (begin (push-artifact slot-num)
+               (push-heap-var-pointers-2 args (cdr artifacts) 
+                                         heap-args (+ slot-num 1))))))
+(define push-heap-args
+  (lambda (args heap-args slot-num)
+    (if (null? heap-args) '()
+        (begin (push-heap-arg args (car heap-args) slot-num)
+               (push-heap-args args (cdr heap-args) (+ slot-num 1))))))
+
+(define push-artifact
+  (lambda (slot-num)
+    (asm-push (offset eax (+ 12 (quadruple slot-num))))))
+(define push-heap-arg
+  (lambda (args arg slot-num)
+    (get-variable arg args)
+    (asm-pop ebx)                 ; get-variable will have pushed %eax
+    (asm-push eax)))
+
+Incidentally, in the above, we also compute the heap-variable slot
+number for each thing we push; so it might be good to return that,
+like so:
+
+(define push-heap-var-pointers
+  (lambda (args artifacts heap-args) 
+    (push-heap-var-pointers-2 args artifacts heap-args 0 args)))
+(define push-heap-var-pointers-2
+  (lambda (artifacts heap-args slot-num heap-vars)
+    (if (null? artifacts) (push-heap-args args heap-args slot-num heap-vars)
+        (begin (push-artifact slot-num)
+               (push-heap-var-pointers-2 
+                 args
+                 (cdr artifacts) 
+                 heap-args
+                 (+ slot-num 1)
+                 (cons (heap-var-slot (car artifacts) slot-num) heap-vars))))))
+(define push-heap-args
+  (lambda (args heap-args slot-num heap-vars)
+    (if (null? heap-args) heap-vars
+        (begin (push-heap-arg args (car heap-args) slot-num)
+               (push-heap-args args (cdr heap-args) (+ slot-num 1)
+                  (cons (heap-var-slot (car heap-args) slot-num) heap-vars)))))
+(define heap-var-slot (lambda (name num) (list 'heapvar name num)))
+
+This conses all the heap variables onto the front of the args list
+(which is presumably an alist explaining how to get arguments off the
+stack).
+
+Perhaps a nicer approach would first compute all the slot numbers and
+types, then push them.  Then the pushing code could look like this:
+
+(define push-heap-vars
+  (lambda (args heap-vars)
+    (for-each (lambda (var) (push-heap-var args var)) heap-vars)))
+(define push-heap-var
+  (lambda (args var) (push-heap-var-2 args (car var) (cadr var) (caddr var))))
+(define push-heap-var-2
+  (lambda (args type name slot-num)
+    (if (eq? type 'artifact) (push-artifact slot-num)
+        (push-heap-arg arg name))))
+(define push-artifact
+  (lambda (slot-num)
+    (asm-push (offset eax (+ 12 (quadruple slot-num))))))
+(define push-heap-arg
+  (lambda (args arg)
+    (get-variable arg args)
+    (asm-pop ebx)                 ; get-variable will have pushed %eax
+    (asm-push eax)))
+
+That does depend on the slot-nums in the list not being out of order.
+Anyway, then you could compute the slot numbers and types as follows:
+
+(define heap-var-slot-defns
+  (lambda (artifacts heap-args) (heap-var-slot-defns-2 artifacts heap-args 0)))
+(define heap-var-slot-defns-2
+  (lambda (artifacts heap-args slot-num)
+    (if (null? artifacts) (heap-arg-slot-defns heap-args slot-num)
+        (cons (artifact (car artifacts) slot-num)
+              (heap-var-slot-defns-2 (cdr artifacts) heap-args 
+                                     (+ slot-num 1))))))
+(define heap-arg-slot-defns
+  (lambda (heap-args slot-num)
+    (if (null? heap-args) '()
+        (cons (heap-arg (car heap-args) slot-num)
+              (heap-arg-slot-defns (cdr heap-args) (+ slot-num 1))))))
+(define artifact (lambda (name slot-num) (list 'artifact name slot-num)))
+(define heap-arg (lambda (name slot-num) (list 'heap-arg name slot-num)))
+
+So then maybe you could toss the artifacts and heap-args into the
+environment for compiling the interior of the procedure, along with
+the stack arguments.  You'd probably want to reformat them a bit,
+though, so that you can look them up by name with assq.
+
+This brings us back to the scary old compute-inner-environment
+function, which is only slightly different from the above
+heap-var-slot-defns function.
+
+The artifact list has to be computed for compiling the lambda as well,
+and it has to be computed as having the same order as the artifact
+list that the prologue is using.  So probably best to pass it in.
+
+Computing the artifact list requires just the lambda-expression and
+the surrounding environment:
+
+(define artifacts-used-by
+  (lambda (expr env)
+    (filter (lambda (var) (assq var env)) (free-vars expr))))
+
+And the heap arguments are similarly easy:
+
+(define heap-args
+  (lambda (args body) (set-intersect args (captured-vars body))))
+
+So, to compile a lambda, today we do this:
+   (jmp jumplabel)
+   (compile-procedure-labeled proclabel nargs
+      (lambda () (compile-begin body (lambda-environment env vars 0) #t)))
+   (label jumplabel)
+   (push-const proclabel)
+
+The "lambda-environment" part provides the environment for the
+compilation of the body, and it is defined as follows:
+
+(define lambda-environment
+  (lambda (env vars idx)
+    (if (null? vars) env
+        (cons (cons (car vars) (lambda () (get-procedure-arg idx)))
+              (lambda-environment env (cdr vars) (+ idx 1))))))
+
+This is incorrect; it should not include "env", nor should it need it
+as an argument.  Only artifacts-used-by should depend on "env".
+
