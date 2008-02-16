@@ -42,8 +42,8 @@
 ;; - nested scopes and closures
 ;; - set! for global and local variables
 ;; D top-level define of a variable (not a function)
-;; - read, for proper lists, symbols, strings, integers, #t and #f,
-;;   and '
+;; - read, for proper and improper lists, symbols, strings, integers,
+;;   #t and #f, and '
 ;; - consequently symbols need to store their strings, and we need
 ;;   string->symbol; other parts of the compiler use symbol->string
 ;; - eof-object?
@@ -58,7 +58,12 @@
 ;; D display, for strings, and newline
 ;; - error
 ;; D several other standard procedures: list, length, assq, caar,
-;;   cdar, cadr, caddr, not, string-append, for-each (in a limited fashion)
+;;   cdar, cadr, caddr, not, string-append, for-each (in a limited
+;;   fashion), map (in a limited fashion), memq, memv, eqv?,
+;;   string->list
+;; D several standard macros: cond (without =>), case, or, let
+;;   (without tagged looping)
+
 ;; D tail-call optimization
 
 ;; All of this would be a little simpler if strings were just lists
@@ -82,7 +87,7 @@
 ;; - macros, quasiquote
 ;; - most of arithmetic
 ;; - vectors
-;; - most of the language syntax: dotted pairs, ` , ,@
+;; - much of the language syntax ` , ,@ character literals
 ;; - write
 ;; - proper tail recursion
 ;; - cond, case, and, or, do, not
@@ -141,7 +146,8 @@
 (define (quadruple val) (double (double val)))
 
 ;; Note: these currently cause a compile error because they are also
-;; in the standard library.
+;; in our standard library.  The names come from SBCL.  XXX I don't
+;; know if they are in Common Lisp.
 (define (1+ x) (+ x 1))
 (define (1- x) (- x 1))
 
@@ -506,6 +512,15 @@
 ;; lambda-expression, we heap-allocate that variable.  But that
 ;; requires knowing which variables are so captured.
 
+;; With respect to a particular lambda-expression, any particular
+;; variable can be in one of five categories:
+;; - not mentioned;
+;; - a stack argument --- one that isn't captured by any inner
+;;   lambdas;
+;; - a heap argument --- one that is captured by inner lambdas;
+;; - an "artifact" --- inherited from some enclosing lexical scope;
+;; - a global variable.
+
 ;; First, some basic set arithmetic.
 (define (set-subtract a b) (filter (lambda (x) (not (memq x b))) a))
 (define (set-equal a b) (eq? (set-subtract a b) (set-subtract b a)))
@@ -574,7 +589,8 @@
                                              (all-free-vars (cdr exprs)))))
 
 ;; Returns the free vars of a lambda found somewhere in its lexical
-;; environment.
+;; environment.  This needs access to the lexical environment to
+;; distinguish artifacts from globals.
 (define (artifacts vars body env) (filter (lambda (x) (assq x env)) 
                                           (free-vars-lambda vars body)))
 
