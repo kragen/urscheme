@@ -683,7 +683,7 @@
   (compile-word (number->string (string-length contents)))
   (ascii contents)
   (text)
-  labelname)                            ; XXX do we really need this?
+  labelname)
 ;; constant-string: Emit code to represent a constant string.
 (define (constant-string contents) (constant-string-2 contents (new-label)))
 
@@ -1133,11 +1133,14 @@
         ((integer? expr) (tagged-integer expr))
         ((boolean? expr) (if expr true-value false-value))
         (else            (compile-quote-3 expr (new-label)))))
+;; compile-quotable: called from dispatch table for auto-quoted things
+;; as well as for (quote ...) exprs
 (define (compile-quotable obj env tail?) (push-const (compile-quote-2 obj)))
 (define (compile-quote expr env tail?)
   (assert-equal 1 (length expr))
   (compile-quotable (car expr) env tail?))
 
+;; needs more cases for things other than stack variables
 (define (get-variable vardefn)
   (assert (eq? (car vardefn) 'stack) 
           (list "unexpected var type" (car vardefn)))
@@ -1153,7 +1156,7 @@
 (define (compile-discarding expr env) (compile-expr expr env #f) (pop))
 
 ;; Construct an environment binding the local variables of the lambda
-;; to bits of code to fetch them.  XXX Handles nesting very incorrectly.
+;; to bits of code to fetch them.
 (define (lambda-environment env vars idx)
   (if (null? vars) '()
       (cons (list (car vars) 'stack idx)
@@ -1240,6 +1243,8 @@
 (define (compile-args-2 args env n)
   (compile-expr (car args) env #f)      ; XXX tail? wrong?
   (1+ n))
+;; Compile arguments for a procedure application.  Returns number of
+;; arguments compiled.
 (define (compile-args args env)
   (if (null? args) 0
       (compile-args-2 args env (compile-args (cdr args) env))))
