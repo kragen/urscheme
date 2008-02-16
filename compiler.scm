@@ -162,18 +162,17 @@
 ;; Converts a number into a string of digits.
 ;; XXX move into standard library!
 (define (number->string num)                  ; same as standard
-  (if (= num 0) "0" 
-      (if (< num 0) 
-          (string-append "-" (number->string-2 (- 0 num) ""))
-          (number->string-2 num ""))))
+  (cond ((= num 0) "0")
+        ((< num 0) (string-append "-" (number->string-2 (- 0 num) "")))
+        (else (number->string-2 num ""))))
 
 ;; Boy, it sure causes a lot of hassle that Scheme has different types
 ;; for strings and chars.
 
 (define (string-idx-2 string char idx)
-  (if (= idx (string-length string)) #f
-      (if (char=? (string-ref string idx) char) idx
-          (string-idx-2 string char (1+ idx)))))
+  (cond ((= idx (string-length string)) #f)
+        ((char=? (string-ref string idx) char) idx)
+        (else (string-idx-2 string char (1+ idx)))))
 ;; returns #f or index into string
 (define (string-idx string char) (string-idx-2 string char 0))
 
@@ -183,12 +182,10 @@
 ;; arbitrarily nested list structure
 (define (emit . stuff) (emit-inline stuff) (newline))
 (define (emit-inline stuff)
-  (if (null? stuff) #t
-      (if (pair? stuff) 
-          (begin (emit-inline (car stuff))
-                 (emit-inline (cdr stuff)))
-          (if (string? stuff) (display stuff)
-              (error (list "emitting" stuff))))))
+  (cond ((null? stuff) #t)
+        ((pair? stuff) (emit-inline (car stuff)) (emit-inline (cdr stuff)))
+        ((string? stuff) (display stuff))
+        (else (error (list "emitting" stuff)))))
 
 ;; Emit an indented instruction
 (define (insn . insn) (emit (cons "        " insn)))
@@ -278,9 +275,10 @@
 (define dangerous '("\\" "\n" "\""))
 (define escapes '("\\\\" "\\n" "\\\""))
 (define (escape-char char dangerous escapes)
-  (if (null? dangerous) (char->string char)
-      (if (char=? char (string-ref (car dangerous) 0)) (car escapes)
-          (escape-char char (cdr dangerous) (cdr escapes)))))
+  (cond ((null? dangerous) (char->string char))
+        ((char=? char (string-ref (car dangerous) 0))
+         (car escapes))
+        (else (escape-char char (cdr dangerous) (cdr escapes)))))
 (define (escape string idx dangerous escapes)
   (if (= idx (string-length string)) '()
       (cons (escape-char (string-ref string idx) dangerous escapes)
@@ -874,12 +872,12 @@
 (define (intern symbol)
   (interning symbol interned-symbol-list))
 (define (interning symbol symlist)
-  (if (null? symlist) 
-      ;; XXX isn't this kind of duplicative with the global variables stuff?
-      (begin (set! interned-symbol-list (cons symbol interned-symbol-list))
-             (length interned-symbol-list))
-      (if (eq? symbol (car symlist)) (length symlist)
-          (interning symbol (cdr symlist)))))
+  (cond ((null? symlist) 
+         ;; XXX isn't this kind of duplicative with the global variables stuff?
+         (set! interned-symbol-list (cons symbol interned-symbol-list))
+         (length interned-symbol-list))
+        ((eq? symbol (car symlist)) (length symlist))
+        (else (interning symbol (cdr symlist)))))
 (define (symbol-value symbol) (list "3 + " (tagshift (intern symbol))))
 
 ;;; Other miscellaneous crap that needs reorganizing
@@ -1123,20 +1121,18 @@
 ;;; Compilation of particular kinds of expressions
 
 (define (compile-quote-3 expr labelname)
-  (if (string? expr) 
-      (constant-string-2 expr labelname)
-      (if (pair? expr)
-          (compile-cons (compile-quote-2 (car expr))
-                        (compile-quote-2 (cdr expr))
-                        labelname)
-          (error "unquotable" expr)))
+  (cond ((string? expr) (constant-string-2 expr labelname))
+        ((pair? expr) (compile-cons (compile-quote-2 (car expr))
+                                    (compile-quote-2 (cdr expr))
+                                    labelname))
+        (else (error "unquotable" expr)))
   labelname)
 (define (compile-quote-2 expr)
-  (if (null? expr) nil-value
-      (if (symbol? expr) (symbol-value expr)
-          (if (integer? expr) (tagged-integer expr)
-              (if (boolean? expr) (if expr true-value false-value)
-                  (compile-quote-3 expr (new-label)))))))
+  (cond ((null? expr)    nil-value)
+        ((symbol? expr)  (symbol-value expr))
+        ((integer? expr) (tagged-integer expr))
+        ((boolean? expr) (if expr true-value false-value))
+        (else            (compile-quote-3 expr (new-label)))))
 (define (compile-quotable obj env tail?) (push-const (compile-quote-2 obj)))
 (define (compile-quote expr env tail?)
   (assert-equal 1 (length expr))
@@ -1180,14 +1176,15 @@
   (compile-lambda-2 (car rands) (cdr rands) env))
 
 (define (compile-begin rands env tail?)
-  (if (null? rands) (push-const "31") ; XXX do something reasonable
-      (if (null? (cdr rands)) (compile-expr (car rands) env tail?)
-          ;; hey, we can avoid discarding the results from
-          ;; intermediate expressions if we're at the top level of a
-          ;; function...
-          (begin (if tail? (compile-expr (car rands) env #f)
-                     (compile-discarding (car rands) env))
-                 (compile-begin (cdr rands) env tail?)))))
+  (cond ((null? rands) (push-const "31")) ; XXX do something reasonable
+        ((null? (cdr rands)) (compile-expr (car rands) env tail?))
+        ;; hey, we can avoid discarding the results from
+        ;; intermediate expressions if we're at the top level of a
+        ;; function...
+        (else
+         (begin (if tail? (compile-expr (car rands) env #f)
+                    (compile-discarding (car rands) env))
+                (compile-begin (cdr rands) env tail?)))))
 
 (define (compile-if-2 cond then else lab1 lab2 env tail?)
   (compile-expr cond env #f)
@@ -1234,9 +1231,9 @@
         (cons boolean? compile-quotable)
         (cons integer? compile-quotable)))
 (define (compile-expr-2 expr env handlers tail?)
-  (if (null? handlers) (error expr)
-      (if ((caar handlers) expr) ((cdar handlers) expr env tail?)
-          (compile-expr-2 expr env (cdr handlers) tail?))))
+  (cond ((null? handlers) (error expr))
+        (((caar handlers) expr) ((cdar handlers) expr env tail?))
+        (else (compile-expr-2 expr env (cdr handlers) tail?))))
 (define (compile-expr expr env tail?)
   (compile-expr-2 expr env compilation-expr-list tail?))
 (define (compile-args-2 args env n)
@@ -1275,10 +1272,10 @@
 ;; Limited definition of cond.
 (define-macro 'cond
   (lambda (args)
-    (if (null? args) #f
-        (if (eq? (caar args) 'else) (cons 'begin (cdar args))
-            (list 'if (caar args) (cons 'begin (cdar args))
-                  (cons 'cond (cdr args)))))))
+    (cond ((null? args) #f)
+          ((eq? (caar args) 'else) (cons 'begin (cdar args)))
+          (else (list 'if (caar args) (cons 'begin (cdar args))
+                      (cons 'cond (cdr args)))))))
 (define-macro 'define 
   (lambda (args) 
     (if (pair? (car args)) (list '%define (caar args) 
@@ -1287,11 +1284,11 @@
 
 ;; Expand all macros in expr, recursively.
 (define (totally-macroexpand expr)
-  (if (relevant-macro-definition expr) 
-      (totally-macroexpand (macroexpand-1 expr))
-      (if (not (pair? expr)) expr
-          (if (eq? (car expr) 'quote) expr
-              (map totally-macroexpand expr))))) ; XXX deleted definition of map
+  (cond ((relevant-macro-definition expr) 
+         (totally-macroexpand (macroexpand-1 expr)))
+        ((not (pair? expr))      expr)
+        ((eq? (car expr) 'quote) expr)
+        (else (map totally-macroexpand expr)))) ; XXX deleted definition of map
 (assert-equal (totally-macroexpand 'foo) 'foo)
 (assert-equal (totally-macroexpand '(if a b c)) '(if a b c))
 (assert (relevant-macro-definition '(begin a b c)) "no begin defn")
@@ -1325,9 +1322,9 @@
     (define (length list)               ; standard
       (if (null? list) 0 (1+ (length (cdr list)))))
     (define (assq obj alist)            ; standard
-      (if (null? alist) #f
-          (if (eq? obj (caar alist)) (car alist)
-              (assq obj (cdr alist)))))
+      (cond ((null? alist)          #f)
+            ((eq? obj (caar alist)) (car alist))
+            (else                   (assq obj (cdr alist)))))
     ;; identical to standard caar, cdar, etc.
     (define (caar val) (car (car val)))
     (define (cdar val) (cdr (car val)))
@@ -1359,9 +1356,9 @@
     (define (null? x) (eq? x '()))
     (define (boolean? x) (if (eq? x #t) #t (eq? x #f)))
     (define (memq obj list) 
-      (if (null? list) #f 
-          (if (eq? obj (car list)) list
-              (memq obj (cdr list)))))
+      (cond ((null? list)         #f)
+            ((eq? obj (car list)) list)
+            (else                 (memq obj (cdr list)))))
 
     (define (for-each proc list)   ; subset of standard: one list only
       (if (null? list) #f
