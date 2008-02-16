@@ -1286,6 +1286,15 @@
                       (cons 'begin (cdadr args))
                       (cons 'case (cons (car args) (cddr args))))))))
 
+(define-macro 'or
+  (lambda (args)
+    (cond ((null? args) #f)
+          ((= 1 (length args)) (car args))
+          ;; XXX unhygienic
+          (else (list 'let (list (list 'or-internal-argument (car args)))
+                      (list 'if 'or-internal-argument 'or-internal-argument
+                            (cons 'or (cdr args))))))))
+
 ;; Expand all macros in expr, recursively.
 (define (totally-macroexpand expr)
   (cond ((relevant-macro-definition expr) 
@@ -1308,6 +1317,13 @@
 (assert-equal (totally-macroexpand '(let () a b c)) '((lambda () a b c)))
 (assert-equal (totally-macroexpand '(let ((a 1) (b 2)) a b c))
               '((lambda (a b) a b c) 1 2))
+(assert-equal (totally-macroexpand '(or a b c))
+              (totally-macroexpand
+               '(let ((or-internal-argument a)) 
+                  (if or-internal-argument or-internal-argument
+                      (let ((or-internal-argument b))
+                        (if or-internal-argument or-internal-argument
+                            c))))))
 
 ;;; Top-level compilation with macro-expansion.
 
