@@ -137,73 +137,65 @@
 ;; Things that I can't find in R5RS, and so I'm not including in
 ;; standard-library down below.
 
-(define double (lambda (val) (+ val val)))
-(define quadruple (lambda (val) (double (double val))))
+(define (double val) (+ val val))
+(define (quadruple val) (double (double val)))
 
 ;; Note: these currently cause a compile error because they are also
 ;; in the standard library.
-(define 1+ (lambda (x) (+ x 1)))
-(define 1- (lambda (x) (- x 1)))
+(define (1+ x) (+ x 1))
+(define (1- x) (- x 1))
 
-(define filter-2
-  (lambda (fn lst rest) (if (fn (car lst)) (cons (car lst) rest) rest)))
-(define filter           ; this must exist in r5rs but I can't find it
-  (lambda (fn lst) (if (null? lst) '()
-                       (filter-2 fn lst (filter fn (cdr lst))))))
+(define (filter-2 fn lst rest) 
+  (if (fn (car lst)) (cons (car lst) rest) rest))
+(define (filter fn lst)  ; this must exist in r5rs but I can't find it
+  (if (null? lst) '()
+      (filter-2 fn lst (filter fn (cdr lst)))))
 
-(define char->string-2
-  (lambda (buf char) (string-set! buf 0 char) buf))
-(define char->string
-  (lambda (char)
-    (char->string-2 (make-string 1) char)))
-(define string-digit
-  (lambda (digit) (char->string (string-ref "0123456789" digit))))
-(define number->string-2
-  (lambda (num tail)
-    (if (= num 0) tail
-        (number->string-2 (quotient num 10)
-                          (string-append (string-digit (remainder num 10)) 
-                                         tail)))))
+(define (char->string-2 buf char) (string-set! buf 0 char) buf)
+(define (char->string char) (char->string-2 (make-string 1) char))
+(define (string-digit digit) (char->string (string-ref "0123456789" digit)))
+(define (number->string-2 num tail)
+  (if (= num 0) tail
+      (number->string-2 (quotient num 10)
+                        (string-append (string-digit (remainder num 10)) 
+                                       tail))))
 ;; Converts a number into a string of digits.
 ;; XXX move into standard library!
-(define number->string                  ; same as standard
-  (lambda (num) (if (= num 0) "0" 
-                    (if (< num 0) 
-                        (string-append "-" (number->string-2 (- 0 num) ""))
-                        (number->string-2 num "")))))
+(define (number->string num)                  ; same as standard
+  (if (= num 0) "0" 
+      (if (< num 0) 
+          (string-append "-" (number->string-2 (- 0 num) ""))
+          (number->string-2 num ""))))
 
 ;; Boy, it sure causes a lot of hassle that Scheme has different types
 ;; for strings and chars.
 
-(define string-idx-2
-  (lambda (string char idx)
-    (if (= idx (string-length string)) #f
-        (if (char=? (string-ref string idx) char) idx
-            (string-idx-2 string char (1+ idx))))))
-(define string-idx                      ; returns #f or index into string
-  (lambda (string char) (string-idx-2 string char 0)))
+(define (string-idx-2 string char idx)
+  (if (= idx (string-length string)) #f
+      (if (char=? (string-ref string idx) char) idx
+          (string-idx-2 string char (1+ idx)))))
+;; returns #f or index into string
+(define (string-idx string char) (string-idx-2 string char 0))
 
 ;;; Basic Assembly Language Emission
 
 ;; emit: output a line of assembly by concatenating the strings in an
 ;; arbitrarily nested list structure
-(define emit (lambda stuff (emit-inline stuff) (newline)))
-(define emit-inline
-  (lambda (stuff)
-    (if (null? stuff) #t
-        (if (pair? stuff) 
-            (begin (emit-inline (car stuff))
-                   (emit-inline (cdr stuff)))
-            (if (string? stuff) (display stuff)
-                (error (list "emitting" stuff)))))))
+(define (emit . stuff) (emit-inline stuff) (newline))
+(define (emit-inline stuff)
+  (if (null? stuff) #t
+      (if (pair? stuff) 
+          (begin (emit-inline (car stuff))
+                 (emit-inline (cdr stuff)))
+          (if (string? stuff) (display stuff)
+              (error (list "emitting" stuff))))))
 
 ;; Emit an indented instruction
-(define insn (lambda insn (emit (cons "        " insn))))
-(define comment (lambda comment (insn "# " comment)))
+(define (insn . insn) (emit (cons "        " insn)))
+(define (comment . comment) (insn "# " comment))
 
 ;; Emit a two-argument instruction
-(define twoarg 
-  (lambda (mnemonic) (lambda (src dest) (insn mnemonic " " src ", " dest))))
+(define (twoarg mnemonic) (lambda (src dest) (insn mnemonic " " src ", " dest)))
 ;; For example:
 (define mov (twoarg "movl"))  (define movb (twoarg "movb"))
 (define movzbl (twoarg "movzbl"))
@@ -214,7 +206,7 @@
 (define asm-and (twoarg "and"))
 
 ;; Emit a one-argument instruction
-(define onearg (lambda (mnemonic) (lambda (rand) (insn mnemonic " " rand))))
+(define (onearg mnemonic) (lambda (rand) (insn mnemonic " " rand)))
 (define asm-push (onearg "push")) (define asm-pop (onearg "pop"))
 (define jmp (onearg "jmp"))       (define jnz (onearg "jnz"))
 (define je (onearg "je"))         (define jz je)
@@ -227,8 +219,8 @@
 (define sal (onearg "sal"))       (define sar (onearg "sar"))
 
 ;; Currently only using two zero-argument instructions:
-(define ret (lambda () (insn "ret")))
-(define repstosb (lambda () (insn "rep stosb")))
+(define (ret) (insn "ret"))
+(define (repstosb) (insn "rep stosb"))
 
 ;; Registers:
 (define eax "%eax")  (define ebx "%ebx")  
@@ -238,27 +230,25 @@
 (define al "%al")
 
 ;; x86 addressing modes:
-(define const (lambda (x) (list "$" x)))
-(define indirect (lambda (x) (list "(" x ")")))
-(define offset 
-  (lambda (x offset) (list (number->string offset) (indirect x))))
-(define absolute (lambda (x) (list "*" x)))
+(define (const x) (list "$" x))
+(define (indirect x) (list "(" x ")"))
+(define (offset x offset) (list (number->string offset) (indirect x)))
+(define (absolute x) (list "*" x))
 ;; Use this one inside of "indirect" or "offset".
-(define index-register
-  (lambda (base index size) (list base "," index "," (number->string size))))
+(define (index-register base index size)
+  (list base "," index "," (number->string size)))
 
-(define syscall (lambda () (int (const "0x80"))))
+(define (syscall) (int (const "0x80")))
 
 
 ;; Other stuff for basic asm emission.
-(define section (lambda (name) (insn ".section " name)))
-(define rodata (lambda () (section ".rodata")))
-(define text (lambda () (insn ".text")))
-(define label (lambda (label) (emit label ":")))
+(define (section name) (insn ".section " name))
+(define (rodata) (section ".rodata"))
+(define (text) (insn ".text"))
+(define (label label) (emit label ":"))
 
 ;; define a .globl label
-(define global-label
-  (lambda (lbl) (insn ".globl " lbl) (label lbl)))
+(define (global-label lbl) (insn ".globl " lbl) (label lbl))
 
 ;; new-label: Allocate a new label (e.g. for a constant) and return it.
 (define constcounter 0)
@@ -272,47 +262,43 @@
 ;; assembly output, rather than changing hundreds or thousands of
 ;; labels, and all the references to them.  This makes the diff output
 ;; a lot more readable!
-(define set-label-prefix
-  (lambda (new-prefix) 
-    ;; XXX we should avoid duplicates
-    (set! label-prefix (cons "_"
-                             (escape (symbol->string new-prefix) 0 
-                                     ;; XXX incomplete list
-                                     '("+"    "-" "="  "?" ">"  "<"  "!")
-                                     '("Plus" "_" "Eq" "P" "Gt" "Lt" "Bang"))))
-    (set! constcounter 0)))
-(define new-label 
-  (lambda () (set! constcounter (1+ constcounter))
-          (list label-prefix "_" (number->string constcounter))))
+(define (set-label-prefix new-prefix) 
+  ;; XXX we should avoid duplicates
+  (set! label-prefix (cons "_"
+                           (escape (symbol->string new-prefix) 0 
+                                   ;; XXX incomplete list
+                                   '("+"    "-" "="  "?" ">"  "<"  "!")
+                                   '("Plus" "_" "Eq" "P" "Gt" "Lt" "Bang"))))
+  (set! constcounter 0))
+(define (new-label)
+  (set! constcounter (1+ constcounter))
+  (list label-prefix "_" (number->string constcounter)))
 
 ;; stuff to output a Lisp string safely for assembly language
 (define dangerous '("\\" "\n" "\""))
 (define escapes '("\\\\" "\\n" "\\\""))
-(define escape-char
-  (lambda (char dangerous escapes)
-    (if (null? dangerous) (char->string char)
-        (if (char=? char (string-ref (car dangerous) 0)) (car escapes)
-            (escape-char char (cdr dangerous) (cdr escapes))))))
-(define escape
-  (lambda (string idx dangerous escapes)
-    (if (= idx (string-length string)) '()
-        (cons (escape-char (string-ref string idx) dangerous escapes)
-              (escape string (1+ idx) dangerous escapes)))))
+(define (escape-char char dangerous escapes)
+  (if (null? dangerous) (char->string char)
+      (if (char=? char (string-ref (car dangerous) 0)) (car escapes)
+          (escape-char char (cdr dangerous) (cdr escapes)))))
+(define (escape string idx dangerous escapes)
+  (if (= idx (string-length string)) '()
+      (cons (escape-char (string-ref string idx) dangerous escapes)
+            (escape string (1+ idx) dangerous escapes))))
 ;; Represent a string appropriately for the output assembly language file.
-(define asm-represent-string 
-  (lambda (string) (list "\"" (escape string 0 dangerous escapes) "\"")))
+(define (asm-represent-string string)
+  (list "\"" (escape string 0 dangerous escapes) "\""))
 
-(define ascii (lambda (string) (insn ".ascii " (asm-represent-string string))))
+(define (ascii string) (insn ".ascii " (asm-represent-string string)))
 
 ;; emit a prologue for a datum to be assembled into .rodata
-(define rodatum
-  (lambda (labelname)
-    (rodata)
-    (comment "align pointers so they end in binary 00")
-    (insn ".align 4")
-    (label labelname)))
+(define (rodatum labelname)
+  (rodata)
+  (comment "align pointers so they end in binary 00")
+  (insn ".align 4")
+  (label labelname))
 
-(define compile-word (lambda (contents) (insn ".int " contents)))
+(define (compile-word contents) (insn ".int " contents))
 
 ;;; Stack Machine Primitives
 ;; As explained earlier, there's an "abstract stack" that includes
@@ -322,42 +308,40 @@
 (define nos (indirect esp))   ; "next on stack", what's underneath TOS
 
 ;; push-const: Emit code to push a constant onto the abstract stack
-(define push-const (lambda (val) (asm-push tos) (mov (const val) tos)))
+(define (push-const val) (asm-push tos) (mov (const val) tos))
 ;; pop: Emit code to discard top of stack.
-(define pop (lambda () (asm-pop tos)))
+(define (pop) (asm-pop tos))
 
 ;; dup: Emit code to copy top of stack.
-(define dup (lambda () (asm-push tos)))
+(define (dup) (asm-push tos))
 
 ;; swap: Emit code to exchange top of stack with what's under it.
-(define swap (lambda () (xchg tos nos)))
+(define (swap) (xchg tos nos))
 
 ;;; Some convenience stuff for the structure of the program.
 
 (define stuff-to-put-in-the-header (lambda () #f))
-(define concatenate-thunks (lambda (a b) (lambda () (a) (b))))
-(define add-to-header 
-  (lambda (proc) (set! stuff-to-put-in-the-header 
-                       (concatenate-thunks stuff-to-put-in-the-header proc))))
+(define (concatenate-thunks a b) (lambda () (a) (b)))
+(define (add-to-header proc) 
+  (set! stuff-to-put-in-the-header 
+        (concatenate-thunks stuff-to-put-in-the-header proc)))
 
 ;; Add code to the header to define an error message.
-(define define-error-routine
-  (lambda (labelname message)
-    (add-to-header (lambda ()
-      ((lambda (errlabel)
-         (label labelname)
-         (mov (const errlabel) tos)
-         (jmp "report_error"))
-       (constant-string (string-append "error: " 
-                                       (string-append message "\n"))))))))
+(define (define-error-routine labelname message)
+  (add-to-header (lambda ()
+    ((lambda (errlabel)
+       (label labelname)
+       (mov (const errlabel) tos)
+       (jmp "report_error"))
+     (constant-string (string-append "error: " 
+                                     (string-append message "\n")))))))
 
-(define compile-tag-check-procedure
-  (lambda (desired-tag)
-    (get-procedure-arg 0)
-    (asm-and (const "3") tos)
-    (cmp (const desired-tag) tos)
-    (je "return_true")
-    (jmp "return_false")))
+(define (compile-tag-check-procedure desired-tag)
+  (get-procedure-arg 0)
+  (asm-and (const "3") tos)
+  (cmp (const desired-tag) tos)
+  (je "return_true")
+  (jmp "return_false"))
 
 
 ;;; Procedure calls.
@@ -378,36 +362,32 @@
       (label "ensure_procedure")
       (if-not-right-magic-jump procedure-magic "not_procedure")
       (ret)))
-(define ensure-procedure (lambda () (call "ensure_procedure")))
-(define compile-apply
-  (lambda (nargs)
-      (ensure-procedure)
-      (mov (offset tos 4) ebx)          ; address of actual procedure
-      (mov (const (number->string nargs)) edx)
-      (call (absolute ebx))))
-(define compile-tail-apply
-  (lambda (nargs)
-    (comment "Tail call; nargs = " (number->string nargs))
-    (comment "Note %esp points at the last thing pushed,")
-    (comment "not the next thing to push.  So for 1 arg, we want %ebx=%esp")
-    (lea (offset esp (quadruple (1- nargs))) ebx)
-    (pop-stack-frame edx)
-    (copy-args ebx nargs 0)
-    (asm-push edx)
-    (ensure-procedure)
-    (mov (offset tos 4) ebx)
-    (mov (const (number->string nargs)) edx)
-    (jmp (absolute ebx))))
-(define copy-args
-  (lambda (basereg nargs i)
-    (if (= nargs i) '()
-        (begin (asm-push (offset basereg (- 0 (quadruple i))))
-               (copy-args basereg nargs (1+ i))))))
+(define (ensure-procedure) (call "ensure_procedure"))
+(define (compile-apply nargs)
+  (ensure-procedure)
+  (mov (offset tos 4) ebx)              ; address of actual procedure
+  (mov (const (number->string nargs)) edx)
+  (call (absolute ebx)))
+(define (compile-tail-apply nargs)
+  (comment "Tail call; nargs = " (number->string nargs))
+  (comment "Note %esp points at the last thing pushed,")
+  (comment "not the next thing to push.  So for 1 arg, we want %ebx=%esp")
+  (lea (offset esp (quadruple (1- nargs))) ebx)
+  (pop-stack-frame edx)
+  (copy-args ebx nargs 0)
+  (asm-push edx)
+  (ensure-procedure)
+  (mov (offset tos 4) ebx)
+  (mov (const (number->string nargs)) edx)
+  (jmp (absolute ebx)))
+(define (copy-args basereg nargs i)
+  (if (= nargs i) '()
+      (begin (asm-push (offset basereg (- 0 (quadruple i))))
+             (copy-args basereg nargs (1+ i)))))
 
-(define push-closed-variables
-  (lambda (nclosed-variables)
-    ;; XXX implement me!
-    2))
+(define (push-closed-variables nclosed-variables)
+  ;; XXX implement me!
+  2)
 
 ;; package up variadic arguments into a list.  %ebp is fully set up,
 ;; so we can index off of it to find each argument, and %edx is the
@@ -441,87 +421,80 @@
    (comment "restore %eax to value on entry to package_up_variadic_args")
    (pop)
    (ret)))
-(define compile-variadic-prologue
-  (lambda (nclosed-variables)
-    (comment "make space for variadic argument list")
-    (asm-pop ebx)
-    (asm-push ebx)
-    (asm-push ebx)
-    (comment "push desired %esp on return")
-    (lea (offset (index-register esp edx 4) 8) ebx)
-    (asm-push ebx)
+(define (compile-variadic-prologue nclosed-variables)
+  (comment "make space for variadic argument list")
+  (asm-pop ebx)
+  (asm-push ebx)
+  (asm-push ebx)
+  (comment "push desired %esp on return")
+  (lea (offset (index-register esp edx 4) 8) ebx)
+  (asm-push ebx)
 
-    (asm-push ebp)                      ; save old %ebp
-    (lea (offset esp 12) ebp) ; 12 bytes to skip saved %ebp, %ebx, %eip
+  (asm-push ebp)                        ; save old %ebp
+  (lea (offset esp 12) ebp)  ; 12 bytes to skip saved %ebp, %ebx, %eip
 
-    (push-closed-variables nclosed-variables)
+  (push-closed-variables nclosed-variables)
 
-    (call "package_up_variadic_args")))
+  (call "package_up_variadic_args"))
     
-(define compile-procedure-prologue
-  (lambda (nargs nclosed-variables)
-    (if (null? nargs) (compile-variadic-prologue nclosed-variables)
-        (begin
-          (comment "compute desired %esp on return in %ebx and push it")
-          (lea (offset (index-register esp edx 4) 4) ebx)
-          (asm-push ebx)
+(define (compile-procedure-prologue nargs nclosed-variables)
+  (if (null? nargs) (compile-variadic-prologue nclosed-variables)
+      (begin
+        (comment "compute desired %esp on return in %ebx and push it")
+        (lea (offset (index-register esp edx 4) 4) ebx)
+        (asm-push ebx)
 
-          (asm-push ebp)                      ; save old %ebp
-          (lea (offset esp 12) ebp) ; 12 bytes to skip saved %ebp, %ebx, %eip
+        (asm-push ebp)                  ; save old %ebp
+        (lea (offset esp 12) ebp) ; 12 bytes to skip saved %ebp, %ebx, %eip
 
-          (push-closed-variables nclosed-variables)
+        (push-closed-variables nclosed-variables)
 
-          (cmp (const (number->string nargs)) edx)
-          (jnz "argument_count_wrong")))))
-(define compile-procedure-epilogue
-  (lambda ()
-    (comment "procedure epilogue")
-    (comment "get return address")
-    (pop-stack-frame edx)
-    (jmp (absolute edx))))
+        (cmp (const (number->string nargs)) edx)
+        (jnz "argument_count_wrong"))))
+(define (compile-procedure-epilogue)
+  (comment "procedure epilogue")
+  (comment "get return address")
+  (pop-stack-frame edx)
+  (jmp (absolute edx)))
 
-(define pop-stack-frame
-  (lambda (return-address-register)
-    (mov (offset ebp -4) return-address-register)
-    (mov (offset ebp -8) esp)
-    (mov (offset ebp -12) ebp)))
+(define (pop-stack-frame return-address-register)
+  (mov (offset ebp -4) return-address-register)
+  (mov (offset ebp -8) esp)
+  (mov (offset ebp -12) ebp))
 
 (define-error-routine "not_procedure" "not a procedure")
 (define-error-routine "argument_count_wrong" "wrong number of arguments")
 
-(define built-in-procedure-2
-  (lambda (labelname nargs body bodylabel)
-    (rodatum labelname)
-    (compile-word procedure-magic)
-    (compile-word bodylabel)
-    (compile-word "0")                  ; no closure args
-    (text)
-    (label bodylabel)
-    (compile-procedure-prologue nargs 0)
-    (body)
-    (compile-procedure-epilogue)))   ; maybe we should just centralize
+(define (built-in-procedure-2 labelname nargs body bodylabel)
+  (rodatum labelname)
+  (compile-word procedure-magic)
+  (compile-word bodylabel)
+  (compile-word "0")                    ; no closure args
+  (text)
+  (label bodylabel)
+  (compile-procedure-prologue nargs 0)
+  (body)
+  (compile-procedure-epilogue))      ; maybe we should just centralize
                                      ; that and jump to it? :)
 ;; Define a built-in procedure so we can refer to it by label and
 ;; push-const that label, then expect to be able to compile-apply to
 ;; it later.
-(define compile-procedure-labeled
-  (lambda (labelname nargs body)
-    (built-in-procedure-2 labelname nargs body (new-label))))
-(define global-procedure-2
-  (lambda (symbolname nargs body procedure-value-label)
-      (define-global-variable symbolname procedure-value-label)
-      (compile-procedure-labeled procedure-value-label nargs body)))
+(define (compile-procedure-labeled labelname nargs body)
+  (built-in-procedure-2 labelname nargs body (new-label)))
+(define (global-procedure-2 symbolname nargs body procedure-value-label)
+  (define-global-variable symbolname procedure-value-label)
+  (compile-procedure-labeled procedure-value-label nargs body))
 ;; Add code to define a global procedure known by a certain global
 ;; variable name to the header
-(define define-global-procedure
-  (lambda (symbolname nargs body)
-    (add-to-header (lambda () 
-                     (set-label-prefix symbolname)
-                     (global-procedure-2 symbolname nargs body (new-label))))))
+(define (define-global-procedure symbolname nargs body)
+  (add-to-header (lambda () 
+                   (set-label-prefix symbolname)
+                   (global-procedure-2 symbolname nargs body (new-label)))))
 
 ;; Emit code to fetch the Nth argument of the innermost procedure.
-(define get-procedure-arg (lambda (n) (asm-push tos)
-                                      (mov (offset ebp (quadruple n)) tos)))
+(define (get-procedure-arg n) 
+  (asm-push tos)
+  (mov (offset ebp (quadruple n)) tos))
 
 (define-global-procedure 'procedure? 1
   (lambda () 
@@ -536,16 +509,14 @@
 ;; requires knowing which variables are so captured.
 
 ;; First, some basic set arithmetic.
-(define set-subtract (lambda (a b) (filter (lambda (x) (not (memq x b))) a)))
-(define set-equal (lambda (a b) (eq? (set-subtract a b) (set-subtract b a))))
-(define add-if-not-present 
-  (lambda (obj set) (if (memq obj set) set (cons obj set))))
-(define set-union 
-  (lambda (a b) (if (null? b) a 
-                    (add-if-not-present (car b) (set-union (cdr b) a)))))
-(define set-intersect (lambda (a b) (filter (lambda (x) (memq x b)) a)))
+(define (set-subtract a b) (filter (lambda (x) (not (memq x b))) a))
+(define (set-equal a b) (eq? (set-subtract a b) (set-subtract b a)))
+(define (add-if-not-present obj set) (if (memq obj set) set (cons obj set)))
+(define (set-union a b) (if (null? b) a 
+                            (add-if-not-present (car b) (set-union (cdr b) a))))
+(define (set-intersect a b) (filter (lambda (x) (memq x b)) a))
 
-(define assert (lambda (x why) (if (not x) (error "surprise! error" why))))
+(define (assert x why) (if (not x) (error "surprise! error" why)))
 (assert (set-equal '() '()) "empty set equality")
 (assert (set-equal '(a) '(a)) "set equality with one item")
 (assert (not (set-equal '(a) '(b))) "set inequality with one item")
@@ -562,58 +533,61 @@
 (assert (memq 'd sample-abcd) "member from set 2")
 (assert (not (memq '() sample-abcd)) "nil not in set")
 
-(define assert-set-equal 
-  (lambda (a b) (assert (set-equal a b) (list 'set-equal a b))))
+(define (assert-set-equal a b) (assert (set-equal a b) (list 'set-equal a b)))
 (assert-set-equal (set-intersect '(a b c) '(b c d)) '(b c))
 
 
 ;; Returns vars captured by some lambda inside expr, i.e. vars that
 ;; occurs free inside a lambda inside expr.
-(define captured-vars
-  (lambda (expr)
-    (if (not (pair? expr)) '()
-        (if (eq? (car expr) 'lambda) (free-vars-lambda (cadr expr) (cddr expr))
-            (if (eq? (car expr) 'if) (all-captured-vars (cdr expr))
-                (if (eq? (car expr) '%begin) (all-captured-vars (cdr expr))
-                    (if (eq? (car expr) 'quote) '()
-                        (all-captured-vars expr))))))))
+(define (captured-vars expr)
+  (if (not (pair? expr)) '()
+      (if (eq? (car expr) 'lambda) (free-vars-lambda (cadr expr) (cddr expr))
+          (if (eq? (car expr) 'if) (all-captured-vars (cdr expr))
+              (if (eq? (car expr) '%begin) (all-captured-vars (cdr expr))
+                  (if (eq? (car expr) 'quote) '()
+                      (all-captured-vars expr)))))))
+; Damn, it would feel good to have a macro right now.
+; (define (captured-vars expr)
+;     (if (not (pair? expr)) '()
+;         (case (car expr)
+;           ((lambda)   (free-vars-lambda (cadr expr) (cddr expr)))
+;           ((if begin) (all-captured-vars (cdr expr)))
+;           ((quote)    '())
+;           (else       (all-captured-vars expr)))))
 
 ;; Returns true if var is captured by a lambda inside any of exprs.
-(define all-captured-vars
-  (lambda (exprs) (if (null? exprs) '()
-                      (set-union (captured-vars (car exprs))
-                                 (all-captured-vars (cdr exprs))))))
+(define (all-captured-vars exprs) 
+  (if (null? exprs) '()
+      (set-union (captured-vars (car exprs))
+                 (all-captured-vars (cdr exprs)))))
 
 ;; Returns a list of the vars that are bound by a particular lambda arg list.
-(define vars-bound (lambda (args) (if (symbol? args) (list args) args)))
+(define (vars-bound args) (if (symbol? args) (list args) args))
 
 ;; Returns vars that occur free inside a lambda-abstraction with given
 ;; args and body.
-(define free-vars-lambda
-  (lambda (args body) (set-subtract (all-free-vars body) (vars-bound args))))
+(define (free-vars-lambda args body) 
+  (set-subtract (all-free-vars body) (vars-bound args)))
 
 ;; Returns vars that occur free inside of expr.
-(define free-vars
-  (lambda (expr)
-    (if (symbol? expr) (list expr)
-        (if (not (pair? expr)) '()
-            (if (eq? (car expr) 'lambda) (free-vars-lambda (cadr expr) 
-                                                           (cddr expr))
-                (if (eq? (car expr) 'if) (all-free-vars (cdr expr))
-                    (if (eq? (car expr) '%begin) (all-free-vars (cdr expr))
-                        (if (eq? (car expr) 'quote) '()
-                            (all-free-vars expr)))))))))
+(define (free-vars expr)
+  (if (symbol? expr) (list expr)
+      (if (not (pair? expr)) '()
+          (if (eq? (car expr) 'lambda) (free-vars-lambda (cadr expr) 
+                                                         (cddr expr))
+              (if (eq? (car expr) 'if) (all-free-vars (cdr expr))
+                  (if (eq? (car expr) '%begin) (all-free-vars (cdr expr))
+                      (if (eq? (car expr) 'quote) '()
+                          (all-free-vars expr))))))))
 ;; Returns vars that occur free inside of any of exprs.
-(define all-free-vars
-  (lambda (exprs) (if (null? exprs) '()
-                      (set-union (free-vars (car exprs))
-                                 (all-free-vars (cdr exprs))))))
+(define (all-free-vars exprs) (if (null? exprs) '()
+                                  (set-union (free-vars (car exprs))
+                                             (all-free-vars (cdr exprs)))))
 
 ;; Returns the free vars of a lambda found somewhere in its lexical
 ;; environment.
-(define artifacts 
-  (lambda (vars body env) (filter (lambda (x) (assq x env)) 
-                                  (free-vars-lambda vars body))))
+(define (artifacts vars body env) (filter (lambda (x) (assq x env)) 
+                                          (free-vars-lambda vars body)))
 
 ;; Some basic unit tests for closure handling.
 
@@ -656,11 +630,10 @@
 
 (assert-set-equal (captured-vars '(lambda x (x y z))) '(y z))
 
-(define vars-needing-heap-allocation
-  (lambda (expr)
-    (assert (eq? (car expr) 'lambda) 
-            (list "vars-needing-heap-allocation needs lambda only" expr))
-    (set-intersect (vars-bound (cadr expr)) (all-captured-vars (cddr expr)))))
+(define (vars-needing-heap-allocation expr)
+  (assert (eq? (car expr) 'lambda) 
+          (list "vars-needing-heap-allocation needs lambda only" expr))
+  (set-intersect (vars-bound (cadr expr)) (all-captured-vars (cddr expr))))
 
 (assert-set-equal '(a) (vars-needing-heap-allocation sample-closure-expression))
 (assert-set-equal '(c) (vars-needing-heap-allocation sample-inner-lambda-1))
@@ -681,22 +654,20 @@
 
 ;; Emit code to bump a pointer in a register up, if necessary, to be
 ;; divisible by 4.
-(define align4
-  (lambda (reg)
-    (add (const "3") reg)
-    (asm-and (const "~3") reg)))
+(define (align4 reg)
+  (add (const "3") reg)
+  (asm-and (const "~3") reg))
 
-(define emit-malloc
-  (lambda ()
-    (comment "code to allocate memory; tagged number of bytes in %eax")
-    (ensure-integer)
-    (scheme-to-native-integer eax)
-    (align4 eax)
-    (mov (indirect "arena_pointer") ebx)
-    (add ebx eax)
-    (mov eax (indirect "arena_pointer"))
-    (mov ebx eax)
-    (comment "now %eax points to newly allocated memory")))
+(define (emit-malloc)
+  (comment "code to allocate memory; tagged number of bytes in %eax")
+  (ensure-integer)
+  (scheme-to-native-integer eax)
+  (align4 eax)
+  (mov (indirect "arena_pointer") ebx)
+  (add ebx eax)
+  (mov eax (indirect "arena_pointer"))
+  (mov ebx eax)
+  (comment "now %eax points to newly allocated memory"))
 
 ;; XXX still need to implement deallocation and a GC
 
@@ -708,37 +679,33 @@
 ;; - N bytes of string data.
 (define string-magic "0xbabb1e")
 
-(define constant-string-2
-  (lambda (contents labelname)
-    (rodatum labelname)
-    (compile-word string-magic)
-    (compile-word (number->string (string-length contents)))
-    (ascii contents)
-    (text)
-    labelname))                         ; XXX do we really need this?
+(define (constant-string-2 contents labelname)
+  (rodatum labelname)
+  (compile-word string-magic)
+  (compile-word (number->string (string-length contents)))
+  (ascii contents)
+  (text)
+  labelname)                            ; XXX do we really need this?
 ;; constant-string: Emit code to represent a constant string.
-(define constant-string
-  (lambda (contents)
-    (constant-string-2 contents (new-label))))
+(define (constant-string contents) (constant-string-2 contents (new-label)))
 
 (define-error-routine "notstring" "not a string")
 
-(define if-not-right-magic-jump
-  (lambda (magic destlabel)
-    (comment "test whether %eax has magic: " magic)
-    (comment "first, ensure that it's a pointer, not something unboxed")
-    (test (const "3") tos)              ; test low two bits
-    (jnz destlabel)
-    (comment "now, test its magic number")
-    (cmp (const magic) (indirect tos))
-    (jnz destlabel)))
+(define (if-not-right-magic-jump magic destlabel)
+  (comment "test whether %eax has magic: " magic)
+  (comment "first, ensure that it's a pointer, not something unboxed")
+  (test (const "3") tos)              ; test low two bits
+  (jnz destlabel)
+  (comment "now, test its magic number")
+  (cmp (const magic) (indirect tos))
+  (jnz destlabel))
 
 (add-to-header (lambda ()
     (label "ensure_string")
     (if-not-right-magic-jump string-magic "notstring")
     (ret)))
 ;; Emit code to ensure that %eax is a string
-(define ensure-string (lambda () (call "ensure_string")))
+(define (ensure-string) (call "ensure_string"))
 
 (define-global-procedure 'string? 1
   (lambda ()
@@ -748,12 +715,11 @@
 
 ;; Emit code to pull the string pointer and count out of a string
 ;; being pointed to and push them on the abstract stack
-(define extract-string
-  (lambda ()
-    (ensure-string)
-    (lea (offset tos 8) ebx)            ; string pointer
-    (asm-push ebx)
-    (mov (offset tos 4) tos)))          ; string length
+(define (extract-string)
+  (ensure-string)
+  (lea (offset tos 8) ebx)              ; string pointer
+  (asm-push ebx)
+  (mov (offset tos 4) tos))             ; string length
 
 (define-global-procedure 'make-string 1
   (lambda () (get-procedure-arg 0)
@@ -776,27 +742,26 @@
              (comment "now pop and return the address")
              (pop)))
 
-(define check-array-bounds
-  (lambda ()
-    (comment "verify that tagged %eax is in [0, untagged NOS)")
-    (ensure-integer)
+(define (check-array-bounds )
+  (comment "verify that tagged %eax is in [0, untagged NOS)")
+  (ensure-integer)
 
-    ;; Intel manual 253667 explains, "[The SUB instruction]
-    ;; evaluates the result for both signed and unsigned integer
-    ;; operands and sets the OF and CF flags to indicate an overflow
-    ;; in the signed or unsigned result, respectively. The SF flag
-    ;; indicates the sign of the signed result."  
+  ;; Intel manual 253667 explains, "[The SUB instruction]
+  ;; evaluates the result for both signed and unsigned integer
+  ;; operands and sets the OF and CF flags to indicate an overflow
+  ;; in the signed or unsigned result, respectively. The SF flag
+  ;; indicates the sign of the signed result."  
 
-    (scheme-to-native-integer eax)
-    ;; We can do this with a single unsigned comparison; negative
-    ;; array indices will look like very large positive numbers and
-    ;; therefore be out of bounds.
-    (comment "set flags by (unsigned array index - array max)")
-    (cmp nos tos)
-    (comment "now we expect unsigned overflow, i.e. borrow/carry.")
-    (jnb "index_out_of_bounds")
-    (comment "now discard both the index and the bound")
-    (pop) (pop)))
+  (scheme-to-native-integer eax)
+  ;; We can do this with a single unsigned comparison; negative
+  ;; array indices will look like very large positive numbers and
+  ;; therefore be out of bounds.
+  (comment "set flags by (unsigned array index - array max)")
+  (cmp nos tos)
+  (comment "now we expect unsigned overflow, i.e. borrow/carry.")
+  (jnb "index_out_of_bounds")
+  (comment "now discard both the index and the bound")
+  (pop) (pop))
 
 (define-error-routine "index_out_of_bounds" "array index out of bounds")
 
@@ -848,7 +813,7 @@
 ;; They're 12 bytes: magic number, car, cdr.  That's all, folks.
 
 (define cons-magic "0x2ce11ed")
-(define ensure-cons (lambda () (call "ensure_cons")))
+(define (ensure-cons) (call "ensure_cons"))
 (add-to-header (lambda () (label "ensure_cons")
                           (if-not-right-magic-jump cons-magic "not_cons")
                           (ret)))
@@ -879,13 +844,12 @@
     (mov tos (offset ebx 8))
     (pop)))
 ;; Compile a quoted cons cell.
-(define compile-cons
-  (lambda (car-contents cdr-contents labelname)
-    (rodatum labelname)
-    (compile-word cons-magic)
-    (compile-word car-contents)
-    (compile-word cdr-contents)
-    (text)))
+(define (compile-cons car-contents cdr-contents labelname)
+  (rodatum labelname)
+  (compile-word cons-magic)
+  (compile-word car-contents)
+  (compile-word cdr-contents)
+  (text))
 
 (define-global-procedure 'pair? 1
   (lambda ()
@@ -907,44 +871,38 @@
 (define-global-procedure 'symbol? 1
   (lambda () (compile-tag-check-procedure symbol-tag)))
 (define interned-symbol-list '())
-(define intern
-  (lambda (symbol)
-    (interning symbol interned-symbol-list)))
-(define interning
-  (lambda (symbol symlist)
-    (if (null? symlist) 
-        ;; XXX isn't this kind of duplicative with the global variables stuff?
-        (begin (set! interned-symbol-list (cons symbol interned-symbol-list))
-               (length interned-symbol-list))
-        (if (eq? symbol (car symlist)) (length symlist)
-            (interning symbol (cdr symlist))))))
-(define symbol-value
-  (lambda (symbol) (list "3 + " (tagshift (intern symbol)))))
+(define (intern symbol)
+  (interning symbol interned-symbol-list))
+(define (interning symbol symlist)
+  (if (null? symlist) 
+      ;; XXX isn't this kind of duplicative with the global variables stuff?
+      (begin (set! interned-symbol-list (cons symbol interned-symbol-list))
+             (length interned-symbol-list))
+      (if (eq? symbol (car symlist)) (length symlist)
+          (interning symbol (cdr symlist)))))
+(define (symbol-value symbol) (list "3 + " (tagshift (intern symbol))))
 
 ;;; Other miscellaneous crap that needs reorganizing
 
 ;; Emit code which, given a byte count on top of stack and a string
 ;; pointer underneath it, outputs the string.
-(define write_2
-  (lambda ()
-    (mov tos edx)                       ; byte count in arg 3
-    (asm-pop ecx)                       ; byte string in arg 2
-    (mov (const "4") eax)               ; __NR_write
-    (syscall)))                         ; return value is in %eax
+(define (write_2)
+  (mov tos edx)                         ; byte count in arg 3
+  (asm-pop ecx)                         ; byte string in arg 2
+  (mov (const "4") eax)                 ; __NR_write
+  (syscall))                            ; return value is in %eax
 
 ;; Emit code to output a string.
 ;; XXX this needs to have a reasonable return value, and it doesn't!
-(define target-display 
-  (lambda () 
-    (extract-string)
-    (comment "fd 1: stdout")
-    (mov (const "1") ebx)
-    (write_2)))
+(define (target-display) 
+  (extract-string)
+  (comment "fd 1: stdout")
+  (mov (const "1") ebx)
+  (write_2))
 ;; Emit code to output a newline.
-(define target-newline
-  (lambda ()
-    (push-const "newline_string")
-    (target-display)))
+(define (target-newline)
+  (push-const "newline_string")
+  (target-display))
 (add-to-header (lambda () (constant-string-2 "\n" "newline_string")))
 
 (define-global-procedure 'display 1
@@ -969,11 +927,11 @@
 
 
 ;;; Integers
-(define tagshift (lambda (str) (list (number->string str) "<<2")))
+(define (tagshift str) (list (number->string str) "<<2"))
 (define integer-tag "1")
 (define-global-procedure 'integer? 1 
   (lambda () (compile-tag-check-procedure integer-tag)))
-(define tagged-integer (lambda (int) (list integer-tag " + " (tagshift int))))
+(define (tagged-integer int) (list integer-tag " + " (tagshift int)))
 (add-to-header (lambda ()
     (label "ensure_integer")
     (test (const "1") tos)
@@ -983,42 +941,37 @@
     (ret)))
 (define-error-routine "not_an_integer" "not an integer")
 
-(define ensure-integer (lambda () (call "ensure_integer")))
-(define assert-equal 
-  ;; XXX I just added equal? to the required subset of the language
-  (lambda (a b) (if (equal? a b) #t (error "not equal" (list a b)))))
+(define (ensure-integer) (call "ensure_integer"))
+;; XXX I just added equal? to the required subset of the language
+(define (assert-equal a b) (if (equal? a b) #t (error "not equal" (list a b))))
 ;; Emit code to add NOS to TOS; assumes they're already tag-checked
-(define emit-integer-addition (lambda () (asm-pop ebx)
-                                         (add ebx tos)
-                                         (dec tos))) ; fix up tag
+(define (emit-integer-addition) (asm-pop ebx)
+                                (add ebx tos)
+                                (dec tos)) ; fix up tag
 
-(define integer-add
-  (lambda (rands env tail?)
-    (comment "integer add operands")
-    (assert-equal 2 (compile-args rands env))
-    (comment "now execute integer add")
-    (ensure-integer)
-    (swap)
-    (ensure-integer)
-    (emit-integer-addition)))
-(define integer-sub
-  (lambda (rands env tail?)
-    (comment "integer subtract operands")
-    (assert-equal 2 (compile-args rands env))
-    (comment "now execute integer subtract")
-    (ensure-integer)
-    (swap)
-    (ensure-integer)
-    (sub tos nos)
-    (pop)
-    (inc tos)))                         ; fix up tag
+(define (integer-add rands env tail?)
+  (comment "integer add operands")
+  (assert-equal 2 (compile-args rands env))
+  (comment "now execute integer add")
+  (ensure-integer)
+  (swap)
+  (ensure-integer)
+  (emit-integer-addition))
+(define (integer-sub rands env tail?)
+  (comment "integer subtract operands")
+  (assert-equal 2 (compile-args rands env))
+  (comment "now execute integer subtract")
+  (ensure-integer)
+  (swap)
+  (ensure-integer)
+  (sub tos nos)
+  (pop)
+  (inc tos))                            ; fix up tag
 
 ;; Emit code to convert a native integer to a tagged integer.
-(define native-to-scheme-integer 
-  (lambda (reg) (sal reg) (sal reg) (inc reg)))
+(define (native-to-scheme-integer reg) (sal reg) (sal reg) (inc reg))
 ;; Emit code to convert a tagged integer to a native integer.    
-(define scheme-to-native-integer 
-  (lambda (reg) (sar reg) (sar reg)))
+(define (scheme-to-native-integer reg) (sar reg) (sar reg))
 
 ;; Emit code to divide procedure arg 0 by procedure arg 1
 ;; This merely zeroes out the tags rather than shifting them off.  The
@@ -1027,20 +980,19 @@
 ;; have particularly nice properties, so we divide (N*4) by (M*4)
 ;; instead.  (N*4) / (M*4) = N/M, and (N*4) % (M*4) = (N%M) * 4.
 ;; (Barring overflow.)
-(define emit-division-code
-  (lambda ()
-    (get-procedure-arg 1)
-    (ensure-integer)
-    (comment "fetch dividend second; idiv wants it in %eax")
-    (get-procedure-arg 0)
-    (ensure-integer)
-    (comment "zero out the tag")
-    (dec tos)
-    (asm-pop ebx)
-    (dec ebx)
-    (comment "zero the top half of the dividend")
-    (sub edx edx)
-    (idiv ebx)))
+(define (emit-division-code)
+  (get-procedure-arg 1)
+  (ensure-integer)
+  (comment "fetch dividend second; idiv wants it in %eax")
+  (get-procedure-arg 0)
+  (ensure-integer)
+  (comment "zero out the tag")
+  (dec tos)
+  (asm-pop ebx)
+  (dec ebx)
+  (comment "zero the top half of the dividend")
+  (sub edx edx)
+  (idiv ebx))
 
 (define-global-procedure 'remainder 2
   (lambda () (emit-division-code)
@@ -1066,33 +1018,32 @@
 
 ;;; Booleans and other misc. types
 (define enum-tag "2")
-(define enum-value (lambda (offset) (list enum-tag " + " (tagshift offset))))
+(define (enum-value offset) (list enum-tag " + " (tagshift offset)))
 (define nil-value (enum-value 256))
 (define true-value (enum-value 257))
 (define false-value (enum-value 258))
 (define eof-value (enum-value 259))
-(define jump-if-false
-  (lambda (label)
-    (cmp (const false-value) tos)
-    (pop)
-    (je label)))
+(define (jump-if-false label)
+  (cmp (const false-value) tos)
+  (pop)
+  (je label))
 
 ;; Emit code to generate an error if TOS isn't a character.
-(define ensure-character
-  (lambda () (test (const "1") tos)
-             (jnz "not_a_character")
-             (test (const "2") tos)
-             (jz "not_a_character")
-             ;; Intel manual 253666 says, "The comparison is
-             ;; performed by subtracting the second operand
-             ;; from the first operand and then setting the
-             ;; status flags in the same manner as the SUB
-             ;; instruction."  Here we're using AT&T syntax, so
-             ;; that means "the first operand from the second
-             ;; operand", so we expect to set the carry flag
-             ;; here.
-             (cmp (const (enum-value 256)) tos)
-             (jnb "not_a_character")))
+(define (ensure-character) 
+  (test (const "1") tos)
+  (jnz "not_a_character")
+  (test (const "2") tos)
+  (jz "not_a_character")
+  ;; Intel manual 253666 says, "The comparison is
+  ;; performed by subtracting the second operand
+  ;; from the first operand and then setting the
+  ;; status flags in the same manner as the SUB
+  ;; instruction."  Here we're using AT&T syntax, so
+  ;; that means "the first operand from the second
+  ;; operand", so we expect to set the carry flag
+  ;; here.
+  (cmp (const (enum-value 256)) tos)
+  (jnb "not_a_character"))
 
 (define-error-routine "not_a_character" "not a character")
 
@@ -1101,22 +1052,20 @@
 (define scheme-to-native-character scheme-to-native-integer)
 ;; Emit code to convert from an unsigned native character to a tagged
 ;; character.
-(define native-to-scheme-character
-  (lambda (reg) (sal reg) (inc reg) (sal reg)))
+(define (native-to-scheme-character reg) (sal reg) (inc reg) (sal reg))
 
 ;; Emit code to push a boolean in place of the top two stack items.
 ;; It will be #t if they are equal, #f if they are not.
-(define target-eq?
-  (lambda ()
-    ((lambda (label1 label2)
-      (asm-pop ebx)
-      (cmp ebx tos)
-      (je label1)
-      (mov (const false-value) tos)
-      (jmp label2)
-      (label label1)
-      (mov (const true-value) tos)
-      (label label2)) (new-label) (new-label))))
+(define (target-eq?)
+  ((lambda (label1 label2)
+     (asm-pop ebx)
+     (cmp ebx tos)
+     (je label1)
+     (mov (const false-value) tos)
+     (jmp label2)
+     (label label1)
+     (mov (const true-value) tos)
+     (label label2)) (new-label) (new-label)))
 
 
 ;;; Global variable handling.
@@ -1124,166 +1073,142 @@
 (define global-variable-labels '())
 (define global-variables-defined '())
 
-(define add-new-global-variable-binding!
-  (lambda (name label)
-    (set! global-variable-labels 
-          (cons (cons name label) global-variable-labels))
-    label))
-(define allocate-new-global-variable-label!
-  (lambda (name) (add-new-global-variable-binding! name (new-label))))
-(define global-variable-label-2
-  (lambda (name binding)
-    (if binding (cdr binding) (allocate-new-global-variable-label! name))))
+(define (add-new-global-variable-binding! name label)
+  (set! global-variable-labels 
+        (cons (cons name label) global-variable-labels))
+  label)
+(define (allocate-new-global-variable-label! name) 
+  (add-new-global-variable-binding! name (new-label)))
+(define (global-variable-label-2 name binding)
+  (if binding (cdr binding) (allocate-new-global-variable-label! name)))
 ;; Return a label representing this global variable, allocating a new
 ;; one if necessary.
-(define global-variable-label
-  (lambda (name) 
-    (global-variable-label-2 name (assq name global-variable-labels))))
+(define (global-variable-label name) 
+  (global-variable-label-2 name (assq name global-variable-labels)))
 
 ;; Emit code to create a mutable labeled cell, for example for use as
 ;; a global variable, with a specific assembly label.
-(define compile-global-variable
-  (lambda (varlabel initial)
-    (section ".data")
-    (label varlabel)
-    (compile-word initial)
-    (text)))
+(define (compile-global-variable varlabel initial)
+  (section ".data")
+  (label varlabel)
+  (compile-word initial)
+  (text))
 
 ;; Emit code to create a mutable labeled cell for use as a global
 ;; variable, bound to a specific identifier.
-(define define-global-variable
-  (lambda (name initial)
-    (if (assq name global-variables-defined) (error "double define" name)
-        (begin (compile-global-variable (global-variable-label name) initial)
-               (set! global-variables-defined 
-                     (cons (list name) global-variables-defined))))))
+(define (define-global-variable name initial)
+  (if (assq name global-variables-defined) (error "double define" name)
+      (begin (compile-global-variable (global-variable-label name) initial)
+             (set! global-variables-defined 
+                   (cons (list name) global-variables-defined)))))
 
 ;; Emit code to fetch from a named global variable.
-(define fetch-global-variable
-  (lambda (varname)
-      (asm-push tos) (mov (indirect varname) tos)))
+(define (fetch-global-variable varname)
+  (asm-push tos) 
+  (mov (indirect varname) tos))
 
 ;; Return a list of undefined global variables.
-(define undefined-global-variables
-  (lambda ()
-    (filter (lambda (pair) (not (assq (car pair) global-variables-defined)))
-            global-variable-labels)))
+(define (undefined-global-variables)
+  (filter (lambda (pair) (not (assq (car pair) global-variables-defined)))
+          global-variable-labels))
 
 ;; This runs at the end of compilation to report any undefined
 ;; globals.  The assumption is that you're recompiling frequently
 ;; enough that there will normally only be one...
-(define assert-no-undefined-global-variables
-  (lambda ()
-    (if (not (null? (undefined-global-variables)))
-        (error "error: undefined global" (caar (undefined-global-variables)))
-        #t)))
+(define (assert-no-undefined-global-variables)
+  (if (not (null? (undefined-global-variables)))
+      (error "error: undefined global" (undefined-global-variables))
+      #t))
 
 ;;; Compilation of particular kinds of expressions
 
-(define compile-quote-3
-  (lambda (expr labelname)
-    (if (string? expr) 
-        (constant-string-2 expr labelname)
-        (if (pair? expr)
-            (compile-cons (compile-quote-2 (car expr))
-                          (compile-quote-2 (cdr expr))
-                          labelname)
-            (error "unquotable" expr)))
-    labelname))
-(define compile-quote-2
-  (lambda (expr)
-    (if (null? expr) nil-value
-        (if (symbol? expr) (symbol-value expr)
-            (if (integer? expr) (tagged-integer expr)
-                (if (boolean? expr) (if expr true-value false-value)
-                    (compile-quote-3 expr (new-label))))))))
-(define compile-quotable 
-  (lambda (obj env tail?) (push-const (compile-quote-2 obj))))
-(define compile-quote
-  (lambda (expr env tail?)
-    (assert-equal 1 (length expr))
-    (compile-quotable (car expr) env tail?)))
+(define (compile-quote-3 expr labelname)
+  (if (string? expr) 
+      (constant-string-2 expr labelname)
+      (if (pair? expr)
+          (compile-cons (compile-quote-2 (car expr))
+                        (compile-quote-2 (cdr expr))
+                        labelname)
+          (error "unquotable" expr)))
+  labelname)
+(define (compile-quote-2 expr)
+  (if (null? expr) nil-value
+      (if (symbol? expr) (symbol-value expr)
+          (if (integer? expr) (tagged-integer expr)
+              (if (boolean? expr) (if expr true-value false-value)
+                  (compile-quote-3 expr (new-label)))))))
+(define (compile-quotable obj env tail?) (push-const (compile-quote-2 obj)))
+(define (compile-quote expr env tail?)
+  (assert-equal 1 (length expr))
+  (compile-quotable (car expr) env tail?))
 
-(define get-variable
-  (lambda (vardefn)
-    (assert (eq? (car vardefn) 'stack) 
-            (list "unexpected var type" (car vardefn)))
-    (get-procedure-arg (cadr vardefn))))
-(define compile-var-2
-  (lambda (lookupval var)
-    (if lookupval (get-variable (cdr lookupval))
-        (fetch-global-variable (global-variable-label var)))))
-(define compile-var
-  (lambda (var env tail?)
-    (compile-var-2 (assq var env) var)))
+(define (get-variable vardefn)
+  (assert (eq? (car vardefn) 'stack) 
+          (list "unexpected var type" (car vardefn)))
+  (get-procedure-arg (cadr vardefn)))
+(define (compile-var-2 lookupval var)
+  (if lookupval (get-variable (cdr lookupval))
+      (fetch-global-variable (global-variable-label var))))
+(define (compile-var var env tail?) (compile-var-2 (assq var env) var))
 
 ;; compile an expression, discarding result, e.g. for toplevel
 ;; expressions
-(define compile-discarding
-  (lambda (expr env) (compile-expr expr env #f) (pop)))
+(define (compile-discarding expr env) (compile-expr expr env #f) (pop))
 
 ;; Construct an environment binding the local variables of the lambda
 ;; to bits of code to fetch them.  XXX Handles nesting very incorrectly.
-(define lambda-environment
-  (lambda (env vars idx)
-    (if (null? vars) '()
-        (cons (list (car vars) 'stack idx)
-              (lambda-environment env (cdr vars) (1+ idx))))))
-(define compile-lambda-4
-  (lambda (artifacts vars body env proclabel jumplabel nargs)
-    (assert-set-equal '() (vars-needing-heap-allocation (list 'lambda vars body)))
-    (comment "jump past the body of the lambda")
-    (jmp jumplabel)
-    (compile-procedure-labeled proclabel nargs
-      (lambda () (compile-begin body (lambda-environment env vars 0) #t)))
-    (label jumplabel)
-    (push-const proclabel)))
-(define compile-lambda-3
-  (lambda (vars body env nargs)
-    (compile-lambda-4 (artifacts vars body env) vars body env
-                      (new-label) (new-label) nargs)))
-(define compile-lambda-2
-  (lambda (vars body env)
-    (if (symbol? vars)
-        (compile-lambda-3 (list vars) body env '())
-        (compile-lambda-3 vars body env (length vars)))))
-(define compile-lambda
-  (lambda (rands env tail?) (compile-lambda-2 (car rands) (cdr rands) env)))
+(define (lambda-environment env vars idx)
+  (if (null? vars) '()
+      (cons (list (car vars) 'stack idx)
+            (lambda-environment env (cdr vars) (1+ idx)))))
+(define (compile-lambda-4 artifacts vars body env proclabel jumplabel nargs)
+  (assert-set-equal '() (vars-needing-heap-allocation (list 'lambda vars body)))
+  (comment "jump past the body of the lambda")
+  (jmp jumplabel)
+  (compile-procedure-labeled proclabel nargs
+    (lambda () (compile-begin body (lambda-environment env vars 0) #t)))
+  (label jumplabel)
+  (push-const proclabel))
+(define (compile-lambda-3 vars body env nargs)
+  (compile-lambda-4 (artifacts vars body env) vars body env
+                    (new-label) (new-label) nargs))
+(define (compile-lambda-2 vars body env)
+  (if (symbol? vars)
+      (compile-lambda-3 (list vars) body env '())
+      (compile-lambda-3 vars body env (length vars))))
+(define (compile-lambda rands env tail?) 
+  (compile-lambda-2 (car rands) (cdr rands) env))
 
-(define compile-begin
-  (lambda (rands env tail?)
-    (if (null? rands) (push-const "31") ; XXX do something reasonable
-        (if (null? (cdr rands)) (compile-expr (car rands) env tail?)
-            ;; hey, we can avoid discarding the results from
-            ;; intermediate expressions if we're at the top level of a
-            ;; function...
-            (begin (if tail? (compile-expr (car rands) env #f)
-                       (compile-discarding (car rands) env))
-                   (compile-begin (cdr rands) env tail?))))))
+(define (compile-begin rands env tail?)
+  (if (null? rands) (push-const "31") ; XXX do something reasonable
+      (if (null? (cdr rands)) (compile-expr (car rands) env tail?)
+          ;; hey, we can avoid discarding the results from
+          ;; intermediate expressions if we're at the top level of a
+          ;; function...
+          (begin (if tail? (compile-expr (car rands) env #f)
+                     (compile-discarding (car rands) env))
+                 (compile-begin (cdr rands) env tail?)))))
 
-(define compile-if-2
-  (lambda (cond then else lab1 lab2 env tail?)
-    (compile-expr cond env #f)
-    (jump-if-false lab1)
-    (compile-expr then env tail?)
-    (jmp lab2)
-    (label lab1)
-    (compile-expr else env tail?)
-    (label lab2)))
-(define compile-if
-  (lambda (rands env tail?)
-    (if (= (length rands) 3)
-        (compile-if-2 (car rands) (cadr rands) (caddr rands)
-                      (new-label) (new-label) env tail?)
-        (error "if arguments length " (length rands) "!= 3"))))
+(define (compile-if-2 cond then else lab1 lab2 env tail?)
+  (compile-expr cond env #f)
+  (jump-if-false lab1)
+  (compile-expr then env tail?)
+  (jmp lab2)
+  (label lab1)
+  (compile-expr else env tail?)
+  (label lab2))
+(define (compile-if rands env tail?)
+  (if (= (length rands) 3)
+      (compile-if-2 (car rands) (cadr rands) (caddr rands)
+                    (new-label) (new-label) env tail?)
+      (error "if arguments length " (length rands) " != 3")))
 
-(define compile-application
-  (lambda (rator env nargs tail?)
-    (comment "get the procedure")
-    (compile-expr rator env #f)
-    (comment "now apply the procedure")
-    (if tail? (compile-tail-apply nargs)
-        (compile-apply nargs))))
+(define (compile-application rator env nargs tail?)
+  (comment "get the procedure")
+  (compile-expr rator env #f)
+  (comment "now apply the procedure")
+  (if tail? (compile-tail-apply nargs)
+      (compile-apply nargs)))
 
 ;; Things that are treated as special forms.  if, lambda, quote, and
 ;; set! are the standard Scheme set.
@@ -1294,65 +1219,55 @@
         (cons 'quote compile-quote)
         (cons '+ integer-add)
         (cons '- integer-sub)))
-(define compile-combination-2
-  (lambda (rator rands env handler tail?)
-    (if handler ((cdr handler) rands env tail?)
-        (compile-application rator env (compile-args rands env) tail?))))
-(define compile-combination
-  (lambda (rator rands env tail?)
-    (compile-combination-2 rator rands env (assq rator special-syntax-list) 
-                           tail?)))
-(define compile-pair
-  (lambda (expr env tail?) 
-    (compile-combination (car expr) (cdr expr) env tail?)))
+(define (compile-combination-2 rator rands env handler tail?)
+  (if handler ((cdr handler) rands env tail?)
+      (compile-application rator env (compile-args rands env) tail?)))
+(define (compile-combination rator rands env tail?)
+  (compile-combination-2 rator rands env (assq rator special-syntax-list) 
+                         tail?))
+(define (compile-pair expr env tail?) 
+  (compile-combination (car expr) (cdr expr) env tail?))
 (define compilation-expr-list
   (list (cons pair? compile-pair)
         (cons symbol? compile-var)
         (cons string? compile-quotable)
         (cons boolean? compile-quotable)
         (cons integer? compile-quotable)))
-(define compile-expr-2
-  (lambda (expr env handlers tail?)
-    (if (null? handlers) (error expr)
-        (if ((caar handlers) expr) ((cdar handlers) expr env tail?)
-            (compile-expr-2 expr env (cdr handlers) tail?)))))
-(define compile-expr
-  (lambda (expr env tail?) (compile-expr-2 expr env compilation-expr-list tail?)))
-(define compile-args-2
-  (lambda (args env n)
-    (compile-expr (car args) env #f)    ; XXX tail? wrong?
-    (1+ n)))
-(define compile-args
-  (lambda (args env)
-    (if (null? args) 0
-        (compile-args-2 args env (compile-args (cdr args) env)))))
+(define (compile-expr-2 expr env handlers tail?)
+  (if (null? handlers) (error expr)
+      (if ((caar handlers) expr) ((cdar handlers) expr env tail?)
+          (compile-expr-2 expr env (cdr handlers) tail?))))
+(define (compile-expr expr env tail?)
+  (compile-expr-2 expr env compilation-expr-list tail?))
+(define (compile-args-2 args env n)
+  (compile-expr (car args) env #f)      ; XXX tail? wrong?
+  (1+ n))
+(define (compile-args args env)
+  (if (null? args) 0
+      (compile-args-2 args env (compile-args (cdr args) env))))
 
-(define compile-toplevel-define
-  (lambda (name body env)
-    (define-global-variable name nil-value)
-    (comment "compute initial value for global variable")
-    (compile-expr body env #f)
-    (comment "initialize global variable with value")
-    (mov tos (indirect (global-variable-label name)))
-    (pop)))
+(define (compile-toplevel-define name body env)
+  (define-global-variable name nil-value)
+  (comment "compute initial value for global variable")
+  (compile-expr body env #f)
+  (comment "initialize global variable with value")
+  (mov tos (indirect (global-variable-label name)))
+  (pop))
 
 (define global-env '())
 
 ;;; Macros.
 
 (define macros '())
-(define define-macro
-  (lambda (name fun)
-    (set! macros (cons (list name fun) macros))))
+(define (define-macro name fun)
+  (set! macros (cons (list name fun) macros)))
 
-(define relevant-macro-definition
-  (lambda (expr)
-    (if (pair? expr) (assq (car expr) macros) #f)))
-(define macroexpand-1
-  (lambda (expr)
-    (if (relevant-macro-definition expr) 
-        ((cadr (relevant-macro-definition expr)) (cdr expr))
-        expr)))
+(define (relevant-macro-definition expr)
+  (if (pair? expr) (assq (car expr) macros) #f))
+(define (macroexpand-1 expr)
+  (if (relevant-macro-definition expr) 
+      ((cadr (relevant-macro-definition expr)) (cdr expr))
+      expr))
 
 ;; This is just a sort of test macro to verify that the macro system
 ;; works.
@@ -1371,12 +1286,12 @@
         (cons '%define args))))
 
 ;; Expand all macros in expr, recursively.
-(define totally-macroexpand
-  (lambda (expr)
-    (if (relevant-macro-definition expr) (totally-macroexpand (macroexpand-1 expr))
-        (if (not (pair? expr)) expr
-            (if (eq? (car expr) 'quote) expr
-                (map totally-macroexpand expr)))))) ; XXX deleted definition of map
+(define (totally-macroexpand expr)
+  (if (relevant-macro-definition expr) 
+      (totally-macroexpand (macroexpand-1 expr))
+      (if (not (pair? expr)) expr
+          (if (eq? (car expr) 'quote) expr
+              (map totally-macroexpand expr))))) ; XXX deleted definition of map
 (assert-equal (totally-macroexpand 'foo) 'foo)
 (assert-equal (totally-macroexpand '(if a b c)) '(if a b c))
 (assert (relevant-macro-definition '(begin a b c)) "no begin defn")
@@ -1390,103 +1305,95 @@
 
 ;;; Top-level compilation with macro-expansion.
 
-(define compile-toplevel
-  (lambda (expr)
-    (compile-toplevel-expanded (totally-macroexpand expr))))
-(define compile-toplevel-expanded
-  (lambda (expr)
-    ;; XXX missing case where it's an atom
-    (if (eq? (car expr) '%define) 
-        (begin
-          (set-label-prefix (cadr expr))
-          (compile-toplevel-define (cadr expr) (caddr expr) global-env))
-        (compile-discarding expr global-env))))
+(define (compile-toplevel expr)
+  (compile-toplevel-expanded (totally-macroexpand expr)))
+(define (compile-toplevel-expanded expr)
+  ;; XXX missing case where it's an atom
+  (if (eq? (car expr) '%define) 
+      (begin
+        (set-label-prefix (cadr expr))
+        (compile-toplevel-define (cadr expr) (caddr expr) global-env))
+      (compile-discarding expr global-env)))
 
 ;;; Library of (a few) standard Scheme procedures defined in Scheme
 
 (define standard-library 
-  '((define 1+ (lambda (x) (+ x 1)))
-    (define 1- (lambda (x) (- x 1)))
-    (define list (lambda args args))    ; standard
-    (define length                      ; standard
-      (lambda (list) (if (null? list) 0 (1+ (length (cdr list))))))
-    (define assq                        ; standard
-      (lambda (obj alist)
-        (if (null? alist) #f
-            (if (eq? obj (caar alist)) (car alist)
-                (assq obj (cdr alist))))))
+  '(
+    (define (1+ x) (+ x 1))
+    (define (1- x) (- x 1))
+    (define (list . args) args)         ; standard
+    (define (length list)               ; standard
+      (if (null? list) 0 (1+ (length (cdr list)))))
+    (define (assq obj alist)            ; standard
+      (if (null? alist) #f
+          (if (eq? obj (caar alist)) (car alist)
+              (assq obj (cdr alist)))))
     ;; identical to standard caar, cdar, etc.
-    (define caar (lambda (val) (car (car val))))
-    (define cdar (lambda (val) (cdr (car val))))
-    (define cadr (lambda (val) (car (cdr val))))
-    (define caddr (lambda (val) (cadr (cdr val))))
-    (define not (lambda (x) (if x #f #t))) ; standard
+    (define (caar val) (car (car val)))
+    (define (cdar val) (cdr (car val)))
+    (define (cadr val) (car (cdr val)))
+    (define (caddr val) (cadr (cdr val)))
+    (define (not x) (if x #f #t))       ; standard
 
     ;; string manipulation
-    (define string-append-3
-      (lambda (length s2 buf idx)
-        (if (= idx (string-length buf)) buf
-            (begin
-              (string-set! buf idx (string-ref s2 (- idx length)))
-              (string-append-3 length s2 buf (1+ idx))))))
-    (define string-append-2
-      (lambda (s1 s2 buf idx)
-        (if (= idx (string-length s1)) 
-            (string-append-3 (string-length s1) s2 buf idx)
-            (begin
-              (string-set! buf idx (string-ref s1 idx))
-              (string-append-2 s1 s2 buf (1+ idx))))))
+    (define (string-append-3 length s2 buf idx)
+      (if (= idx (string-length buf)) buf
+          (begin
+            (string-set! buf idx (string-ref s2 (- idx length)))
+            (string-append-3 length s2 buf (1+ idx)))))
+    (define (string-append-2 s1 s2 buf idx)
+      (if (= idx (string-length s1)) 
+          (string-append-3 (string-length s1) s2 buf idx)
+          (begin
+            (string-set! buf idx (string-ref s1 idx))
+            (string-append-2 s1 s2 buf (1+ idx)))))
     ;; XXX we could get rid of this if we weren't using it for creating error msgs
     ;; (and now, again, number->string)
-    (define string-append               ; standard
-      (lambda (s1 s2)
-        (string-append-2 s1 s2 (make-string (+ (string-length s1) 
-                                               (string-length s2)))
-                         0)))
+    (define (string-append s1 s2)       ; standard
+      (string-append-2 s1 s2 (make-string (+ (string-length s1) 
+                                             (string-length s2)))
+                       0))
     (define = eq?)
     ;; because chars are unboxed, char=? is eq?
     (define char=? eq?)
-    (define null? (lambda (x) (eq? x '())))
-    (define boolean? (lambda (x) (if (eq? x #t) #t (eq? x #f))))
-    (define memq
-      (lambda (obj list) 
-        (if (null? list) #f 
-            (if (eq? obj (car list)) list
-                (memq obj (cdr list))))))
+    (define (null? x) (eq? x '()))
+    (define (boolean? x) (if (eq? x #t) #t (eq? x #f)))
+    (define (memq obj list) 
+      (if (null? list) #f 
+          (if (eq? obj (car list)) list
+              (memq obj (cdr list)))))
 
-    (define for-each               ; subset of standard: one list only
-      (lambda (proc list) (if (null? list) #f
-                              (begin
-                                (proc (car list))
-                                (for-each proc (cdr list))))))))
+    (define (for-each proc list)   ; subset of standard: one list only
+      (if (null? list) #f
+          (begin
+            (proc (car list))
+            (for-each proc (cdr list)))))))
 
 ;;; Main Program
 
-(define compile-program
-  (lambda (body)
-    (stuff-to-put-in-the-header)
+(define (compile-program body)
+  (stuff-to-put-in-the-header)
 
-    (global-label "_start")         ; allow compiling with -nostdlib
-    (insn ".weak _start")     ; but also allow compiling with stdlib
-    (global-label "main")     ; with entry point of main, not _start
-    (mov (const "0x610ba1") ebp)      ; global-scope ebp
+  (global-label "_start")             ; allow compiling with -nostdlib
+  (insn ".weak _start")         ; but also allow compiling with stdlib
+  (global-label "main")         ; with entry point of main, not _start
+  (mov (const "0x610ba1") ebp)          ; global-scope ebp
 
-    (for-each compile-toplevel standard-library)
-    (comment "(end of standard library prologue)")
+  (for-each compile-toplevel standard-library)
+  (comment "(end of standard library prologue)")
 
-    (body)
+  (body)
 
-    (mov (const "1") eax)             ; __NR_exit
-    (mov (const "0") ebx)             ; exit code
-    (syscall)
-    (assert-no-undefined-global-variables)))
+  (mov (const "1") eax)             ; __NR_exit
+  (mov (const "0") ebx)             ; exit code
+  (syscall)
+  (assert-no-undefined-global-variables))
 
-(define read-compile-loop
-  (lambda ()
-    ((lambda (expr)
-       (if (eof-object? expr) #t
-           (begin (compile-toplevel expr)
-                  (read-compile-loop))))
-     (read))))
+(define (read-compile-loop)
+  ((lambda (expr)
+     (if (eof-object? expr) #t
+         (begin (compile-toplevel expr)
+                (read-compile-loop))))
+   (read)))
 
 (compile-program read-compile-loop)
