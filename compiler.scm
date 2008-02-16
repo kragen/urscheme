@@ -263,8 +263,18 @@
 ;; new-label: Allocate a new label (e.g. for a constant) and return it.
 (define constcounter 0)
 (define label-prefix "k")
+;; We set the label prefix (and reset the counter) periodically for
+;; two reasons.  First, the assembly code is much more readable when
+;; it says movl (_cdr_2), %eax; call ensure_procedure, rather than
+;; movl (k_321), %eax; call ensure_procedure.  Second, resetting the
+;; counter occasionally means that a compiler change that allocates
+;; one more or one less label will have a fairly local effect on the
+;; assembly output, rather than changing hundreds or thousands of
+;; labels, and all the references to them.  This makes the diff output
+;; a lot more readable!
 (define set-label-prefix
   (lambda (new-prefix) 
+    ;; XXX we should avoid duplicates
     (set! label-prefix (cons "_"
                              (escape (symbol->string new-prefix) 0 
                                      ;; XXX incomplete list
