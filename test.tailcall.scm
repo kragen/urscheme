@@ -13,6 +13,11 @@
 ;; Incidentally, SBCL can count down from a hundred million in 
 ;; * (time (do-n 100000000))
 ;; ... 6.172386 seconds of user run time
+
 ;; So that's 62ns per iteration, or 16 million iterations per second
 ;; (on my 700MHz laptop).  This Scheme compiler is getting about 6.5
-;; million, which is like 110 cycles per call.  So don't get cocky.
+;; million, which is like 110 cycles per call.  Even Python 2.4 gets
+;; 2.2 million for-loop iterations on this machine.  (But it can only
+;; do around half a million function call/returns in a second.)  Lua
+;; 5.0.3 gets 1.15 million iterations of do-n per second, and 2.3
+;; million for-loop iterations per second. So don't get cocky.
