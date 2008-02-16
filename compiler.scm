@@ -574,7 +574,7 @@
     (if (not (pair? expr)) '()
         (if (eq? (car expr) 'lambda) (free-vars-lambda (cadr expr) (cddr expr))
             (if (eq? (car expr) 'if) (all-captured-vars (cdr expr))
-                (if (eq? (car expr) 'begin) (all-captured-vars (cdr expr))
+                (if (eq? (car expr) '%begin) (all-captured-vars (cdr expr))
                     (if (eq? (car expr) 'quote) '()
                         (all-captured-vars expr))))))))
 
@@ -600,7 +600,7 @@
             (if (eq? (car expr) 'lambda) (free-vars-lambda (cadr expr) 
                                                            (cddr expr))
                 (if (eq? (car expr) 'if) (all-free-vars (cdr expr))
-                    (if (eq? (car expr) 'begin) (all-free-vars (cdr expr))
+                    (if (eq? (car expr) '%begin) (all-free-vars (cdr expr))
                         (if (eq? (car expr) 'quote) '()
                             (all-free-vars expr)))))))))
 ;; Returns vars that occur free inside of any of exprs.
@@ -984,7 +984,9 @@
 (define-error-routine "not_an_integer" "not an integer")
 
 (define ensure-integer (lambda () (call "ensure_integer")))
-(define assert-equal (lambda (a b) (if (= a b) #t (error "assert failed"))))
+(define assert-equal 
+  ;; XXX I just added equal? to the required subset of the language
+  (lambda (a b) (if (equal? a b) #t (error "not equal" (list a b)))))
 ;; Emit code to add NOS to TOS; assumes they're already tag-checked
 (define emit-integer-addition (lambda () (asm-pop ebx)
                                          (add ebx tos)
@@ -1286,7 +1288,7 @@
 ;; Things that are treated as special forms.  if, lambda, quote, and
 ;; set! are the standard Scheme set.
 (define special-syntax-list
-  (list (cons 'begin compile-begin)
+  (list (cons '%begin compile-begin)
         (cons 'if compile-if)
         (cons 'lambda compile-lambda)
         (cons 'quote compile-quote)
@@ -1336,7 +1338,57 @@
 
 (define global-env '())
 
+;;; Macros.
+
+(define macros '())
+(define define-macro
+  (lambda (name fun)
+    (set! macros (cons (list name fun) macros))))
+
+(define relevant-macro-definition
+  (lambda (expr)
+    (if (pair? expr) (assq (car expr) macros) #f)))
+(define macroexpand-1
+  (lambda (expr)
+    (if (relevant-macro-definition expr) 
+        ((cadr (relevant-macro-definition expr)) (cdr expr))
+        expr)))
+
+;; This is just a sort of test macro to verify that the macro system
+;; works.
+(define-macro 'begin (lambda (args) (cons '%begin args)))
+;; Limited definition of cond.
+(define-macro 'cond
+  (lambda (args)
+    (if (null? args) #f
+        (if (eq? (caar args) 'else) (cons 'begin (cdar args))
+            (list 'if (caar args) (cons 'begin (cdar args))
+                  (cons 'cond (cdr args)))))))
+
+;; Expand all macros in expr, recursively.
+(define totally-macroexpand
+  (lambda (expr)
+    (if (relevant-macro-definition expr) (totally-macroexpand (macroexpand-1 expr))
+        (if (not (pair? expr)) expr
+            (if (eq? (car expr) 'quote) expr
+                (map totally-macroexpand expr)))))) ; XXX deleted definition of map
+(assert-equal (totally-macroexpand 'foo) 'foo)
+(assert-equal (totally-macroexpand '(if a b c)) '(if a b c))
+(assert (relevant-macro-definition '(begin a b c)) "no begin defn")
+(assert-equal (totally-macroexpand '(begin a b c)) '(%begin a b c))
+(assert-equal (totally-macroexpand '(cond ((eq? x 3) 4 '(cond 3)) 
+                                          ((eq? x 4) 8)
+                                          (else 6 7)))
+              '(if (eq? x 3) (%begin 4 '(cond 3))
+                   (if (eq? x 4) (%begin 8)
+                       (%begin 6 7))))
+
+;;; Top-level compilation with macro-expansion.
+
 (define compile-toplevel
+  (lambda (expr)
+    (compile-toplevel-expanded (totally-macroexpand expr))))
+(define compile-toplevel-expanded
   (lambda (expr)
     ;; XXX missing case where it's an atom
     (if (eq? (car expr) 'define) 
