@@ -1170,9 +1170,14 @@
     (assert-equal 1 (length expr))
     (compile-quotable (car expr) env tail?)))
 
+(define get-variable
+  (lambda (vardefn)
+    (assert (eq? (car vardefn) 'stack) 
+            (list "unexpected var type" (car vardefn)))
+    (get-procedure-arg (cadr vardefn))))
 (define compile-var-2
   (lambda (lookupval var)
-    (if lookupval ((cdr lookupval)) 
+    (if lookupval (get-variable (cdr lookupval))
         (fetch-global-variable (global-variable-label var)))))
 (define compile-var
   (lambda (var env tail?)
@@ -1187,8 +1192,8 @@
 ;; to bits of code to fetch them.  XXX Handles nesting very incorrectly.
 (define lambda-environment
   (lambda (env vars idx)
-    (if (null? vars) env
-        (cons (cons (car vars) (lambda () (get-procedure-arg idx)))
+    (if (null? vars) '()
+        (cons (list (car vars) 'stack idx)
               (lambda-environment env (cdr vars) (+ idx 1))))))
 (define compile-lambda-3
   (lambda (vars body env proclabel jumplabel nargs)
