@@ -266,8 +266,8 @@
     (set! label-prefix (cons "_"
                              (escape (symbol->string new-prefix) 0 
                                      ;; XXX incomplete list
-                                     '("+"    "-" "="  "?" ">")
-                                     '("plus" "_" "eq" "p" "gt"))))
+                                     '("+"    "-" "="  "?" ">"  "<"  "!")
+                                     '("Plus" "_" "Eq" "P" "Gt" "Lt" "Bang"))))
     (set! constcounter 0)))
 (define new-label 
   (lambda () (set! constcounter (1+ constcounter))
@@ -504,6 +504,7 @@
 (define define-global-procedure
   (lambda (symbolname nargs body)
     (add-to-header (lambda () 
+                     (set-label-prefix symbolname)
                      (global-procedure-2 symbolname nargs body (new-label))))))
 
 ;; Emit code to fetch the Nth argument of the innermost procedure.
