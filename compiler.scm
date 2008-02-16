@@ -1161,8 +1161,6 @@
             (if (integer? expr) (tagged-integer expr)
                 (if (boolean? expr) (if expr true-value false-value)
                     (compile-quote-3 expr (new-label))))))))
-;; XXX is compile-quotable going to be sad about its responsibility to
-;; compile tail calls?
 (define compile-quotable 
   (lambda (obj env tail?) (push-const (compile-quote-2 obj))))
 (define compile-quote
