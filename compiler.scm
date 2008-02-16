@@ -538,20 +538,12 @@
 ;; Returns vars captured by some lambda inside expr, i.e. vars that
 ;; occurs free inside a lambda inside expr.
 (define (captured-vars expr)
-  (if (not (pair? expr)) '()
-      (if (eq? (car expr) 'lambda) (free-vars-lambda (cadr expr) (cddr expr))
-          (if (eq? (car expr) 'if) (all-captured-vars (cdr expr))
-              (if (eq? (car expr) '%begin) (all-captured-vars (cdr expr))
-                  (if (eq? (car expr) 'quote) '()
-                      (all-captured-vars expr)))))))
-; Damn, it would feel good to have a macro right now.
-; (define (captured-vars expr)
-;     (if (not (pair? expr)) '()
-;         (case (car expr)
-;           ((lambda)   (free-vars-lambda (cadr expr) (cddr expr)))
-;           ((if begin) (all-captured-vars (cdr expr)))
-;           ((quote)    '())
-;           (else       (all-captured-vars expr)))))
+    (if (not (pair? expr)) '()
+        (case (car expr)
+          ((lambda)   (free-vars-lambda (cadr expr) (cddr expr)))
+          ((if %begin) (all-captured-vars (cdr expr)))
+          ((quote)    '())
+          (else       (all-captured-vars expr)))))
 
 ;; Returns true if var is captured by a lambda inside any of exprs.
 (define (all-captured-vars exprs) 
@@ -569,14 +561,13 @@
 
 ;; Returns vars that occur free inside of expr.
 (define (free-vars expr)
-  (if (symbol? expr) (list expr)
-      (if (not (pair? expr)) '()
-          (if (eq? (car expr) 'lambda) (free-vars-lambda (cadr expr) 
-                                                         (cddr expr))
-              (if (eq? (car expr) 'if) (all-free-vars (cdr expr))
-                  (if (eq? (car expr) '%begin) (all-free-vars (cdr expr))
-                      (if (eq? (car expr) 'quote) '()
-                          (all-free-vars expr))))))))
+  (cond ((symbol? expr) (list expr))
+        ((not (pair? expr)) '())
+        (else (case (car expr)
+                ((lambda)    (free-vars-lambda (cadr expr) (cddr expr)))
+                ((if %begin) (all-free-vars (cdr expr)))
+                ((quote)     '())
+                (else        (all-free-vars expr))))))
 ;; Returns vars that occur free inside of any of exprs.
 (define (all-free-vars exprs) (if (null? exprs) '()
                                   (set-union (free-vars (car exprs))
@@ -1133,12 +1124,9 @@
         ((integer? expr) (tagged-integer expr))
         ((boolean? expr) (if expr true-value false-value))
         (else            (compile-quote-3 expr (new-label)))))
-;; compile-quotable: called from dispatch table for auto-quoted things
-;; as well as for (quote ...) exprs
-(define (compile-quotable obj env tail?) (push-const (compile-quote-2 obj)))
-(define (compile-quote expr env tail?)
-  (assert-equal 1 (length expr))
-  (compile-quotable (car expr) env tail?))
+;; compile-quotable: called for auto-quoted things and (quote ...)
+;; exprs
+(define (compile-quotable obj env) (push-const (compile-quote-2 obj)))
 
 ;; needs more cases for things other than stack variables
 (define (get-variable vardefn)
@@ -1206,42 +1194,35 @@
         (label endlabel))))
 
 
-(define (compile-application rator env nargs tail?)
-  (comment "get the procedure")
-  (compile-expr rator env #f)
-  (comment "now apply the procedure")
-  (if tail? (compile-tail-apply nargs)
-      (compile-apply nargs)))
-
-;; Things that are treated as special forms.  if, lambda, quote, and
-;; set! are the standard Scheme set.
-(define special-syntax-list
-  (list (cons '%begin compile-begin)
-        (cons 'if compile-if)
-        (cons 'lambda compile-lambda)
-        (cons 'quote compile-quote)
-        (cons '+ integer-add)
-        (cons '- integer-sub)))
+;; if, lambda, quote, and set! are the standard Scheme set of
+;; primitive special forms.
 (define (compile-combination rator rands env tail?)
-  (let ((handler (assq rator special-syntax-list)))
-    (if handler ((cdr handler) rands env tail?)
-        (compile-application rator env (compile-args rands env) tail?))))
-(define (compile-pair expr env tail?) 
-  (compile-combination (car expr) (cdr expr) env tail?))
-(define compilation-expr-list
-  (list (cons pair? compile-pair)
-        (cons symbol? compile-var)
-        (cons string? compile-quotable)
-        (cons boolean? compile-quotable)
-        (cons integer? compile-quotable)))
-(define (compile-expr-2 expr env handlers tail?)
-  (cond ((null? handlers) (error expr))
-        (((caar handlers) expr) ((cdar handlers) expr env tail?))
-        (else (compile-expr-2 expr env (cdr handlers) tail?))))
+  (case rator
+    ((%begin) (compile-begin rands env tail?))
+    ((if)     (compile-if rands env tail?))
+    ((lambda) (compile-lambda rands env tail?))
+    ((quote)  (assert-equal 1 (length rands))
+              (compile-quotable (car rands) env))
+    ((+)      (integer-add rands env tail?))
+    ((-)      (integer-sub rands env tail?))
+    (else     (let ((nargs (compile-args rands env)))
+                (comment "get the procedure")
+                (compile-expr rator env #f)
+                (comment "now apply the procedure")
+                (if tail? (compile-tail-apply nargs)
+                    (compile-apply nargs))))))
+
 (define (compile-expr expr env tail?)
-  (compile-expr-2 expr env compilation-expr-list tail?))
+  (cond ((pair? expr)   (compile-combination (car expr) (cdr expr) env tail?))
+        ((symbol? expr) (compile-var expr env tail?))
+        ;; XXX I want "or"
+        ((string? expr) (compile-quotable expr env))
+        ((boolean? expr) (compile-quotable expr env))
+        ((integer? expr) (compile-quotable expr env))
+        (else (error "don't know how to compile" expr))))
+
 (define (compile-args-2 args env n)
-  (compile-expr (car args) env #f)      ; XXX tail? wrong?
+  (compile-expr (car args) env #f)      ; args are never in tail position
   (1+ n))
 ;; Compile arguments for a procedure application.  Returns number of
 ;; arguments compiled.
