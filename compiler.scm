@@ -1281,6 +1281,10 @@
     (if (pair? (car args)) (list '%define (caar args) 
                                  (cons 'lambda (cons (cdar args) (cdr args))))
         (cons '%define args))))
+(define-macro 'let
+  (lambda (args)
+    (cons (cons 'lambda (cons (map car (car args)) (cdr args)))
+          (map cadr (car args)))))
 
 ;; Expand all macros in expr, recursively.
 (define (totally-macroexpand expr)
@@ -1289,6 +1293,8 @@
         ((not (pair? expr))      expr)
         ((eq? (car expr) 'quote) expr)
         (else (map totally-macroexpand expr)))) ; XXX deleted definition of map
+
+;; tests for macros
 (assert-equal (totally-macroexpand 'foo) 'foo)
 (assert-equal (totally-macroexpand '(if a b c)) '(if a b c))
 (assert (relevant-macro-definition '(begin a b c)) "no begin defn")
@@ -1299,6 +1305,9 @@
               '(if (eq? x 3) (%begin 4 '(cond 3))
                    (if (eq? x 4) (%begin 8)
                        (%begin 6 7))))
+(assert-equal (totally-macroexpand '(let () a b c)) '((lambda () a b c)))
+(assert-equal (totally-macroexpand '(let ((a 1) (b 2)) a b c))
+              '((lambda (a b) a b c) 1 2))
 
 ;;; Top-level compilation with macro-expansion.
 
