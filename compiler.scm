@@ -572,7 +572,7 @@
 (define captured-vars
   (lambda (expr)
     (if (not (pair? expr)) '()
-        (if (eq? (car expr) 'lambda) (free-vars-lambda (cdr expr))
+        (if (eq? (car expr) 'lambda) (free-vars-lambda (cadr expr) (cddr expr))
             (if (eq? (car expr) 'if) (all-captured-vars (cdr expr))
                 (if (eq? (car expr) 'begin) (all-captured-vars (cdr expr))
                     (if (eq? (car expr) 'quote) '()
@@ -584,17 +584,12 @@
                       (set-union (captured-vars (car exprs))
                                  (all-captured-vars (cdr exprs))))))
 
-;; Returns vars that occur free inside a lambda-abstraction whose
-;; arguments and body are consed together in rands.
-(define free-vars-lambda
-  (lambda (rands) (free-vars-lambda-2 (car rands) (cdr rands))))
-
 ;; Returns a list of the vars that are bound by a particular lambda arg list.
 (define vars-bound (lambda (args) (if (symbol? args) (list args) args)))
 
 ;; Returns vars that occur free inside a lambda-abstraction with given
 ;; args and body.
-(define free-vars-lambda-2
+(define free-vars-lambda
   (lambda (args body) (set-subtract (all-free-vars body) (vars-bound args))))
 
 ;; Returns vars that occur free inside of expr.
@@ -602,7 +597,8 @@
   (lambda (expr)
     (if (symbol? expr) (list expr)
         (if (not (pair? expr)) '()
-            (if (eq? (car expr) 'lambda) (free-vars-lambda (cdr expr))
+            (if (eq? (car expr) 'lambda) (free-vars-lambda (cadr expr) 
+                                                           (cddr expr))
                 (if (eq? (car expr) 'if) (all-free-vars (cdr expr))
                     (if (eq? (car expr) 'begin) (all-free-vars (cdr expr))
                         (if (eq? (car expr) 'quote) '()
@@ -612,6 +608,12 @@
   (lambda (exprs) (if (null? exprs) '()
                       (set-union (free-vars (car exprs))
                                  (all-free-vars (cdr exprs))))))
+
+;; Returns the free vars of a lambda found somewhere in its lexical
+;; environment.
+(define artifacts 
+  (lambda (vars body env) (filter (lambda (x) (assq x env)) 
+                                  (free-vars-lambda vars body))))
 
 ;; Some basic unit tests for closure handling.
 
@@ -630,6 +632,10 @@
 (define sample-inner-lambda-2 (caddr sample-inner-lambda-1))
 (assert-set-equal (free-vars sample-inner-lambda-2) '(a c +))
 (assert-set-equal (captured-vars sample-inner-lambda-2) '(a c +))
+(assert-set-equal (artifacts '(e f) (caddr sample-inner-lambda-2)
+                             '((c whatever) (d whatever)
+                               (a whatever) (b whatever)))
+                  '(a c))
 
 ;; Some tests for the other cases.
 (define sample-quoted-expr '(foo bar '(a b c)))
@@ -1221,8 +1227,8 @@
     (if (null? vars) '()
         (cons (list (car vars) 'stack idx)
               (lambda-environment env (cdr vars) (1+ idx))))))
-(define compile-lambda-3
-  (lambda (vars body env proclabel jumplabel nargs)
+(define compile-lambda-4
+  (lambda (artifacts vars body env proclabel jumplabel nargs)
     (assert-set-equal '() (vars-needing-heap-allocation (list 'lambda vars body)))
     (comment "jump past the body of the lambda")
     (jmp jumplabel)
@@ -1230,11 +1236,15 @@
       (lambda () (compile-begin body (lambda-environment env vars 0) #t)))
     (label jumplabel)
     (push-const proclabel)))
+(define compile-lambda-3
+  (lambda (vars body env nargs)
+    (compile-lambda-4 (artifacts vars body env) vars body env
+                      (new-label) (new-label) nargs)))
 (define compile-lambda-2
   (lambda (vars body env)
     (if (symbol? vars)
-        (compile-lambda-3 (list vars) body env (new-label) (new-label) '())
-        (compile-lambda-3 vars body env (new-label) (new-label) (length vars)))))
+        (compile-lambda-3 (list vars) body env '())
+        (compile-lambda-3 vars body env (length vars)))))
 (define compile-lambda
   (lambda (rands env tail?) (compile-lambda-2 (car rands) (cdr rands) env)))
 
