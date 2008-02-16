@@ -326,12 +326,12 @@
 ;; Add code to the header to define an error message.
 (define (define-error-routine labelname message)
   (add-to-header (lambda ()
-    ((lambda (errlabel)
-       (label labelname)
-       (mov (const errlabel) tos)
-       (jmp "report_error"))
-     (constant-string (string-append "error: " 
-                                     (string-append message "\n")))))))
+    (let ((errlabel         
+           (constant-string (string-append "error: " 
+                                           (string-append message "\n")))))
+      (label labelname)
+      (mov (const errlabel) tos)
+      (jmp "report_error")))))
 
 (define (compile-tag-check-procedure desired-tag)
   (get-procedure-arg 0)
@@ -1055,15 +1055,15 @@
 ;; Emit code to push a boolean in place of the top two stack items.
 ;; It will be #t if they are equal, #f if they are not.
 (define (target-eq?)
-  ((lambda (label1 label2)
-     (asm-pop ebx)
-     (cmp ebx tos)
-     (je label1)
-     (mov (const false-value) tos)
-     (jmp label2)
-     (label label1)
-     (mov (const true-value) tos)
-     (label label2)) (new-label) (new-label)))
+  (let ((label1 (new-label)) (label2 (new-label)))
+    (asm-pop ebx)
+    (cmp ebx tos)
+    (je label1)
+    (mov (const false-value) tos)
+    (jmp label2)
+    (label label1)
+    (mov (const true-value) tos)
+    (label label2)))
 
 
 ;;; Global variable handling.
@@ -1402,10 +1402,9 @@
   (assert-no-undefined-global-variables))
 
 (define (read-compile-loop)
-  ((lambda (expr)
-     (if (eof-object? expr) #t
-         (begin (compile-toplevel expr)
-                (read-compile-loop))))
-   (read)))
+  (let ((expr (read)))
+    (if (eof-object? expr) #t
+        (begin (compile-toplevel expr)
+               (read-compile-loop)))))
 
 (compile-program read-compile-loop)
