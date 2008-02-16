@@ -1368,6 +1368,8 @@
     (define = eq?)
     ;; because chars are unboxed, char=? is eq?
     (define char=? eq?)
+    ;; and all our numbers are unboxed too
+    (define eqv? eq?)
     (define (null? x) (eq? x '()))
     (define (boolean? x) (if (eq? x #t) #t (eq? x #f)))
     (define (memq obj list) 
@@ -1379,7 +1381,13 @@
       (if (null? list) #f
           (begin
             (proc (car list))
-            (for-each proc (cdr list)))))))
+            (for-each proc (cdr list)))))
+    (define (string->list string)
+      (string->list-2 string (string-length string) '()))
+    (define (string->list-2 string n rest)
+      (if (= n 0) rest
+          (string->list-2 string (- n 1)
+                          (cons (string-ref string (- n 1)) rest))))))
 
 ;;; Main Program
 
