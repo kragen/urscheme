@@ -4,6 +4,7 @@
 ;; From the Scheme 9 From Empty Space page:
 ;;     Why in earth write another half-baked implementation of Scheme?
 ;;     It is better than getting drunk at a bar.
+;; And anyway, I never metacircular compiler I didn't like. (Neil Van-Dyke)
 
 ;; I had been working on this for a couple of days now when I ran across
 ;http://www.iro.umontreal.ca/%7Eboucherd/mslug/meetings/20041020/minutes-en.html
@@ -157,6 +158,7 @@
                           (string-append (string-digit (remainder num 10)) 
                                          tail)))))
 ;; Converts a number into a string of digits.
+;; XXX move into standard library!
 (define number->string                  ; same as standard
   (lambda (num) (if (= num 0) "0" 
                     (if (< num 0) 
@@ -279,7 +281,8 @@
 (define rodatum
   (lambda (labelname)
     (rodata)
-    (insn ".align 4")       ; align pointers so they end in binary 00!
+    (comment "align pointers so they end in binary 00")
+    (insn ".align 4")
     (label labelname)))
 
 (define compile-word (lambda (contents) (insn ".int " contents)))
@@ -1181,7 +1184,7 @@
   (lambda (expr env) (compile-expr expr env #f) (pop)))
 
 ;; Construct an environment binding the local variables of the lambda
-;; to bits of code to fetch them.  Handles nesting very incorrectly.
+;; to bits of code to fetch them.  XXX Handles nesting very incorrectly.
 (define lambda-environment
   (lambda (env vars idx)
     (if (null? vars) env
