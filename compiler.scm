@@ -145,14 +145,13 @@
 (define (1+ x) (+ x 1))
 (define (1- x) (- x 1))
 
-(define (filter-2 fn lst rest) 
-  (if (fn (car lst)) (cons (car lst) rest) rest))
 (define (filter fn lst)  ; this must exist in r5rs but I can't find it
   (if (null? lst) '()
-      (filter-2 fn lst (filter fn (cdr lst)))))
+      (let ((first (car lst)) (rest (filter fn (cdr lst))))
+        (if (fn first) (cons first rest) rest))))
 
-(define (char->string-2 buf char) (string-set! buf 0 char) buf)
-(define (char->string char) (char->string-2 (make-string 1) char))
+(define (char->string char) 
+  (let ((buf (make-string 1))) (string-set! buf 0 char) buf))
 (define (string-digit digit) (char->string (string-ref "0123456789" digit)))
 (define (number->string-2 num tail)
   (if (= num 0) tail
@@ -479,15 +478,16 @@
 ;; it later.
 (define (compile-procedure-labeled labelname nargs body)
   (built-in-procedure-2 labelname nargs body (new-label)))
-(define (global-procedure-2 symbolname nargs body procedure-value-label)
-  (define-global-variable symbolname procedure-value-label)
-  (compile-procedure-labeled procedure-value-label nargs body))
+
 ;; Add code to define a global procedure known by a certain global
 ;; variable name to the header
 (define (define-global-procedure symbolname nargs body)
-  (add-to-header (lambda () 
-                   (set-label-prefix symbolname)
-                   (global-procedure-2 symbolname nargs body (new-label)))))
+  (add-to-header 
+    (lambda () 
+      (set-label-prefix symbolname)
+      (let ((procedure-value-label (new-label)))
+        (define-global-variable symbolname procedure-value-label)
+        (compile-procedure-labeled procedure-value-label nargs body)))))
 
 ;; Emit code to fetch the Nth argument of the innermost procedure.
 (define (get-procedure-arg n) 
@@ -1077,12 +1077,12 @@
   label)
 (define (allocate-new-global-variable-label! name) 
   (add-new-global-variable-binding! name (new-label)))
-(define (global-variable-label-2 name binding)
-  (if binding (cdr binding) (allocate-new-global-variable-label! name)))
+
 ;; Return a label representing this global variable, allocating a new
 ;; one if necessary.
 (define (global-variable-label name) 
-  (global-variable-label-2 name (assq name global-variable-labels)))
+  (let ((binding (assq name global-variable-labels)))
+    (if binding (cdr binding) (allocate-new-global-variable-label! name))))
 
 ;; Emit code to create a mutable labeled cell, for example for use as
 ;; a global variable, with a specific assembly label.
@@ -1142,10 +1142,11 @@
   (assert (eq? (car vardefn) 'stack) 
           (list "unexpected var type" (car vardefn)))
   (get-procedure-arg (cadr vardefn)))
-(define (compile-var-2 lookupval var)
-  (if lookupval (get-variable (cdr lookupval))
-      (fetch-global-variable (global-variable-label var))))
-(define (compile-var var env tail?) (compile-var-2 (assq var env) var))
+
+(define (compile-var var env tail?)
+  (let ((binding (assq var env)))
+    (if binding (get-variable (cdr binding))
+        (fetch-global-variable (global-variable-label var)))))
 
 ;; compile an expression, discarding result, e.g. for toplevel
 ;; expressions
@@ -1157,23 +1158,25 @@
   (if (null? vars) '()
       (cons (list (car vars) 'stack idx)
             (lambda-environment env (cdr vars) (1+ idx)))))
-(define (compile-lambda-4 artifacts vars body env proclabel jumplabel nargs)
-  (assert-set-equal '() (vars-needing-heap-allocation (list 'lambda vars body)))
-  (comment "jump past the body of the lambda")
-  (jmp jumplabel)
-  (compile-procedure-labeled proclabel nargs
-    (lambda () (compile-begin body (lambda-environment env vars 0) #t)))
-  (label jumplabel)
-  (push-const proclabel))
-(define (compile-lambda-3 vars body env nargs)
-  (compile-lambda-4 (artifacts vars body env) vars body env
-                    (new-label) (new-label) nargs))
-(define (compile-lambda-2 vars body env)
-  (if (symbol? vars)
-      (compile-lambda-3 (list vars) body env '())
-      (compile-lambda-3 vars body env (length vars))))
+
 (define (compile-lambda rands env tail?) 
-  (compile-lambda-2 (car rands) (cdr rands) env))
+  (let ((vars (car rands)) (body (cdr rands)))
+    (let ((varlist (if (symbol? vars) (list vars) vars))
+          (nargs (if (symbol? vars) '() (length vars))))
+      (let ((artifacts (artifacts varlist body env))
+            (proclabel (new-label))
+            (jumplabel (new-label)))
+        (assert-set-equal '() (vars-needing-heap-allocation 
+                               (list 'lambda varlist body)))
+        (comment "jump past the body of the lambda")
+        (jmp jumplabel)
+        (compile-procedure-labeled proclabel nargs
+          (lambda () (compile-begin body 
+                                    (lambda-environment env varlist 0) 
+                                    #t)))
+        (label jumplabel)
+        (push-const proclabel)))))
+
 
 (define (compile-begin rands env tail?)
   (cond ((null? rands) (push-const "31")) ; XXX do something reasonable
@@ -1186,19 +1189,19 @@
                     (compile-discarding (car rands) env))
                 (compile-begin (cdr rands) env tail?)))))
 
-(define (compile-if-2 cond then else lab1 lab2 env tail?)
-  (compile-expr cond env #f)
-  (jump-if-false lab1)
-  (compile-expr then env tail?)
-  (jmp lab2)
-  (label lab1)
-  (compile-expr else env tail?)
-  (label lab2))
 (define (compile-if rands env tail?)
-  (if (= (length rands) 3)
-      (compile-if-2 (car rands) (cadr rands) (caddr rands)
-                    (new-label) (new-label) env tail?)
-      (error "if arguments length " (length rands) " != 3")))
+  (if (not (= (length rands) 3))
+      (error "if arguments length " (length rands) " != 3")
+      (let ((cond (car rands)) (then (cadr rands)) (else (caddr rands))
+            (falselabel (new-label)) (endlabel (new-label)))
+        (compile-expr cond env #f)
+        (jump-if-false falselabel)
+        (compile-expr then env tail?)
+        (jmp endlabel)
+        (label falselabel)
+        (compile-expr else env tail?)
+        (label endlabel))))
+
 
 (define (compile-application rator env nargs tail?)
   (comment "get the procedure")
@@ -1216,12 +1219,10 @@
         (cons 'quote compile-quote)
         (cons '+ integer-add)
         (cons '- integer-sub)))
-(define (compile-combination-2 rator rands env handler tail?)
-  (if handler ((cdr handler) rands env tail?)
-      (compile-application rator env (compile-args rands env) tail?)))
 (define (compile-combination rator rands env tail?)
-  (compile-combination-2 rator rands env (assq rator special-syntax-list) 
-                         tail?))
+  (let ((handler (assq rator special-syntax-list)))
+    (if handler ((cdr handler) rands env tail?)
+        (compile-application rator env (compile-args rands env) tail?))))
 (define (compile-pair expr env tail?) 
   (compile-combination (car expr) (cdr expr) env tail?))
 (define compilation-expr-list
