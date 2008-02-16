@@ -424,7 +424,7 @@
    (comment "restore %eax to value on entry to package_up_variadic_args")
    (pop)
    (ret)))
-(define (compile-variadic-prologue nclosed-variables)
+(define (compile-variadic-prologue nartifacts)
   (comment "make space for variadic argument list")
   (asm-pop ebx)
   (asm-push ebx)
@@ -436,12 +436,12 @@
   (asm-push ebp)                        ; save old %ebp
   (lea (offset esp 12) ebp)  ; 12 bytes to skip saved %ebp, %ebx, %eip
 
-  (push-closed-variables nclosed-variables)
+  (push-closed-variables nartifacts)
 
   (call "package_up_variadic_args"))
     
-(define (compile-procedure-prologue nargs nclosed-variables)
-  (if (null? nargs) (compile-variadic-prologue nclosed-variables)
+(define (compile-procedure-prologue nargs nartifacts)
+  (if (null? nargs) (compile-variadic-prologue nartifacts)
       (begin
         (comment "compute desired %esp on return in %ebx and push it")
         (lea (offset (index-register esp edx 4) 4) ebx)
@@ -450,7 +450,7 @@
         (asm-push ebp)                  ; save old %ebp
         (lea (offset esp 12) ebp) ; 12 bytes to skip saved %ebp, %ebx, %eip
 
-        (push-closed-variables nclosed-variables)
+        (push-closed-variables nartifacts)
 
         (cmp (const (number->string nargs)) edx)
         (jnz "argument_count_wrong"))))
@@ -468,17 +468,21 @@
 (define-error-routine "not_procedure" "not a procedure")
 (define-error-routine "argument_count_wrong" "wrong number of arguments")
 
+;; Compiles a procedure into the text segment at a given label.
+(define (compile-procedure bodylabel nargs body nartifacts)
+  (text)
+  (label bodylabel)
+  (compile-procedure-prologue nargs nartifacts)
+  (body)
+  (compile-procedure-epilogue))      ; maybe we should just centralize
+                                     ; that and jump to it? :)
+
 (define (built-in-procedure-2 labelname nargs body bodylabel)
   (rodatum labelname)
   (compile-word procedure-magic)
   (compile-word bodylabel)
   (compile-word "0")                    ; no closure args
-  (text)
-  (label bodylabel)
-  (compile-procedure-prologue nargs 0)
-  (body)
-  (compile-procedure-epilogue))      ; maybe we should just centralize
-                                     ; that and jump to it? :)
+  (compile-procedure bodylabel nargs body 0))
 ;; Define a built-in procedure so we can refer to it by label and
 ;; push-const that label, then expect to be able to compile-apply to
 ;; it later.
@@ -635,17 +639,21 @@
 
 (assert-set-equal (captured-vars '(lambda x (x y z))) '(y z))
 
-(define (vars-needing-heap-allocation expr)
-  (assert (eq? (car expr) 'lambda) 
-          (list "vars-needing-heap-allocation needs lambda only" expr))
-  (set-intersect (vars-bound (cadr expr)) (all-captured-vars (cddr expr))))
+(define (heap-args varlist body)
+  (set-intersect varlist (all-captured-vars body)))
 
-(assert-set-equal '(a) (vars-needing-heap-allocation sample-closure-expression))
-(assert-set-equal '(c) (vars-needing-heap-allocation sample-inner-lambda-1))
-(assert-set-equal '() (vars-needing-heap-allocation sample-inner-lambda-2))
-(assert-set-equal '(message) (vars-needing-heap-allocation 
-  '(lambda (message) 
-     (lambda (message2) (display message) (display message2) (newline)))))
+(assert-set-equal '(a) (heap-args (cadr sample-closure-expression)
+                                  (cddr sample-closure-expression)))
+(assert-set-equal '(c) (heap-args (cadr sample-inner-lambda-1)
+                                  (cddr sample-inner-lambda-1)))
+(assert-set-equal '() (heap-args (cadr sample-inner-lambda-2)
+                                 (cddr sample-inner-lambda-2)))
+(assert-set-equal '(message)
+                  (heap-args '(message) 
+                             '((lambda (message2) 
+                                 (display message)
+                                 (display message2)
+                                 (newline)))))
 
 
 ;;; Memory management.
@@ -1173,8 +1181,7 @@
       (let ((artifacts (artifacts varlist body env))
             (proclabel (new-label))
             (jumplabel (new-label)))
-        (assert-set-equal '() (vars-needing-heap-allocation 
-                               (list 'lambda varlist body)))
+        (assert-set-equal '() (heap-args varlist body))
         (comment "jump past the body of the lambda")
         (jmp jumplabel)
         (compile-procedure-labeled proclabel nargs
@@ -1408,9 +1415,8 @@
             (proc (car list))
             (for-each proc (cdr list)))))
     (define (map proc list)        ; subset of standard: one list only
-      (if (null? list) '()
-          (cons (proc (car list)) (map proc (cdr list)))))
-    (define (string->list string)
+      (if (null? list) '() (cons (proc (car list)) (map proc (cdr list)))))
+    (define (string->list string)       ; standard
       (string->list-2 string (string-length string) '()))
     (define (string->list-2 string n rest)
       (if (= n 0) rest
