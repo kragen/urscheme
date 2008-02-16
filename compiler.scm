@@ -1291,6 +1291,19 @@
   (lambda (args)
     (cons (cons 'lambda (cons (map car (car args)) (cdr args)))
           (map cadr (car args)))))
+(define-macro 'case
+  (lambda (args)
+    (cond ((pair? (car args)) 
+           ;; Avoid evaluating expression more than once.  XXX unhygienic
+           (list 'let (list (list 'case-atom-key (car args)))
+                 (cons 'case (cons 'case-atom-key (cdr args)))))
+          ((null? (cdr args)) (list 'begin)) ; XXX indeterminate
+          ;; XXX here we unwarrantedly assume there's nothing after an
+          ;; else clause
+          ((eq? (caadr args) 'else) (cons 'begin (cdadr args)))
+          (else (list 'if (list 'memv (car args) (list 'quote (caadr args)))
+                      (cons 'begin (cdadr args))
+                      (cons 'case (cons (car args) (cddr args))))))))
 
 ;; Expand all macros in expr, recursively.
 (define (totally-macroexpand expr)
@@ -1372,10 +1385,11 @@
     (define eqv? eq?)
     (define (null? x) (eq? x '()))
     (define (boolean? x) (if (eq? x #t) #t (eq? x #f)))
-    (define (memq obj list) 
+    (define (memq obj list)             ; standard
       (cond ((null? list)         #f)
             ((eq? obj (car list)) list)
             (else                 (memq obj (cdr list)))))
+    (define memv memq)                  ; standard
 
     (define (for-each proc list)   ; subset of standard: one list only
       (if (null? list) #f
