@@ -1364,6 +1364,11 @@
         (if (eq? (caar args) 'else) (cons 'begin (cdar args))
             (list 'if (caar args) (cons 'begin (cdar args))
                   (cons 'cond (cdr args)))))))
+(define-macro 'define 
+  (lambda (args) 
+    (if (pair? (car args)) (list '%define (caar args) 
+                                 (cons 'lambda (cons (cdar args) (cdr args))))
+        (cons '%define args))))
 
 ;; Expand all macros in expr, recursively.
 (define totally-macroexpand
@@ -1391,7 +1396,7 @@
 (define compile-toplevel-expanded
   (lambda (expr)
     ;; XXX missing case where it's an atom
-    (if (eq? (car expr) 'define) 
+    (if (eq? (car expr) '%define) 
         (begin
           (set-label-prefix (cadr expr))
           (compile-toplevel-define (cadr expr) (caddr expr) global-env))
