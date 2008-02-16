@@ -44,6 +44,8 @@
 ;; D top-level define of a variable (not a function)
 ;; - read, for proper lists, symbols, strings, integers, #t and #f,
 ;;   and '
+;; - consequently symbols need to store their strings, and we need
+;;   string->symbol; other parts of the compiler use symbol->string
 ;; - eof-object?
 ;; - garbage collection
 ;; D strings, with string-set!, string-ref, string literals,
@@ -258,25 +260,35 @@
 
 ;; new-label: Allocate a new label (e.g. for a constant) and return it.
 (define constcounter 0)
-(define new-label (lambda () (set! constcounter (1+ constcounter))
-                             (list "k_" (number->string constcounter))))
+(define label-prefix "k")
+(define set-label-prefix
+  (lambda (new-prefix) 
+    (set! label-prefix (cons "_"
+                             (escape (symbol->string new-prefix) 0 
+                                     ;; XXX incomplete list
+                                     '("+"    "-" "="  "?" ">")
+                                     '("plus" "_" "eq" "p" "gt"))))
+    (set! constcounter 0)))
+(define new-label 
+  (lambda () (set! constcounter (1+ constcounter))
+          (list label-prefix "_" (number->string constcounter))))
 
 ;; stuff to output a Lisp string safely for assembly language
 (define dangerous '("\\" "\n" "\""))
 (define escapes '("\\\\" "\\n" "\\\""))
-(define backslashify-char
+(define escape-char
   (lambda (char dangerous escapes)
     (if (null? dangerous) (char->string char)
         (if (char=? char (string-ref (car dangerous) 0)) (car escapes)
-            (backslashify-char char (cdr dangerous) (cdr escapes))))))
-(define backslashify
-  (lambda (string idx)
-    (if (= idx (string-length string)) '("\"")
-        (cons (backslashify-char (string-ref string idx) dangerous escapes)
-              (backslashify string (1+ idx))))))
+            (escape-char char (cdr dangerous) (cdr escapes))))))
+(define escape
+  (lambda (string idx dangerous escapes)
+    (if (= idx (string-length string)) '()
+        (cons (escape-char (string-ref string idx) dangerous escapes)
+              (escape string (1+ idx) dangerous escapes)))))
 ;; Represent a string appropriately for the output assembly language file.
 (define asm-represent-string 
-  (lambda (string) (cons "\"" (backslashify string 0))))
+  (lambda (string) (list "\"" (escape string 0 dangerous escapes) "\"")))
 
 (define ascii (lambda (string) (insn ".ascii " (asm-represent-string string))))
 
@@ -1305,7 +1317,9 @@
   (lambda (expr)
     ;; XXX missing case where it's an atom
     (if (eq? (car expr) 'define) 
-        (compile-toplevel-define (cadr expr) (caddr expr) global-env)
+        (begin
+          (set-label-prefix (cadr expr))
+          (compile-toplevel-define (cadr expr) (caddr expr) global-env))
         (compile-discarding expr global-env))))
 
 ;;; Library of (a few) standard Scheme procedures defined in Scheme
