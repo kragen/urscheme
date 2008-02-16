@@ -1215,10 +1215,8 @@
 (define (compile-expr expr env tail?)
   (cond ((pair? expr)   (compile-combination (car expr) (cdr expr) env tail?))
         ((symbol? expr) (compile-var expr env tail?))
-        ;; XXX I want "or"
-        ((string? expr) (compile-quotable expr env))
-        ((boolean? expr) (compile-quotable expr env))
-        ((integer? expr) (compile-quotable expr env))
+        ((or (string? expr) (boolean? expr) (integer? expr))
+                        (compile-quotable expr env))
         (else (error "don't know how to compile" expr))))
 
 (define (compile-args-2 args env n)
