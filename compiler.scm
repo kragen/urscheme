@@ -140,6 +140,11 @@
 (define double (lambda (val) (+ val val)))
 (define quadruple (lambda (val) (double (double val))))
 
+;; Note: these currently cause a compile error because they are also
+;; in the standard library.
+(define 1+ (lambda (x) (+ x 1)))
+(define 1- (lambda (x) (- x 1)))
+
 (define filter-2
   (lambda (fn lst rest) (if (fn (car lst)) (cons (car lst) rest) rest)))
 (define filter           ; this must exist in r5rs but I can't find it
@@ -169,9 +174,6 @@
 
 ;; Boy, it sure causes a lot of hassle that Scheme has different types
 ;; for strings and chars.
-
-(define 1+ (lambda (x) (+ x 1)))
-(define 1- (lambda (x) (- x 1)))
 
 (define string-idx-2
   (lambda (string char idx)
