@@ -1083,6 +1083,13 @@
 (define true-value (enum-value 257))
 (define false-value (enum-value 258))
 (define eof-value (enum-value 259))
+(define-global-procedure 'eof-object? 1
+  (lambda ()
+    (get-procedure-arg 0)
+    (cmp (const eof-value) tos)
+    (je "return_true")
+    (jmp "return_false")))
+
 (define (jump-if-false label)
   (cmp (const false-value) tos)
   (pop)
@@ -1483,11 +1490,22 @@
       (cond ((null? alist)          #f)
             ((eq? obj (caar alist)) (car alist))
             (else                   (assq obj (cdr alist)))))
+    (define (memq obj list)             ; standard
+      (cond ((null? list)         #f)
+            ((eq? obj (car list)) list)
+            (else                 (memq obj (cdr list)))))
+    (define memv memq)                  ; standard
+    (define (append a b)                ; standard
+      (if (null? a) b (cons (car a) (append (cdr a) b))))
+
     ;; identical to standard caar, cdar, etc.
     (define (caar val) (car (car val)))
     (define (cdar val) (cdr (car val)))
     (define (cadr val) (car (cdr val)))
-    (define (caddr val) (cadr (cdr val)))
+    (define (cddr val) (cdr (cdr val)))
+    (define (caddr val) (car (cddr val)))
+    (define (caadr val) (car (cadr val)))
+    (define (cdadr val) (cdr (cadr val)))
     (define (not x) (if x #f #t))       ; standard
 
     ;; string manipulation
@@ -1515,11 +1533,6 @@
     (define eqv? eq?)
     (define (null? x) (eq? x '()))
     (define (boolean? x) (if (eq? x #t) #t (eq? x #f)))
-    (define (memq obj list)             ; standard
-      (cond ((null? list)         #f)
-            ((eq? obj (car list)) list)
-            (else                 (memq obj (cdr list)))))
-    (define memv memq)                  ; standard
 
     (define (for-each proc list)   ; subset of standard: one list only
       (if (null? list) #f
