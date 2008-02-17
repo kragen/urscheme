@@ -388,10 +388,6 @@
       (begin (asm-push (offset basereg (- 0 (quadruple i))))
              (copy-args basereg nargs (1+ i)))))
 
-(define (push-closed-variables nclosed-variables)
-  ;; XXX implement me!
-  2)
-
 ;; package up variadic arguments into a list.  %ebp is fully set up,
 ;; so we can index off of it to find each argument, and %edx is the
 ;; total number of arguments.  Only trouble is that we have to push
@@ -424,7 +420,7 @@
    (comment "restore %eax to value on entry to package_up_variadic_args")
    (pop)
    (ret)))
-(define (compile-variadic-prologue nartifacts)
+(define (compile-variadic-prologue)
   (comment "make space for variadic argument list")
   (asm-pop ebx)
   (asm-push ebx)
@@ -436,12 +432,10 @@
   (asm-push ebp)                        ; save old %ebp
   (lea (offset esp 12) ebp)  ; 12 bytes to skip saved %ebp, %ebx, %eip
 
-  (push-closed-variables nartifacts)
-
   (call "package_up_variadic_args"))
     
-(define (compile-procedure-prologue nargs nartifacts)
-  (if (null? nargs) (compile-variadic-prologue nartifacts)
+(define (compile-procedure-prologue nargs)
+  (if (null? nargs) (compile-variadic-prologue)
       (begin
         (comment "compute desired %esp on return in %ebx and push it")
         (lea (offset (index-register esp edx 4) 4) ebx)
@@ -449,8 +443,6 @@
 
         (asm-push ebp)                  ; save old %ebp
         (lea (offset esp 12) ebp) ; 12 bytes to skip saved %ebp, %ebx, %eip
-
-        (push-closed-variables nartifacts)
 
         (cmp (const (number->string nargs)) edx)
         (jnz "argument_count_wrong"))))
@@ -469,25 +461,24 @@
 (define-error-routine "argument_count_wrong" "wrong number of arguments")
 
 ;; Compiles a procedure into the text segment at a given label.
-(define (compile-procedure bodylabel nargs body nartifacts)
+(define (compile-procedure bodylabel nargs body)
   (text)
   (label bodylabel)
-  (compile-procedure-prologue nargs nartifacts)
+  (compile-procedure-prologue nargs)
   (body)
   (compile-procedure-epilogue))      ; maybe we should just centralize
                                      ; that and jump to it? :)
 
-(define (built-in-procedure-2 labelname nargs body bodylabel)
-  (rodatum labelname)
-  (compile-word procedure-magic)
-  (compile-word bodylabel)
-  (compile-word "0")                    ; no closure args
-  (compile-procedure bodylabel nargs body 0))
 ;; Define a built-in procedure so we can refer to it by label and
-;; push-const that label, then expect to be able to compile-apply to
-;; it later.
+;; push-const that label and expect to get a procedure value.
 (define (compile-procedure-labeled labelname nargs body)
-  (built-in-procedure-2 labelname nargs body (new-label)))
+  (let ((bodylabel (new-label)))
+    (rodatum labelname)
+    (compile-word procedure-magic)
+    (compile-word bodylabel)
+    (compile-word "0")                    ; closed over zero artifacts
+    (compile-procedure bodylabel nargs body)))
+
 
 ;; Add code to define a global procedure known by a certain global
 ;; variable name to the header
@@ -598,6 +589,64 @@
 (define (artifacts vars body env) (filter (lambda (x) (assq x env)) 
                                           (free-vars-lambda vars body)))
 
+
+;; Compiles code to store the requested heap arguments; returns an
+;; environment containing them as well as the original contents of the
+;; environment.
+(define (compile-heap-args heap-args heap-slots-used env)
+  (comment "discarding useless value in %eax")
+  (pop)
+  (compile-heap-args-2 heap-args heap-slots-used env))
+(define (compile-heap-args-2 heap-args heap-slots-used env)
+  (if (null? heap-args) env
+      ;; XXX compile-var doesn't need a tail? argument!
+      (let ((var (car heap-args)))
+        (begin 
+          (comment "move arg from stack to heap: " (symbol->string var))
+          (compile-var var env #f)
+          (move-var-to-heap-arg)
+          ;; Now we have the heap arg pointer on the stack, hopefully
+          ;; in the right place.
+          (compile-heap-args-2 (cdr heap-args) (1+ heap-slots-used) 
+                               (cons (list var 'heap-pointer
+                                           heap-slots-used) env))))))
+
+(define (push-artifacts artifacts) (push-artifacts-2 artifacts 0))
+(define (push-artifacts-2 artifacts slotnum)
+  (if (null? artifacts) '()
+      (let ((var (car artifacts)))
+        (comment "fetch artifact from closure: " (number->string slotnum) 
+                 " " (symbol->string var))
+        ;; 12 skips the magic number, code pointer, and artifact count.
+        (asm-push (offset eax (+ 12 (quadruple slotnum))))
+        (cons (list var 'heap-pointer slotnum) 
+              (push-artifacts-2 (cdr artifacts) (1+ slotnum))))))
+
+(define (push-closure label artifacts env)
+  (push-const (tagged-integer (+ 12 (quadruple (length artifacts)))))
+  (emit-malloc)
+  (mov tos ebx)
+  (mov (const procedure-magic) (indirect ebx))
+  (mov (const label) (offset ebx 4))
+  (mov (const (number->string (length artifacts))) (offset ebx 8))
+  (store-closure-artifacts ebx 12 artifacts env))
+
+(define (store-closure-artifacts reg off artifacts env)
+  (if (null? artifacts) '()
+      (begin (get-heap-var (assq (car artifacts) env))
+             (mov tos (offset reg off))
+             (pop)
+             (store-closure-artifacts reg (+ off 4) (cdr artifacts) env))))
+
+;; Heap variable objects are 8 bytes: a magic number and their current value.
+(define heap-var-magic "0x1abe11ed")
+(define (move-var-to-heap-arg)
+  (comment "moving top of stack to newly allocated heap var")
+  (push-const (tagged-integer 8))
+  (emit-malloc)
+  (mov (const heap-var-magic) (indirect tos))
+  (asm-pop (offset tos 4)))
+
 ;; Some basic unit tests for closure handling.
 
 (define sample-closure-expression    
@@ -655,7 +704,6 @@
                                  (display message2)
                                  (newline)))))
 
-
 ;;; Memory management.
 
 (add-to-header
@@ -702,8 +750,6 @@
 ;; constant-string: Emit code to represent a constant string.
 (define (constant-string contents) (constant-string-2 contents (new-label)))
 
-(define-error-routine "notstring" "not a string")
-
 (define (if-not-right-magic-jump magic destlabel)
   (comment "test whether %eax has magic: " magic)
   (comment "first, ensure that it's a pointer, not something unboxed")
@@ -713,6 +759,7 @@
   (cmp (const magic) (indirect tos))
   (jnz destlabel))
 
+(define-error-routine "notstring" "not a string")
 (add-to-header (lambda ()
     (label "ensure_string")
     (if-not-right-magic-jump string-magic "notstring")
@@ -1152,11 +1199,39 @@
 ;; exprs
 (define (compile-quotable obj env) (push-const (compile-quote-2 obj)))
 
-;; needs more cases for things other than stack variables
+(define (fetch-heap-var-pointer slotnum)
+  (comment "fetching heap var pointer " (number->string slotnum))
+  ;; below %ebp is return address, %esp, and saved %ebp, and then a
+  ;; word of crap; so the first heap var slot is at ebp - 20
+  (dup)
+  (mov (offset ebp (+ -16 (quadruple slotnum))) tos))
+
+(define-error-routine "not_heap_var" "heap-var indirection to non-heap-var")
+(add-to-header (lambda ()
+    (label "ensure_heap_var")
+    (if-not-right-magic-jump heap-var-magic "not_heap_var")
+    (ret)))
+(define (ensure-heap-var) (call "ensure_heap_var"))
+
+(define (fetch-heap-var slotnum)
+  (fetch-heap-var-pointer slotnum)
+  (comment "now fetching current value from the heap")
+  (ensure-heap-var)
+  (mov (offset tos 4) tos))
+
+;; needs more cases for things other than stack variables?
 (define (get-variable vardefn)
-  (assert (eq? (car vardefn) 'stack) 
-          (list "unexpected var type" (car vardefn)))
-  (get-procedure-arg (cadr vardefn)))
+  (case (car vardefn)
+    ((stack) (get-procedure-arg (cadr vardefn)))
+    ((heap-pointer) (fetch-heap-var (cadr vardefn)))
+    (else (error (list "unexpected var type" (car vardefn))))))
+
+;; rather than getting the variable value, it gets the variable's
+;; location in the heap.
+(define (get-heap-var vardefn)
+  (if (eq? (cadr vardefn) 'heap-pointer) 
+      (fetch-heap-var-pointer (caddr vardefn))
+      (error "trying to fetch the heap var pointer for " vardefn)))
 
 (define (compile-var var env tail?)
   (let ((binding (assq var env)))
@@ -1180,17 +1255,37 @@
           (nargs (if (symbol? vars) '() (length vars))))
       (let ((artifacts (artifacts varlist body env))
             (proclabel (new-label))
-            (jumplabel (new-label)))
-        (assert-set-equal '() (heap-args varlist body))
+            (jumplabel (new-label))
+            (stack-env (lambda-environment env varlist 0))
+            (heap-arg-list (heap-args varlist body)))
         (comment "jump past the body of the lambda")
         (jmp jumplabel)
-        (compile-procedure-labeled proclabel nargs
-          (lambda () (compile-begin body 
-                                    (lambda-environment env varlist 0) 
-                                    #t)))
-        (label jumplabel)
-        (push-const proclabel)))))
-
+        (if (null? artifacts)
+            (begin
+              ;; There are no artifacts, so we don't need to create a
+              ;; closure.
+              (compile-procedure-labeled proclabel nargs
+                (lambda () 
+                  ;; But there may be inner closures...
+                  (let ((inner-env (compile-heap-args heap-arg-list 0
+                                                      stack-env)))
+                    (compile-begin body inner-env #t))))
+              (label jumplabel)
+              ;; And we can just push-const it instead of creating a
+              ;; new closure.
+              (push-const proclabel))
+            (begin
+              (compile-procedure proclabel nargs 
+                (lambda ()
+                  ;; There may still be inner closures.
+                  (let ((artifacts-env (push-artifacts artifacts)))
+                    (let ((inner-env (compile-heap-args 
+                                      heap-arg-list
+                                      (length artifacts) ; follow artifacts
+                                      (append artifacts-env stack-env))))
+                      (compile-begin body inner-env #t)))))
+              (label jumplabel)
+              (push-closure proclabel artifacts env)))))))
 
 (define (compile-begin rands env tail?)
   (cond ((null? rands) (push-const "31")) ; XXX do something reasonable
