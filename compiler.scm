@@ -1416,8 +1416,12 @@
   (cond ((relevant-macro-definition expr) 
          (totally-macroexpand (macroexpand-1 expr)))
         ((not (pair? expr))      expr)
-        ((eq? (car expr) 'quote) expr)
-        (else (map totally-macroexpand expr)))) ; XXX deleted definition of map
+        (else (case (car expr)
+                ((quote) expr)
+                ((lambda) (cons 'lambda (cons (cadr expr) 
+                                              (map totally-macroexpand 
+                                                   (cddr expr)))))
+                (else (map totally-macroexpand expr))))))
 
 ;; tests for macros
 (assert-equal (totally-macroexpand 'foo) 'foo)
@@ -1440,6 +1444,19 @@
                       (let ((or-internal-argument b))
                         (if or-internal-argument or-internal-argument
                             c))))))
+;; This test ensures we don't try to macro-expand lambda argument
+;; lists.
+(assert-equal (totally-macroexpand
+               '(let ((cond (car rands)) (then (cadr rands)) 
+                      (else (caddr rands)) (falselabel (new-label)) 
+                      (endlabel (new-label)))
+                  (compile-expr cond env #f)
+                  (jump-if-false falselabel)))
+              '((lambda (cond then else falselabel endlabel) 
+                  (compile-expr cond env #f)
+                  (jump-if-false falselabel)
+                  ) (car rands) (cadr rands) (caddr rands) 
+                    (new-label) (new-label)))
 
 ;;; Top-level compilation with macro-expansion.
 
