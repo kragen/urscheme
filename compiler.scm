@@ -1531,6 +1531,31 @@
     (define char=? eq?)
     ;; and all our numbers are unboxed too
     (define eqv? eq?)
+
+    ;; equal? is a little trickier
+    (define (equal? a b)
+      (cond ((eq? a b) #t)
+            ;; XXX need "and"
+            ((string? a) (if (string? b) (string=? a b) #f))
+            ;; XXX need "and"
+            ((pair? a) (if (pair? b) (if (equal? (car a) (car b))
+                                         (equal? (cdr a) (cdr b))
+                                         #f)
+                           #f))
+            (else #f)))
+
+    ;; string=? needs a loop
+    (define (string=? a b)
+      ;; XXX need "and"
+      (if (= (string-length a) (string-length b)) (string=?-2 a b 0)
+          #f))
+    (define (string=?-2 a b idx)
+      ;; XXX need "and"
+      (or (= idx (string-length a))
+          (if (char=? (string-ref a idx) (string-ref b idx))
+              (string=?-2 a b (1+ idx))
+              #f)))
+
     (define (null? x) (eq? x '()))
     (define (boolean? x) (if (eq? x #t) #t (eq? x #f)))
 
