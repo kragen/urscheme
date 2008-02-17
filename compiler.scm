@@ -1201,10 +1201,10 @@
 
 (define (fetch-heap-var-pointer slotnum)
   (comment "fetching heap var pointer " (number->string slotnum))
-  ;; below %ebp is return address, %esp, and saved %ebp, and then a
-  ;; word of crap; so the first heap var slot is at ebp - 20
+  ;; below %ebp is return address, %esp, and saved %ebp; so the first
+  ;; heap var slot is at ebp - 16, and the next one is at ebp - 20.
   (dup)
-  (mov (offset ebp (+ -16 (quadruple slotnum))) tos))
+  (mov (offset ebp (- -16 (quadruple slotnum))) tos))
 
 (define-error-routine "not_heap_var" "heap-var indirection to non-heap-var")
 (add-to-header (lambda ()
