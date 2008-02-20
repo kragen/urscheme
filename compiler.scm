@@ -75,8 +75,13 @@
 ;; D read-char
 ;; - char-alphabetic?
 ;; - and
-;; - string->symbol
-;; - symbol->string
+;; - symbol->string, string->symbol
+;;    1D make a compile-time alist of symbol labels
+;;    2D emit them just as magic words at the end of the file
+;;    3. change symbols to be merely pointers to those things
+;;    4. add pointers to strings to the symbols
+;;    5. add symbol->string
+;;    6. add string->symbol
 ;; - string->number
 ;; D list->string (already have string->list)
 ;; - char?
@@ -141,7 +146,7 @@
 ;;   guaranteed by R5RS, so we can't depend on that property inside
 ;;   the compiler, since we want to be able to run it on other R5RS
 ;;   Schemes.
-;; - low bits binary 11: symbols.
+;; - low bits binary 11: unused.
 ;; So, type-testing consists of testing the type-tag, then possibly
 ;; testing the magic number.  In the usual case, we'll jump to an
 ;; error routine if the type test fails, which will exit the program.
@@ -937,8 +942,10 @@
    (compile-procedure-epilogue)))
 
 ;;; Symbols.
-;; Just unique numbers with the low-order bits set to 11.
+;; In-memory structures with magic number "0x1abe1" (for now.)
+;; (XXX In transition from being tagged numbers.)
 (define symbol-tag "3")
+(define symbol-magic "0x1abe1")
 (define-global-procedure 'symbol? 1
   (lambda () (compile-tag-check-procedure symbol-tag)))
 (define interned-symbol-list '())
@@ -947,11 +954,21 @@
 (define (interning symbol symlist)
   (cond ((null? symlist) 
          ;; XXX isn't this kind of duplicative with the global variables stuff?
-         (set! interned-symbol-list (cons symbol interned-symbol-list))
+         (set! interned-symbol-list 
+               (cons (list symbol (new-label)) interned-symbol-list))
          (length interned-symbol-list))
-        ((eq? symbol (car symlist)) (length symlist))
+        ((eq? symbol (caar symlist)) (length symlist))
         (else (interning symbol (cdr symlist)))))
 (define (symbol-value symbol) (list "3 + " (tagshift (intern symbol))))
+
+(define (emit-symbols)
+  (comment "symbols")
+  (rodata)
+  (for-each (lambda (symlabel)
+              (comment "symbol: " (symbol->string (car symlabel)))
+              (label (cdr symlabel))
+              (compile-word symbol-magic))
+            interned-symbol-list))
 
 ;;; I/O: input and output.  Putout and Vladimir.
 
@@ -1822,6 +1839,7 @@
   (mov (const "1") eax)             ; __NR_exit
   (mov (const "0") ebx)             ; exit code
   (syscall)
+  (emit-symbols)
   (assert-no-undefined-global-variables))
 
 (define (read-compile-loop)
