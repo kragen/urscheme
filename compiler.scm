@@ -1619,11 +1619,17 @@
           (else (cons c (parse-atom-2 s)))))))
 (define (parse-string-literal s) (list->string (parse-string-literal-2 s)))
 (define (parse-string-literal-2 s)
-  (let ((c (s))) (case c                ; XXX eof in string
-                   (( #\\ ) (let ((next (s))) 
-                              (cons next (parse-string-literal-2 s))))
-                   (( #\" ) '())
-                   (else (cons c (parse-string-literal-2 s))))))
+  (let ((c (s))) 
+    (case c                             ; XXX eof in string
+      (( #\\ ) 
+       (let ((next (s)))
+         (let ((decoded
+                (case next ((#\n) #\newline) ((#\t) #\tab) (else next))))
+           (cons decoded (parse-string-literal-2 s)))))
+       (( #\" ) 
+        '())
+       (else
+        (cons c (parse-string-literal-2 s))))))
 (define (parse-hashy-thing s)
   (let ((c (s))) 
     (if (parse-eof? c) (error "eof after #")
@@ -1684,6 +1690,8 @@
  (parse-string "(#\\a #\\newline #\\tab #\\space #\\( #\\) #\\# #\\\\)")
  '(#\a #\newline #\tab #\space #\( #\) #\# #\\))
 
+(assert-equal (parse-string "\"hello\\n\\tthere\"") "hello\n\tthere")
+
 ;;; Library of (a few) standard Scheme procedures defined in Scheme
 
 (define standard-library 
@@ -1733,6 +1741,12 @@
       (string-append-2 s1 s2 (make-string (+ (string-length s1) 
                                              (string-length s2)))
                        0))
+
+    ;; chars
+    (define (char-whitespace? c)
+      (case c ((#\space #\newline #\tab) #t) (else #f)))
+
+    ;; equality
     (define = eq?)
     ;; because chars are unboxed, char=? is eq?
     (define char=? eq?)
