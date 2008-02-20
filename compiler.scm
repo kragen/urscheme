@@ -1217,6 +1217,22 @@
   (pop)
   (je label))
 
+;; Emit code to push a boolean in place of the top two stack items.
+;; It will be #t if they are equal, #f if they are not.
+(define (target-eq?)
+  (let ((label1 (new-label)) (label2 (new-label)))
+    (asm-pop ebx)
+    (cmp ebx tos)
+    (je label1)
+    (mov (const false-value) tos)
+    (jmp label2)
+    (label label1)
+    (mov (const true-value) tos)
+    (label label2)))
+
+;;; Characters (chars).
+;; These are unboxed and use "enum-tag" (2).
+
 ;; Emit code to jump if TOS isn't a character.
 (define (jump-if-not-char label)
   (test (const "1") tos)
@@ -1254,18 +1270,15 @@
 (define (tagged-character char)
   (list enum-tag " + '" (char->string char) "<<2"))
 
-;; Emit code to push a boolean in place of the top two stack items.
-;; It will be #t if they are equal, #f if they are not.
-(define (target-eq?)
-  (let ((label1 (new-label)) (label2 (new-label)))
-    (asm-pop ebx)
-    (cmp ebx tos)
-    (je label1)
-    (mov (const false-value) tos)
-    (jmp label2)
-    (label label1)
-    (mov (const true-value) tos)
-    (label label2)))
+;; XXX these sure would be nice to inline :)
+(define-global-procedure 'integer->char 1
+  (lambda () (get-procedure-arg 0)
+             (inc tos)
+             (ensure-character)))
+(define-global-procedure 'char->integer 1
+  (lambda () (get-procedure-arg 0)
+             (ensure-character)
+             (dec tos)))
 
 
 ;;; Global variable handling.
