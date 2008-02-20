@@ -72,7 +72,7 @@
 ;; Remaining to implement:
 ;; D current-input-port
 ;; D read-char
-;; - char-alphabetic?
+;; D char-alphabetic?
 ;; D and
 ;; D symbol->string, string->symbol
 ;;    1D make a compile-time alist of symbol labels
@@ -1854,6 +1854,10 @@
     ;; chars
     (define (char-whitespace? c)
       (case c ((#\space #\newline #\tab) #t) (else #f)))
+    (define (char<? a b) (< (char->integer a) (char->integer b)))
+    (define (char<=? a b) (or (eqv? a b) (char<? a b)))
+    (define (char-alphabetic? x) (or (and (char<=? #\A x) (char<=? x #\Z))
+                                     (and (char<=? #\a x) (char<=? x #\z))))
 
     ;; equality
     (define = eq?)
