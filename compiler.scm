@@ -78,7 +78,7 @@
 ;; - symbol->string, string->symbol
 ;;    1D make a compile-time alist of symbol labels
 ;;    2D emit them just as magic words at the end of the file
-;;    3. change symbols to be merely pointers to those things
+;;    3D change symbols to be merely pointers to those things
 ;;    4. add pointers to strings to the symbols
 ;;    5. add symbol->string
 ;;    6. add string->symbol
@@ -943,11 +943,13 @@
 
 ;;; Symbols.
 ;; In-memory structures with magic number "0x1abe1" (for now.)
-;; (XXX In transition from being tagged numbers.)
-(define symbol-tag "3")
 (define symbol-magic "0x1abe1")
+;; XXX refactor these if-not-right-magic-jump predicates
 (define-global-procedure 'symbol? 1
-  (lambda () (compile-tag-check-procedure symbol-tag)))
+  (lambda ()
+    (get-procedure-arg 0)
+    (if-not-right-magic-jump symbol-magic "return_false")
+    (jmp "return_true")))
 (define interned-symbol-list '())
 (define (intern symbol)
   (interning symbol interned-symbol-list))
@@ -956,10 +958,10 @@
          ;; XXX isn't this kind of duplicative with the global variables stuff?
          (set! interned-symbol-list 
                (cons (list symbol (new-label)) interned-symbol-list))
-         (length interned-symbol-list))
-        ((eq? symbol (caar symlist)) (length symlist))
+         (car interned-symbol-list))
+        ((eq? symbol (caar symlist)) (car symlist))
         (else (interning symbol (cdr symlist)))))
-(define (symbol-value symbol) (list "3 + " (tagshift (intern symbol))))
+(define (symbol-value symbol) (cadr (intern symbol)))
 
 (define (emit-symbols)
   (comment "symbols")
