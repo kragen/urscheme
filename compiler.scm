@@ -1567,7 +1567,7 @@
 (assert-equal (sample-unget) #\o)
 (assert-equal (sample-unget) 'eof-indicator)
 
-;; actual parsing.
+;; Actual Parsing.
 
 (define (parse s) 
   (let ((c (after-wsp s)))
@@ -1578,11 +1578,14 @@
           (( #\" ) (parse-string-literal s))
           (( #\# ) (parse-hashy-thing s))
           (else (s 'unget) (parse-atom s))))))
-(define (parse-list s) (case (after-wsp s)
-                         (( #\) ) '())
-                         (( #\. ) (read-dotted-tail s))
-                         (else (let ((hd (begin (s 'unget) (parse s))))
-                                 (cons hd (parse-list s))))))
+(define (parse-list s)
+  (let ((c (after-wsp s)))
+    (if (parse-eof? c) (error "missing right paren")
+        (case c
+          (( #\) ) '())
+          (( #\. ) (read-dotted-tail s))
+          (else (let ((hd (begin (s 'unget) (parse s))))
+                  (cons hd (parse-list s))))))))
 (define (read-dotted-tail s)
   (let ((rv (parse s)))
     (if (eqv? #\) (after-wsp s)) rv (error "funky dotted list"))))
