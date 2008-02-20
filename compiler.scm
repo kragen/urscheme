@@ -32,7 +32,7 @@
 ;; D null?
 ;; D booleans
 ;; D eq?, pair?, null?, symbol?, integer?, boolean?, string?, procedure? 
-;;   (but not char?)
+;; - char?
 ;; D if (with three arguments)
 ;; D lambda (with fixed numbers of arguments or with a single argument
 ;;   that gets bound to the argument list (lambda <var> <body>)
@@ -70,8 +70,18 @@
 ;; All of this would be a little simpler if strings were just lists
 ;; of small integers.
 
-;; Next to implement:
-;; ???
+;; Remaining to implement:
+;; - current-input-port
+;; - read-char
+;; - char-alphabetic?
+;; - and
+;; - string->symbol
+;; - symbol->string
+;; - string->number
+;; - list->string (already have string->list)
+;; - char?
+;; - set!
+;; - error
 
 ;; There were a bunch of parts of standard Scheme that I implemented
 ;; at the top of the compiler, which was a little bit silly --- any
