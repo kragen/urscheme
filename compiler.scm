@@ -73,7 +73,7 @@
 ;; D current-input-port
 ;; D read-char
 ;; - char-alphabetic?
-;; - and
+;; D and
 ;; D symbol->string, string->symbol
 ;;    1D make a compile-time alist of symbol labels
 ;;    2D emit them just as magic words at the end of the file
@@ -1551,6 +1551,11 @@
           (else (list 'let (list (list 'or-internal-argument (car args)))
                       (list 'if 'or-internal-argument 'or-internal-argument
                             (cons 'or (cdr args))))))))
+(define-macro 'and
+  (lambda (args)
+    (cond ((null? args) #t)
+          ((= 1 (length args)) (car args))
+          (else (list 'if (car args) (cons 'and (cdr args)) #f)))))
 
 ;; Expand all macros in expr, recursively.
 (define (totally-macroexpand expr)
@@ -1578,6 +1583,7 @@
 (assert-equal (totally-macroexpand '(let () a b c)) '((lambda () a b c)))
 (assert-equal (totally-macroexpand '(let ((a 1) (b 2)) a b c))
               '((lambda (a b) a b c) 1 2))
+(assert-equal (totally-macroexpand '(and a b c)) '(if a (if b c #f) #f))
 (assert-equal (totally-macroexpand '(or a b c))
               (totally-macroexpand
                '(let ((or-internal-argument a)) 
@@ -1846,26 +1852,18 @@
     ;; equal? is a little trickier
     (define (equal? a b)
       (cond ((eq? a b) #t)
-            ;; XXX need "and"
-            ((string? a) (if (string? b) (string=? a b) #f))
-            ;; XXX need "and"
-            ((pair? a) (if (pair? b) (if (equal? (car a) (car b))
-                                         (equal? (cdr a) (cdr b))
-                                         #f)
-                           #f))
+            ((string? a) (and (string? b) (string=? a b)))
+            ((pair? a) (and (pair? b) (equal? (car a) (car b))
+                            (equal? (cdr a) (cdr b))))
             (else #f)))
 
     ;; string=? needs a loop
     (define (string=? a b)
-      ;; XXX need "and"
-      (if (= (string-length a) (string-length b)) (string=?-2 a b 0)
-          #f))
+      (and (= (string-length a) (string-length b)) (string=?-2 a b 0)))
     (define (string=?-2 a b idx)
-      ;; XXX need "and"
       (or (= idx (string-length a))
-          (if (char=? (string-ref a idx) (string-ref b idx))
-              (string=?-2 a b (1+ idx))
-              #f)))
+          (and (char=? (string-ref a idx) (string-ref b idx))
+               (string=?-2 a b (1+ idx)))))
 
     (define (null? x) (eq? x '()))
     (define (boolean? x) (if (eq? x #t) #t (eq? x #f)))
