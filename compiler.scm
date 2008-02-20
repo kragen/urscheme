@@ -1478,6 +1478,95 @@
         (compile-toplevel-define (cadr expr) (caddr expr) global-env))
       (compile-discarding expr global-env)))
 
+;;; Parsing: file handling
+
+;; "ungettable" wraps an input stream with a thunk s that you can read
+;; a character from (with (s)) or back up by a character (with (s
+;; 'unget)).  You pass in a thunk that returns a character when it's
+;; called.
+
+;; XXX come up with a better name.  back-up-able?
+
+;; It would be nice if we could map eof objects into 'eof or something
+;; to simplify the parsing transition rules, but then we have to have
+;; a way to return them so that (read) can return them, but that took
+;; this definition from 5 lines to 16.
+(define (ungettable thunk)
+  (let ((ungot #f) (last #f))
+    (lambda cmd (cond ((not (null? cmd)) (set! ungot last))
+                      (ungot (let ((result ungot)) (set! ungot #f) result))
+                      (else (set! last (thunk)) last)))))
+
+;; read-from-string returns a thunk that returns successive characters
+;; of a string, and then 'eof-indicator after the end of the string.
+
+;; There's a SRFI (SRFI 9?) that defines a way to use file operations
+;; on strings (in this case, using open-input-string), but at least my
+;; version of SCM doesn't support it.  But we need something like it
+;; for testing.
+(define (read-from-string string)
+  (let ((pos 0))
+    (lambda () (if (= pos (string-length string)) 'eof-indicator
+                   (begin (set! pos (1+ pos)) (string-ref string (1- pos)))))))
+;; unit tests:
+(define sample-sr (read-from-string "foo"))
+(assert-equal (sample-sr) #\f)
+(assert-equal (sample-sr) #\o)
+(assert-equal (sample-sr) #\o)
+(assert-equal (sample-sr) 'eof-indicator)
+(assert-equal (sample-sr) 'eof-indicator)
+
+(define sample-unget (ungettable (read-from-string "foo")))
+(assert-equal (sample-unget) #\f)
+(sample-unget 'unget)
+(assert-equal (sample-unget) #\f)
+(assert-equal (sample-unget) #\o)
+(assert-equal (sample-unget) #\o)
+(assert-equal (sample-unget) 'eof-indicator)
+
+;; actual parsing.
+
+(define (parse s) (case (after-wsp s)
+                    (( #\( ) (parse-list s))
+                    (else (s 'unget) (parse-symbol s))))
+(define (parse-list s) (case (after-wsp s)
+                         (( #\) ) '())
+                         (else (let ((hd (begin (s 'unget) (parse s))))
+                                 (cons hd (parse-list s))))))
+(define whitespace-chars "\n ")
+(define (after-wsp s) 
+  (let ((c (s))) (case c
+                   ((#\space #\newline #\tab) (after-wsp s))
+                   (( #\; ) (discard-comment s) (after-wsp s))
+                   (else c))))
+(define (discard-comment s) (if (eqv? (s) #\newline) #f (discard-comment s)))
+;; XXX list->string
+(define (parse-symbol s) (string->symbol (list->string (parse-symbol-2 s))))
+(define (parse-symbol-2 s) 
+  (let ((c (s))) 
+    (if (parse-eof? c) '()
+        (case c
+          (( #\space #\newline #\tab #\; #\( #\) #\' ) (s 'unget) '())
+          (else (cons c (parse-symbol-2 s)))))))
+
+(define (parse-string string) (parse (ungettable (read-from-string string))))
+(define (read-expr file) (parse (ungettable (lambda () (read-char file)))))
+;; Because we can't make a real eof-object portably, we fake it with this:
+(define (parse-eof? x) (or (eof-object? x) (eq? x 'eof-indicator)))
+
+;; Unit tests for parsing.  Unfortunately, there's no portable
+;; exception system in Scheme, so this doesn't include any tests of
+;; error handling!  (Even (error ...) isn't in R5RS.)
+(assert-equal (parse-string "()") '())
+(assert-equal (parse-string " ()") '())
+(assert-equal (parse-string "\n()") '())
+(assert-equal (parse-string " ( )") '())
+(assert-equal (parse-string ";hi\n(;hi\n)") '())
+(assert-equal (parse-string "x ") 'x)
+(assert-equal (parse-string "x") 'x)    ; terminated by eof
+(assert-equal (parse-string "xyz") 'xyz)
+(assert-equal (parse-string "(xyz)") '(xyz))
+
 ;;; Library of (a few) standard Scheme procedures defined in Scheme
 
 (define standard-library 
