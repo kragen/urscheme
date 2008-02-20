@@ -56,7 +56,7 @@
 ;; D < for integers
 ;; D recursive procedure calls
 ;; D display, for strings, and newline
-;; - error
+;; D error
 ;; D several other standard procedures: list, length, assq, caar,
 ;;   cdar, cadr, caddr, not, string-append, for-each (in a limited
 ;;   fashion), map (in a limited fashion), memq, memv, eqv?,
@@ -79,7 +79,7 @@
 ;; D list->string (already have string->list)
 ;; D char?
 ;; - set!
-;; - error
+;; D error
 ;; - something for the double-define of 1+
 
 ;; There were a bunch of parts of standard Scheme that I implemented
@@ -349,6 +349,17 @@
       (label labelname)
       (mov (const errlabel) tos)
       (jmp "report_error")))))
+
+;; Emit the code for the normal error-reporting routine
+(add-to-header (lambda ()
+    (label "report_error")
+    (extract-string)
+    (comment "fd 2: stderr")
+    (mov (const "2") ebx)
+    (write_2)
+    (mov (const "1") ebx)               ; exit code of program
+    (mov (const "1") eax)               ; __NR_exit
+    (syscall)))                         ; make system call to exit
 
 (define (compile-tag-check-procedure desired-tag)
   (get-procedure-arg 0)
@@ -1090,19 +1101,14 @@
              (mov (const eof-value) tos)
              (label "read_char_return")))  
 
-;;; Other miscellaneous crap that needs reorganizing
-
-;; Emit the code for the normal error-reporting routine
-(add-to-header (lambda ()
-    (label "report_error")
-    (extract-string)
-    (comment "fd 2: stderr")
-    (mov (const "2") ebx)
-    (write_2)
-    (mov (const "1") ebx)               ; exit code of program
-    (mov (const "1") eax)               ; __NR_exit
-    (syscall)))                         ; make system call to exit
-
+;; XXX this isn't terribly good --- it doesn't bother to say "error: "
+;; or append a newline, let alone representing the other args or
+;; providing a way to handle the error programmatically.
+(define-global-procedure 'error '()
+  (lambda () (get-procedure-arg 0)
+             (comment "get car --- first arg")
+             (mov (offset tos 4) tos)
+             (jmp "report_error")))
 
 ;;; Integers
 (define (tagshift str) (list (number->string str) "<<2"))
