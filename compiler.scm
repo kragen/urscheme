@@ -79,8 +79,8 @@
 ;;    1D make a compile-time alist of symbol labels
 ;;    2D emit them just as magic words at the end of the file
 ;;    3D change symbols to be merely pointers to those things
-;;    4. add pointers to strings to the symbols
-;;    5. add symbol->string
+;;    4D add pointers to strings to the symbols
+;;    5D add symbol->string
 ;;    6. add string->symbol
 ;; - string->number
 ;; D list->string (already have string->list)
@@ -965,12 +965,25 @@
 
 (define (emit-symbols)
   (comment "symbols")
-  (rodata)
   (for-each (lambda (symlabel)
               (comment "symbol: " (symbol->string (car symlabel)))
-              (label (cdr symlabel))
-              (compile-word symbol-magic))
+              (let ((stringlabel (compile-constant 
+                                  (symbol->string (car symlabel)))))
+                (rodatum (cdr symlabel))
+                (compile-word symbol-magic)
+                (compile-word stringlabel)))
             interned-symbol-list))
+
+(add-to-header (lambda () (label "ensure_symbol")
+                          (if-not-right-magic-jump symbol-magic "not_symbol")
+                          (ret)))
+(define-error-routine "not_symbol" "not a symbol")
+(define (ensure-symbol) (call "ensure_symbol"))
+
+(define-global-procedure 'symbol->string 1
+  (lambda () (get-procedure-arg 0)
+             (ensure-symbol)
+             (mov (offset tos 4) tos)))
 
 ;;; I/O: input and output.  Putout and Vladimir.
 
@@ -1252,12 +1265,13 @@
 
 (define (compile-quote-3 expr labelname)
   (cond ((string? expr) (constant-string-2 expr labelname))
-        ((pair? expr) (compile-cons (compile-quote-2 (car expr))
-                                    (compile-quote-2 (cdr expr))
+        ((pair? expr) (compile-cons (compile-constant (car expr))
+                                    (compile-constant (cdr expr))
                                     labelname))
         (else (error "unquotable" expr)))
   labelname)
-(define (compile-quote-2 expr)
+;; Return a thing you can stick into instructions to name the constant.
+(define (compile-constant expr)
   (cond ((null? expr)    nil-value)
         ((symbol? expr)  (symbol-value expr))
         ((integer? expr) (tagged-integer expr))
@@ -1266,7 +1280,7 @@
         (else            (compile-quote-3 expr (new-label)))))
 ;; compile-quotable: called for auto-quoted things and (quote ...)
 ;; exprs
-(define (compile-quotable obj env) (push-const (compile-quote-2 obj)))
+(define (compile-quotable obj env) (push-const (compile-constant obj)))
 
 (define (fetch-heap-var-pointer slotnum)
   (comment "fetching heap var pointer " (number->string slotnum))
