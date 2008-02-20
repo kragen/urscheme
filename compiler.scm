@@ -1122,6 +1122,9 @@
 ;; character.
 (define (native-to-scheme-character reg) (sal reg) (inc reg) (sal reg))
 
+(define (tagged-character char)
+  (list enum-tag " + '" (char->string char) "<<2"))
+
 ;; Emit code to push a boolean in place of the top two stack items.
 ;; It will be #t if they are equal, #f if they are not.
 (define (target-eq?)
@@ -1202,6 +1205,7 @@
         ((symbol? expr)  (symbol-value expr))
         ((integer? expr) (tagged-integer expr))
         ((boolean? expr) (if expr true-value false-value))
+        ((char? expr)    (tagged-character expr))
         (else            (compile-quote-3 expr (new-label)))))
 ;; compile-quotable: called for auto-quoted things and (quote ...)
 ;; exprs
@@ -1341,7 +1345,7 @@
 (define (compile-expr expr env tail?)
   (cond ((pair? expr)   (compile-combination (car expr) (cdr expr) env tail?))
         ((symbol? expr) (compile-var expr env tail?))
-        ((or (string? expr) (boolean? expr) (integer? expr))
+        ((or (string? expr) (boolean? expr) (integer? expr) (char? expr))
                         (compile-quotable expr env))
         (else (error "don't know how to compile" expr))))
 
