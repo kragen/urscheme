@@ -50,7 +50,8 @@
 ;; - garbage collection
 ;; D strings, with string-set!, string-ref, string literals,
 ;;   string-length, and make-string with one argument, and string=?
-;; D which unfortunately requires characters; char=?
+;; D which unfortunately requires characters; char=? and character
+;;   literals
 ;; D very basic arithmetic: two-argument +, -, quotient, remainder,
 ;;   and = for integers, and decimal numeric constants
 ;; D < for integers
@@ -87,7 +88,7 @@
 ;; - macros, quasiquote
 ;; - most of arithmetic
 ;; - vectors
-;; - much of the language syntax ` , ,@ character literals
+;; - some of the language syntax ` , ,@
 ;; - write
 ;; - proper tail recursion
 ;; - cond, case, and, or, do, not
