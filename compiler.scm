@@ -75,17 +75,12 @@
 ;; D char-alphabetic?
 ;; D and
 ;; D symbol->string, string->symbol
-;;    1D make a compile-time alist of symbol labels
-;;    2D emit them just as magic words at the end of the file
-;;    3D change symbols to be merely pointers to those things
-;;    4D add pointers to strings to the symbols
-;;    5D add symbol->string
-;;    6D add string->symbol
 ;; - string->number
 ;; D list->string (already have string->list)
 ;; D char?
 ;; - set!
 ;; - error
+;; - something for the double-define of 1+
 
 ;; There were a bunch of parts of standard Scheme that I implemented
 ;; at the top of the compiler, which was a little bit silly --- any
@@ -992,6 +987,7 @@
              (ensure-symbol)
              (mov (offset tos 4) tos)))
 
+;; XXX maybe this could use the normal string=?, or vice versa?
 (define-global-procedure 'string->symbol 1
   (lambda ()
     (get-procedure-arg 0)
@@ -1365,6 +1361,8 @@
     (label "ensure_heap_var")
     (if-not-right-magic-jump heap-var-magic "not_heap_var")
     (ret)))
+;; It should be impossible for a user program to cause this check to
+;; fail, but it did help me track down a few compiler bugs early on.
 (define (ensure-heap-var) (call "ensure_heap_var"))
 
 (define (fetch-heap-var slotnum)
