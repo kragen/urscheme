@@ -75,12 +75,14 @@
 ;; D char-alphabetic?
 ;; D and
 ;; D symbol->string, string->symbol
-;; - string->number
+;; D string->number
 ;; D list->string (already have string->list)
 ;; D char?
 ;; - set!
 ;; D error
 ;; - something for the double-define of 1+
+;; - make read accessible to programs compiled with the compiler
+;;   somehow
 
 ;; There were a bunch of parts of standard Scheme that I implemented
 ;; at the top of the compiler, which was a little bit silly --- any
@@ -647,7 +649,7 @@
              (store-closure-artifacts reg (+ off 4) (cdr artifacts) env))))
 
 ;; Heap variable objects are 8 bytes: a magic number and their current value.
-(define heap-var-magic "0x1abe11ed")
+(define heap-var-magic "0x1ce11ed")
 (define (move-var-to-heap-arg)
   (comment "moving top of stack to newly allocated heap var")
   (push-const (tagged-integer 8))
@@ -1644,10 +1646,9 @@
 ;; read-from-string returns a thunk that returns successive characters
 ;; of a string, and then 'eof-indicator after the end of the string.
 
-;; There's a SRFI (SRFI 9?) that defines a way to use file operations
-;; on strings (in this case, using open-input-string), but at least my
-;; version of SCM doesn't support it.  But we need something like it
-;; for testing.
+;; SRFI 6 defines a way to use file operations on strings (in this
+;; case, using open-input-string), but at least my version of SCM
+;; doesn't support it.  But we need something like it for testing.
 (define (read-from-string string)
   (let ((pos 0))
     (lambda () (if (= pos (string-length string)) 'eof-indicator
