@@ -264,10 +264,10 @@
 (define (set-label-prefix new-prefix) 
   ;; XXX we should avoid duplicates
   (set! label-prefix (cons "_"
-                           (escape (symbol->string new-prefix) 0 
-                                   ;; XXX incomplete list
-                                   '("+"    "-" "="  "?" ">"  "<"  "!")
-                                   '("Plus" "_" "Eq" "P" "Gt" "Lt" "Bang"))))
+     (escape (symbol->string new-prefix) 0 
+             ;; XXX incomplete list
+             '("+"    "-" "="  "?" ">"  "<"  "!"    "*")
+             '("Plus" "_" "Eq" "P" "Gt" "Lt" "Bang" "star"))))
   (set! constcounter 0))
 (define (new-label)
   (set! constcounter (1+ constcounter))
@@ -1320,6 +1320,7 @@
       (error "error: undefined global" (undefined-global-variables))
       #t))
 
+
 ;;; Compilation of particular kinds of expressions
 
 (define (compile-quote-3 expr labelname)
@@ -1499,6 +1500,7 @@
   (pop))
 
 (define global-env '())
+
 
 ;;; Macros.
 
@@ -1840,20 +1842,6 @@
       (string-append-2 s1 s2 (make-string (+ (string-length s1) 
                                              (string-length s2)))
                        0))
-    (define (char->string char)
-      (let ((buf (make-string 1))) (string-set! buf 0 char) buf))
-    (define (string-digit digit) 
-      (char->string (string-ref "0123456789" digit)))
-    (define (number->string-2 num tail)
-      (if (= num 0) tail
-          (number->string-2 (quotient num 10)
-                            (string-append (string-digit (remainder num 10)) 
-                                           tail))))
-    ;; Converts a number into a string of digits.
-    (define (number->string num)        ; standard
-      (cond ((= num 0) "0")
-            ((< num 0) (string-append "-" (number->string-2 (- 0 num) "")))
-            (else (number->string-2 num ""))))
 
 
     ;; chars
@@ -1861,8 +1849,9 @@
       (case c ((#\space #\newline #\tab) #t) (else #f)))
     (define (char<? a b) (< (char->integer a) (char->integer b)))
     (define (char<=? a b) (or (eqv? a b) (char<? a b)))
-    (define (char-alphabetic? x) (or (and (char<=? #\A x) (char<=? x #\Z))
-                                     (and (char<=? #\a x) (char<=? x #\z))))
+    (define (char-between? a b c) (and (char<=? a b) (char<=? b c)))
+    (define (char-alphabetic? x) (or (char-between? #\A x #\Z) 
+                                     (char-between? #\a x #\z)))
 
     ;; equality
     (define = eq?)
@@ -1891,6 +1880,7 @@
     (define (null? x) (eq? x '()))
     (define (boolean? x) (if (eq? x #t) #t (eq? x #f)))
 
+    ;; list utils
     (define (for-each proc list)   ; subset of standard: one list only
       (if (null? list) #f
           (begin
@@ -1898,21 +1888,62 @@
             (for-each proc (cdr list)))))
     (define (map proc list)        ; subset of standard: one list only
       (if (null? list) '() (cons (proc (car list)) (map proc (cdr list)))))
+
+    (define (reverse lst) (reverse-plus '() lst))
+    (define (reverse-plus tail lst) 
+      (if (null? lst) tail (reverse-plus (cons (car lst) tail) (cdr lst))))
+
+
+    ;; conversions
     (define (string->list string)       ; standard
       (string->list-2 string (string-length string) '()))
     (define (string->list-2 string n rest)
       (if (= n 0) rest
           (string->list-2 string (- n 1)
                           (cons (string-ref string (- n 1)) rest))))
+
     (define (list->string lst)
       (list->string-2 (make-string (length lst)) lst 0))
     (define (list->string-2 buf lst idx)
       (if (null? lst) buf
           (begin (string-set! buf idx (car lst))
                  (list->string-2 buf (cdr lst) (1+ idx)))))
-    (define (reverse lst) (reverse-plus '() lst))
-    (define (reverse-plus tail lst) 
-      (if (null? lst) tail (reverse-plus (cons (car lst) tail) (cdr lst))))
+
+    (define (char->string char)
+      (let ((buf (make-string 1))) (string-set! buf 0 char) buf))
+
+    (define (string-digit digit) 
+      (char->string (string-ref "0123456789" digit)))
+    (define (number->string-2 num tail)
+      (if (= num 0) tail
+          (number->string-2 (quotient num 10)
+                            (string-append (string-digit (remainder num 10)) 
+                                           tail))))
+    ;; Converts a number into a string of digits.
+    (define (number->string num)        ; standard
+      (cond ((= num 0) "0")
+            ((< num 0) (string-append "-" (number->string-2 (- 0 num) "")))
+            (else (number->string-2 num ""))))
+
+    ;; Converts a string of digits into a number.
+    (define (string->number str)
+      (if (string=? str "") (error "string->number of empty string")
+          (case (string-ref str 0)
+            (( #\+ )      (string->number-2 str 1 0))
+            (( #\- ) (- 0 (string->number-2 str 1 0)))
+            (else         (string->number-2 str 0 0)))))
+    (define (string->number-2 str idx sofar)
+      (if (= idx (string-length str)) sofar
+          (let ((c (string-ref str idx)))
+            (if (not (char-between? #\0 c #\9)) 
+                (error "non-numeric char" c str)
+                (string->number-2
+                 str
+                 (1+ idx)
+                 (+ (10* sofar) (- (char->integer c) (char->integer #\0))))))))
+    (define (10* x) (+ (8* x) (2* x)))
+    (define (2* x) (+ x x))
+    (define (8* x) (2* (2* (2* x))))
 ))
 
 ;;; Main Program
