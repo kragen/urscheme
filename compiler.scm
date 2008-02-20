@@ -1526,12 +1526,15 @@
 
 ;; actual parsing.
 
-(define (parse s) (case (after-wsp s)
-                    (( #\( ) (parse-list s))
-                    (( #\' ) (list 'quote (parse s)))
-                    (( #\" ) (parse-string-literal s))
-                    (( #\# ) (parse-hashy-thing s))
-                    (else (s 'unget) (parse-atom s))))
+(define (parse s) 
+  (let ((c (after-wsp s)))
+    (if (parse-eof? c) c
+        (case c
+          (( #\( ) (parse-list s))
+          (( #\' ) (list 'quote (parse s)))
+          (( #\" ) (parse-string-literal s))
+          (( #\# ) (parse-hashy-thing s))
+          (else (s 'unget) (parse-atom s))))))
 (define (parse-list s) (case (after-wsp s)
                          (( #\) ) '())
                          (( #\. ) (read-dotted-tail s))
@@ -1550,13 +1553,18 @@
 ;; XXX list->string
 (define (parse-atom s) 
   (let ((atom (parse-atom-2 s)))
-    (if (all-numeric? atom) (string->number (list->string atom))
+    (if (parsed-number? atom) (string->number (list->string atom))
         (string->symbol (list->string atom)))))
+(define (char-numeric? char)            ; XXX standard
+  (if (string-idx "0123456789" char) #t #f))
+(define (parsed-number? lst)
+  (cond ((null? lst) #f)
+        ((char-numeric? (car lst)) (all-numeric? (cdr lst)))
+        ((string-idx "+-" (car lst)) (and (not (null? (cdr lst))) 
+                                          (all-numeric? (cdr lst))))
+        (else #f)))
 (define (all-numeric? lst)
-  (or (null? lst) 
-      (case (car lst)
-        ((#\0 #\1 #\2 #\3 #\4 #\5 #\6 #\7 #\8 #\9) (all-numeric? (cdr lst)))
-        (else #f))))
+  (or (null? lst) (and (char-numeric? (car lst)) (all-numeric? (cdr lst)))))
 (define (parse-atom-2 s) 
   (let ((c (s))) 
     (if (parse-eof? c) '()
@@ -1576,7 +1584,21 @@
         (case c
           (( #\t ) #t)
           (( #\f ) #f)
+          (( #\\ ) (parse-char-literal s))
           (else (error "Unimplemented #" c))))))
+(define (parse-char-literal s)
+  (let ((c (s))) (cond ((parse-eof? c) (error "eof in char literal"))
+                       ((char-alphabetic? c) (s 'unget) (parse-named-char s))
+                       (else c))))
+(define (parse-named-char s)
+  (let ((name (parse-atom-2 s)))
+    (if (= 1 (length name)) (car name)
+        (case (string->symbol (list->string name))
+          ((space) #\space)
+          ((newline) #\newline)
+          ((tab) #\tab)
+          (else (error "Unrecognized character name"
+                       (string->symbol (list->string name))))))))
                     
 
 (define (parse-string string) (parse (ungettable (read-from-string string))))
@@ -1608,15 +1630,13 @@
              '(char->string (string-ref "0123456789" digit)))
 (assert-equal (parse-string "(foo\"3\"()\"5\")") '(foo "3" () "5"))
 (assert-equal (parse-string "(b a #t #f)") '(b a #t #f))
+(assert-equal (parse-string "(mov (offset ebp -8) esp)") 
+              '(mov (offset ebp -8) esp))
+(assert (parse-eof? (parse-string "")) "parsing at end of file")
 
-(define compilerfile (open-input-file "compiler.scm"))
-(define (foo x) 
-  (if (= x 0) #f
-      (begin (display "# ") 
-             (write (read-expr compilerfile)) 
-             (newline)
-             (foo (1- x)))))
-(foo 75)
+(assert-equal 
+ (parse-string "(#\\a #\\newline #\\tab #\\space #\\( #\\) #\\# #\\\\)")
+ '(#\a #\newline #\tab #\space #\( #\) #\# #\\))
 
 ;;; Library of (a few) standard Scheme procedures defined in Scheme
 
@@ -1735,7 +1755,7 @@
   (assert-no-undefined-global-variables))
 
 (define (read-compile-loop)
-  (let ((expr (read)))
+  (let ((expr (read-expr (current-input-port))))
     (if (eof-object? expr) #t
         (begin (compile-toplevel expr)
                (read-compile-loop)))))
