@@ -33,7 +33,9 @@ tmp.s: compiler.scm test.crufty.scm
 	diff -u $@.ref.old $@.ref ||:
 clean:
 	rm -f a.out tmp.s $(listing) tmp.s.ref tmp.s.ref.old
-tests:
+tests: chmodding
 	./runtests
 summary:
 	egrep '^;;;|^\(' compiler.scm
+chmodding:
+	chmod 755 runtests runscheme
