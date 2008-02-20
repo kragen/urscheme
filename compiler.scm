@@ -75,13 +75,13 @@
 ;; D read-char
 ;; - char-alphabetic?
 ;; - and
-;; - symbol->string, string->symbol
+;; D symbol->string, string->symbol
 ;;    1D make a compile-time alist of symbol labels
 ;;    2D emit them just as magic words at the end of the file
 ;;    3D change symbols to be merely pointers to those things
 ;;    4D add pointers to strings to the symbols
 ;;    5D add symbol->string
-;;    6. add string->symbol
+;;    6D add string->symbol
 ;; - string->number
 ;; D list->string (already have string->list)
 ;; - char?
@@ -236,15 +236,16 @@
 ;; These have two-arg forms too, but I'm not using them.
 (define sal (onearg "sal"))       (define sar (onearg "sar"))
 
-;; Currently only using two zero-argument instructions:
+;; Currently only using three zero-argument instructions:
 (define (ret) (insn "ret"))
-(define (repstosb) (insn "rep stosb"))
+(define (rep-stosb) (insn "rep stosb"))
+(define (repe-cmpsb) (insn "repe cmpsb"))
 
 ;; Registers:
 (define eax "%eax")  (define ebx "%ebx")  
 (define ecx "%ecx")  (define edx "%edx")
 (define ebp "%ebp")  (define esp "%esp")
-(define edi "%edi")
+(define esi "%esi")  (define edi "%edi")
 (define al "%al")
 
 ;; x86 addressing modes:
@@ -814,7 +815,7 @@
              (lea (offset ebx 8) edi)
              (mov tos ecx)
              (mov (const "'X") eax)
-             (repstosb)
+             (rep-stosb)
              (comment "now pop and return the address")
              (pop)))
 
@@ -965,14 +966,21 @@
 
 (define (emit-symbols)
   (comment "symbols")
-  (for-each (lambda (symlabel)
-              (comment "symbol: " (symbol->string (car symlabel)))
-              (let ((stringlabel (compile-constant 
-                                  (symbol->string (car symlabel)))))
-                (rodatum (cdr symlabel))
-                (compile-word symbol-magic)
-                (compile-word stringlabel)))
-            interned-symbol-list))
+  (emit-symbols-from "0" interned-symbol-list))
+(define (emit-symbols-from last-pointer remaining)
+  (if (null? remaining) (emit-symbol-list-header last-pointer)
+      (let ((symlabel (car remaining)))
+        (comment "symbol: " (symbol->string (car symlabel)))
+        (let ((stringlabel (compile-constant (symbol->string (car symlabel)))))
+          (rodatum (cdr symlabel))
+          (compile-word symbol-magic)
+          (compile-word stringlabel)
+          (compile-word last-pointer)
+          (emit-symbols-from (cdr symlabel) (cdr remaining))))))
+(define (emit-symbol-list-header last-pointer)
+  (section ".data")
+  (label "symbol_table")
+  (compile-word last-pointer))
 
 (add-to-header (lambda () (label "ensure_symbol")
                           (if-not-right-magic-jump symbol-magic "not_symbol")
@@ -984,6 +992,49 @@
   (lambda () (get-procedure-arg 0)
              (ensure-symbol)
              (mov (offset tos 4) tos)))
+
+(define-global-procedure 'string->symbol 1
+  (lambda ()
+    (get-procedure-arg 0)
+    (extract-string)
+    (comment "now string length is in %eax and string data pointer at (%esp)")
+    (mov (indirect "symbol_table") ebx)
+    (label "string_to_symbol_loop")
+    (test ebx ebx)
+    (jz "intern_new_symbol")
+    (comment "fetch pointer to string value")
+    (mov (offset ebx 4) edx)
+    (comment "fetch string length")
+    (mov (offset edx 4) ecx)
+    (cmp ecx eax)
+    (jnz "wrong_symbol_thanks_for_playing")
+    (comment "fetch string pointer")
+    (lea (offset edx 8) esi)
+    (mov nos edi)
+    (repe-cmpsb)
+    (jnz "wrong_symbol_thanks_for_playing")
+    (comment "found the right symbol")
+    (pop)
+    (mov ebx tos)
+    (jmp "string_symbol_return")
+    (label "wrong_symbol_thanks_for_playing")
+    (comment "get address of next symbol")
+    (mov (offset ebx 8) ebx)
+    (jmp "string_to_symbol_loop")
+    (label "intern_new_symbol")
+    (comment "get string pointer")
+    (get-procedure-arg 0)
+    (comment "symbols are 12 bytes")
+    (push-const (tagged-integer 12))
+    (emit-malloc)
+    (mov (const symbol-magic) (indirect tos))
+    (comment "store string pointer for new symbol")
+    (mov nos ebx)
+    (mov ebx (offset tos 4))
+    (mov (indirect "symbol_table") ebx)
+    (mov ebx (offset tos 8))
+    (mov tos (indirect "symbol_table"))
+    (label "string_symbol_return")))    
 
 ;;; I/O: input and output.  Putout and Vladimir.
 
