@@ -31,8 +31,7 @@
 ;; D car, cdr, cons
 ;; D null?
 ;; D booleans
-;; D eq?, pair?, null?, symbol?, integer?, boolean?, string?, procedure? 
-;; - char?
+;; D eq?, pair?, null?, symbol?, integer?, boolean?, string?, procedure?, char?
 ;; D if (with three arguments)
 ;; D lambda (with fixed numbers of arguments or with a single argument
 ;;   that gets bound to the argument list (lambda <var> <body>)
@@ -84,7 +83,7 @@
 ;;    6D add string->symbol
 ;; - string->number
 ;; D list->string (already have string->list)
-;; - char?
+;; D char?
 ;; - set!
 ;; - error
 
@@ -1218,12 +1217,12 @@
   (pop)
   (je label))
 
-;; Emit code to generate an error if TOS isn't a character.
-(define (ensure-character) 
+;; Emit code to jump if TOS isn't a character.
+(define (jump-if-not-char label)
   (test (const "1") tos)
-  (jnz "not_a_character")
+  (jnz label)
   (test (const "2") tos)
-  (jz "not_a_character")
+  (jz label)
   ;; Intel manual 253666 says, "The comparison is
   ;; performed by subtracting the second operand
   ;; from the first operand and then setting the
@@ -1233,9 +1232,17 @@
   ;; operand", so we expect to set the carry flag
   ;; here.
   (cmp (const (enum-value 256)) tos)
-  (jnb "not_a_character"))
+  (jnb label))
 
+;; Emit code to generate an error if TOS isn't a character.
+(define (ensure-character) (jump-if-not-char "not_a_character"))
 (define-error-routine "not_a_character" "not a character")
+
+(define-global-procedure 'char? 1 
+  (lambda ()
+    (get-procedure-arg 0)
+    (jump-if-not-char "return_false")
+    (jmp "return_true")))
 
 ;; Emit code to leave an unsigned native character in the register,
 ;; converting from a tagged character.
