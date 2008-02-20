@@ -1528,11 +1528,18 @@
 
 (define (parse s) (case (after-wsp s)
                     (( #\( ) (parse-list s))
-                    (else (s 'unget) (parse-symbol s))))
+                    (( #\' ) (list 'quote (parse s)))
+                    (( #\" ) (parse-string-literal s))
+                    (( #\# ) (parse-hashy-thing s))
+                    (else (s 'unget) (parse-atom s))))
 (define (parse-list s) (case (after-wsp s)
                          (( #\) ) '())
+                         (( #\. ) (read-dotted-tail s))
                          (else (let ((hd (begin (s 'unget) (parse s))))
                                  (cons hd (parse-list s))))))
+(define (read-dotted-tail s)
+  (let ((rv (parse s)))
+    (if (eqv? #\) (after-wsp s)) rv (error "funky dotted list"))))
 (define whitespace-chars "\n ")
 (define (after-wsp s) 
   (let ((c (s))) (case c
@@ -1541,13 +1548,36 @@
                    (else c))))
 (define (discard-comment s) (if (eqv? (s) #\newline) #f (discard-comment s)))
 ;; XXX list->string
-(define (parse-symbol s) (string->symbol (list->string (parse-symbol-2 s))))
-(define (parse-symbol-2 s) 
+(define (parse-atom s) 
+  (let ((atom (parse-atom-2 s)))
+    (if (all-numeric? atom) (string->number (list->string atom))
+        (string->symbol (list->string atom)))))
+(define (all-numeric? lst)
+  (or (null? lst) 
+      (case (car lst)
+        ((#\0 #\1 #\2 #\3 #\4 #\5 #\6 #\7 #\8 #\9) (all-numeric? (cdr lst)))
+        (else #f))))
+(define (parse-atom-2 s) 
   (let ((c (s))) 
     (if (parse-eof? c) '()
         (case c
-          (( #\space #\newline #\tab #\; #\( #\) #\' ) (s 'unget) '())
-          (else (cons c (parse-symbol-2 s)))))))
+          (( #\space #\newline #\tab #\; #\( #\) #\' #\" ) (s 'unget) '())
+          (else (cons c (parse-atom-2 s)))))))
+(define (parse-string-literal s) (list->string (parse-string-literal-2 s)))
+(define (parse-string-literal-2 s)
+  (let ((c (s))) (case c                ; XXX eof in string
+                   (( #\\ ) (let ((next (s))) 
+                              (cons next (parse-string-literal-2 s))))
+                   (( #\" ) '())
+                   (else (cons c (parse-string-literal-2 s))))))
+(define (parse-hashy-thing s)
+  (let ((c (s))) 
+    (if (parse-eof? c) (error "eof after #")
+        (case c
+          (( #\t ) #t)
+          (( #\f ) #f)
+          (else (error "Unimplemented #" c))))))
+                    
 
 (define (parse-string string) (parse (ungettable (read-from-string string))))
 (define (read-expr file) (parse (ungettable (lambda () (read-char file)))))
@@ -1566,6 +1596,27 @@
 (assert-equal (parse-string "x") 'x)    ; terminated by eof
 (assert-equal (parse-string "xyz") 'xyz)
 (assert-equal (parse-string "(xyz)") '(xyz))
+(assert-equal (parse-string "(x y z)") '(x y z))
+(assert-equal (parse-string "(x y . z)") '(x y . z))
+(assert-equal (parse-string "(define (1+ x) (+ x 1))")
+              '(define (1+ x) (+ x 1)))
+(assert-equal 
+ (parse-string "(define (filter fn lst)  ; foo\n  (if (null? lst) '()))")
+ '(define (filter fn lst) (if (null? lst) (quote ()))))
+(parse-string "(char->string (string-ref \"0123456789\"))") ; digit)))")
+(assert-equal (parse-string "(char->string (string-ref \"0123456789\" digit)))")
+             '(char->string (string-ref "0123456789" digit)))
+(assert-equal (parse-string "(foo\"3\"()\"5\")") '(foo "3" () "5"))
+(assert-equal (parse-string "(b a #t #f)") '(b a #t #f))
+
+(define compilerfile (open-input-file "compiler.scm"))
+(define (foo x) 
+  (if (= x 0) #f
+      (begin (display "# ") 
+             (write (read-expr compilerfile)) 
+             (newline)
+             (foo (1- x)))))
+(foo 75)
 
 ;;; Library of (a few) standard Scheme procedures defined in Scheme
 
