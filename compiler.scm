@@ -155,31 +155,17 @@
 (define (double val) (+ val val))
 (define (quadruple val) (double (double val)))
 
-;; Note: these currently cause a compile error because they are also
-;; in our standard library.  The names come from SBCL.  XXX I don't
-;; know if they are in Common Lisp.
-(define (1+ x) (+ x 1))
-(define (1- x) (- x 1))
+;; These functions' names come from Common Lisp or Forth.
+(define (1+ x) (+ x 1))                 ; duplicated in stdlib
+(define (1- x) (- x 1))                 ; duplicated in stdlib
 
 (define (filter fn lst)  ; this must exist in r5rs but I can't find it
   (if (null? lst) '()
       (let ((first (car lst)) (rest (filter fn (cdr lst))))
         (if (fn first) (cons first rest) rest))))
 
-(define (char->string char) 
+(define (char->string char)             ; duplicated in stdlib
   (let ((buf (make-string 1))) (string-set! buf 0 char) buf))
-(define (string-digit digit) (char->string (string-ref "0123456789" digit)))
-(define (number->string-2 num tail)
-  (if (= num 0) tail
-      (number->string-2 (quotient num 10)
-                        (string-append (string-digit (remainder num 10)) 
-                                       tail))))
-;; Converts a number into a string of digits.
-;; XXX move into standard library!
-(define (number->string num)                  ; same as standard
-  (cond ((= num 0) "0")
-        ((< num 0) (string-append "-" (number->string-2 (- 0 num) "")))
-        (else (number->string-2 num ""))))
 
 ;; Boy, it sure causes a lot of hassle that Scheme has different types
 ;; for strings and chars.
@@ -1854,6 +1840,21 @@
       (string-append-2 s1 s2 (make-string (+ (string-length s1) 
                                              (string-length s2)))
                        0))
+    (define (char->string char)
+      (let ((buf (make-string 1))) (string-set! buf 0 char) buf))
+    (define (string-digit digit) 
+      (char->string (string-ref "0123456789" digit)))
+    (define (number->string-2 num tail)
+      (if (= num 0) tail
+          (number->string-2 (quotient num 10)
+                            (string-append (string-digit (remainder num 10)) 
+                                           tail))))
+    ;; Converts a number into a string of digits.
+    (define (number->string num)        ; standard
+      (cond ((= num 0) "0")
+            ((< num 0) (string-append "-" (number->string-2 (- 0 num) "")))
+            (else (number->string-2 num ""))))
+
 
     ;; chars
     (define (char-whitespace? c)
@@ -1886,6 +1887,7 @@
           (and (char=? (string-ref a idx) (string-ref b idx))
                (string=?-2 a b (1+ idx)))))
 
+    ;; type tests
     (define (null? x) (eq? x '()))
     (define (boolean? x) (if (eq? x #t) #t (eq? x #f)))
 
