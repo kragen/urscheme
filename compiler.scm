@@ -953,7 +953,7 @@
         (else (interning symbol (cdr symlist)))))
 (define (symbol-value symbol) (list "3 + " (tagshift (intern symbol))))
 
-;;; Other miscellaneous crap that needs reorganizing
+;;; I/O: input and output.  Putout and Vladimir.
 
 ;; Emit code which, given a byte count on top of stack and a string
 ;; pointer underneath it, outputs the string.
@@ -984,6 +984,8 @@
   (lambda () (get-procedure-arg 0)
              (get-procedure-arg 1)
              (target-eq?)))
+
+;;; Other miscellaneous crap that needs reorganizing
 
 ;; Emit the code for the normal error-reporting routine
 (add-to-header (lambda ()
