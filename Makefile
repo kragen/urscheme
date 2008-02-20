@@ -1,8 +1,9 @@
 # Use any of these:
 #scheme = guile -s
 scheme = mzscheme -r
+# SCM gives nice stack traces:
 #scheme = scm -f
-# Bigloo produces lots of warnings but works:
+# Bigloo produces lots of warnings but used to work:
 #scheme = bigloo -i
 #scheme = elk -l
 listing=tmp.s.lst
