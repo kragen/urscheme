@@ -38,14 +38,14 @@
 ;; D begin
 ;; D global variables
 ;; D lexically-scoped local variables
-;; - nested scopes and closures
+;; D nested scopes and closures
 ;; - set! for global and local variables
 ;; D top-level define of a variable (not a function)
 ;; - read, for proper and improper lists, symbols, strings, integers,
-;;   #t and #f, and '
-;; - consequently symbols need to store their strings, and we need
+;;   #t and #f, and '  (written, just not provided to other programs yet)
+;; D consequently symbols need to store their strings, and we need
 ;;   string->symbol; other parts of the compiler use symbol->string
-;; - eof-object?
+;; D eof-object?
 ;; - garbage collection
 ;; D strings, with string-set!, string-ref, string literals,
 ;;   string-length, and make-string with one argument, and string=?
