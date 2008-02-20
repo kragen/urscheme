@@ -1823,6 +1823,7 @@
     (define (caddr val) (car (cddr val)))
     (define (caadr val) (car (cadr val)))
     (define (cdadr val) (cdr (cadr val)))
+    (define (cadar val) (car (cdar val)))
     (define (not x) (if x #f #t))       ; standard
 
     ;; string manipulation
@@ -1880,6 +1881,9 @@
     ;; type tests
     (define (null? x) (eq? x '()))
     (define (boolean? x) (if (eq? x #t) #t (eq? x #f)))
+    ;; we don't have any other kinds of numbers
+    (define number? integer?)    
+
 
     ;; list utils
     (define (for-each proc list)   ; subset of standard: one list only
