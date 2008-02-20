@@ -1,0 +1,4 @@
+#!/bin/bash
+set -e
+diff -u  <(echo "hello Mellow Yellow" | ./runscheme test-cryptogram-sig.scm) \
+         <(echo "0122345122364712236 hello Mellow Yellow")

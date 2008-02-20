@@ -71,8 +71,8 @@
 ;; of small integers.
 
 ;; Remaining to implement:
-;; - current-input-port
-;; - read-char
+;; D current-input-port
+;; D read-char
 ;; - char-alphabetic?
 ;; - and
 ;; - string->symbol
@@ -984,6 +984,33 @@
   (lambda () (get-procedure-arg 0)
              (get-procedure-arg 1)
              (target-eq?)))
+
+(define-global-procedure 'current-input-port 0
+  (lambda () (comment "We don't have ports right now, so return nil")
+             (push-const nil-value)))
+
+(define-global-procedure 'read-char '()
+  (lambda () (comment "We don't care about our args.")
+             (comment "(maybe somebody passed us (current-input-port))")
+             (section ".data")
+             (label "read_char_buffer")
+             (compile-word "0")
+             (text)
+             (comment "__NR_read; see asm-i486/unistd.h")
+             (mov (const "3") eax)
+             (comment "stdin")
+             (mov (const "0") ebx)
+             (mov (const "read_char_buffer") ecx)
+             (mov (const "1") edx)
+             (syscall)
+             (test eax eax)
+             (je "return_eof")
+             (movzbl (indirect "read_char_buffer") tos)
+             (native-to-scheme-character tos)
+             (jmp "read_char_return")
+             (label "return_eof")
+             (mov (const eof-value) tos)
+             (label "read_char_return")))  
 
 ;;; Other miscellaneous crap that needs reorganizing
 

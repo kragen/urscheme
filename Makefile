@@ -36,7 +36,8 @@ clean:
 	rm -f a.out tmp.s $(listing) tmp.s.ref tmp.s.ref.old
 tests: chmodding
 	./runtests
+	./test-read-char
 summary:
 	egrep '^;;;|^\(' compiler.scm
 chmodding:
-	chmod 755 runtests runscheme
+	chmod 755 runtests runscheme test-read-char
