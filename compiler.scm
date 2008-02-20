@@ -1200,12 +1200,11 @@
 (define global-variable-labels '())
 (define global-variables-defined '())
 
-(define (add-new-global-variable-binding! name label)
-  (set! global-variable-labels 
-        (cons (cons name label) global-variable-labels))
-  label)
-(define (allocate-new-global-variable-label! name) 
-  (add-new-global-variable-binding! name (new-label)))
+(define (allocate-new-global-variable-label! name)
+  (let ((label (new-label)))
+    (set! global-variable-labels 
+          (cons (cons name label) global-variable-labels))
+    label))
 
 ;; Return a label representing this global variable, allocating a new
 ;; one if necessary.
