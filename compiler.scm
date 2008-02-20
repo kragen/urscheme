@@ -721,7 +721,7 @@
  (lambda () 
    (insn ".bss")
    (label "the_arena")
-   (insn ".space 1048576")
+   (insn ".space 128*1048576")          ; no GC yet!
    (compile-global-variable "arena_pointer" "the_arena")))
 
 ;; Emit code to bump a pointer in a register up, if necessary, to be
