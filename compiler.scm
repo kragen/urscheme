@@ -1755,6 +1755,9 @@
       (if (null? lst) buf
           (begin (string-set! buf idx (car lst))
                  (list->string-2 buf (cdr lst) (1+ idx)))))
+    (define (reverse lst) (reverse-plus '() lst))
+    (define (reverse-plus tail lst) 
+      (if (null? lst) tail (reverse-plus (cons (car lst) tail) (cdr lst))))
 ))
 
 ;;; Main Program
