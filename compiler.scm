@@ -78,7 +78,7 @@
 ;; - string->symbol
 ;; - symbol->string
 ;; - string->number
-;; - list->string (already have string->list)
+;; D list->string (already have string->list)
 ;; - char?
 ;; - set!
 ;; - error
@@ -1746,7 +1746,14 @@
     (define (string->list-2 string n rest)
       (if (= n 0) rest
           (string->list-2 string (- n 1)
-                          (cons (string-ref string (- n 1)) rest))))))
+                          (cons (string-ref string (- n 1)) rest))))
+    (define (list->string lst)
+      (list->string-2 (make-string (length lst)) lst 0))
+    (define (list->string-2 buf lst idx)
+      (if (null? lst) buf
+          (begin (string-set! buf idx (car lst))
+                 (list->string-2 buf (cdr lst) (1+ idx)))))
+))
 
 ;;; Main Program
 
