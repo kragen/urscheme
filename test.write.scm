@@ -10,5 +10,7 @@
                 (foo bar)
                 (foo bar baz)
                 (foo bar . baz)
+                3
+                (1 2 3 5)
                 (#t #f)
                 (#\x #\y #\newline #\space #\\)))

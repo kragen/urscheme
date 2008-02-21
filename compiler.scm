@@ -2068,6 +2068,7 @@
       (cond ((string? x) (wstring x display))
             ((or (pair? x) (null? x)) (display "(") (wlist x display))
             ((symbol? x) (display (symbol->string x)))
+            ((number? x) (display (number->string x)))
             ((eq? x #t) (display "#t"))
             ((eq? x #f) (display "#f"))
             ((eq? x #\newline) (display "#\\newline"))
