@@ -1,7 +1,8 @@
 #!/bin/sh
 set -e
-trap 'rm -f tmp.s a.out' EXIT # clean up in case of early failure exit
-mzscheme -r compiler.scm < "${1?usage: $0 foo.scm}" > tmp.s
-gcc -nostdlib tmp.s
+# clean up in case of early failure exit
+trap 'rm -f runscheme.s runscheme.out' EXIT
+mzscheme -r compiler.scm < "${1?usage: $0 foo.scm}" > runscheme.s
+gcc -nostdlib runscheme.s -o runscheme.out
 trap '' EXIT                    # no need to do cleanup any more
-./a.out
+./runscheme.out

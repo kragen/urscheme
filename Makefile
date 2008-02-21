@@ -22,10 +22,11 @@ listing=tmp.s.lst
 # file.  (It's unusual to have an assembly file that can compile both
 # with and without -nostdlib, but this is one.)
 asflags = -nostdlib -Wa,-adhlns=$(listing)
-all: urscheme-compiler
-urscheme-compiler: test tests compiler.scm
-	$(scheme) compiler.scm < compiler.scm > compiler.s
-	$(CC) $(asflags) compiler.s -o $@
+all: test tests urscheme-compiler
+urscheme-compiler: compiler.s
+	time $(CC) $(asflags) $< -o $@
+compiler.s: compiler.scm
+	time $(scheme) $< < $< > $@
 test: a.out
 	./a.out
 a.out: tmp.s
@@ -36,7 +37,8 @@ tmp.s: compiler.scm test.crufty.scm
 	cp $@ $@.ref
 	diff -u $@.ref.old $@.ref ||:
 clean:
-	rm -f a.out tmp.s $(listing) tmp.s.ref tmp.s.ref.old
+	rm -f a.out tmp.s $(listing) tmp.s.ref tmp.s.ref.old \
+		urscheme-compiler compiler.s runscheme.s compiler.s.stage2
 tests: chmodding
 	./runtests
 	./test-read-char
@@ -44,3 +46,6 @@ summary:
 	egrep '^;;;|^\(' compiler.scm
 chmodding:
 	chmod 755 runtests runscheme test-read-char
+stage2-test: urscheme-compiler compiler.s compiler.scm
+	time ./urscheme-compiler < compiler.scm > compiler.s.stage2
+	diff -u compiler.s compiler.s.stage2
