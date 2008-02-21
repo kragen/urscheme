@@ -1,5 +1,5 @@
-;;; UrScheme: A self-hosting compiler for a subset of R5RS Scheme to x86 asm
-;; Kragen Javier Sitaker, 2008-01-03 through 10
+;;; Ur-Scheme: A self-hosting compiler for a subset of R5RS Scheme to x86 asm
+;; Kragen Javier Sitaker, 2008-01-03 through 21
 
 ;; From the Scheme 9 From Empty Space page:
 ;;     Why in earth write another half-baked implementation of Scheme?
@@ -1091,7 +1091,7 @@
 (define-global-procedure 'display 1
   (lambda () (get-procedure-arg 0)
              (target-display)))
-(define-global-procedure 'newline 0 target-newline)
+(define-global-procedure 'newline 0 target-newline) ; XXX rewrite in Lisp
 (define-global-procedure 'eq? 2 
   (lambda () (get-procedure-arg 0)
              (get-procedure-arg 1)
@@ -1547,6 +1547,8 @@
 
 ;; if, lambda, quote, and set! are the standard Scheme set of
 ;; primitive special forms.
+;; XXX this is misleadingly named.  Only actual procedure calls are
+;; "combinations".
 (define (compile-combination rator rands env tail?)
   (case rator
     ((%begin) (compile-begin rands env tail?))
