@@ -276,8 +276,6 @@
   (list label-prefix "_" (number->string constcounter)))
 
 ;; stuff to output a Lisp string safely for assembly language
-(define dangerous '("\\" "\n" "\""))
-(define escapes '("\\\\" "\\n" "\\\""))
 (define (escape-char char dangerous escapes)
   (cond ((null? dangerous) (char->string char))
         ((char=? char (string-ref (car dangerous) 0))
@@ -287,9 +285,10 @@
   (if (= idx (string-length string)) '()
       (cons (escape-char (string-ref string idx) dangerous escapes)
             (escape string (1+ idx) dangerous escapes))))
+(define (backslash string) (escape string 0 '("\\"   "\n"  "\"") 
+                                            '("\\\\" "\\n" "\\\"")))
 ;; Represent a string appropriately for the output assembly language file.
-(define (asm-represent-string string)
-  (list "\"" (escape string 0 dangerous escapes) "\""))
+(define (asm-represent-string string) (list "\"" (backslash string) "\""))
 
 (define (ascii string) (insn ".ascii " (asm-represent-string string)))
 
