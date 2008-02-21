@@ -91,19 +91,17 @@
 
 ;;; Not implemented:
 ;; - call/cc, dynamic-wind
-;; - macros, quasiquote
+;; - user-definable macros
+;; - quasiquote
 ;; - most of arithmetic
 ;; - vectors
 ;; - some of the language syntax ` , ,@
-;; - write
-;; - proper tail recursion
-;; - cond, case, and, or, do, not
+;; - do
 ;; - let, let*, letrec
 ;; - delay, force
 ;; - internal definitions
 ;; - most of the library procedures for handling lists, characters
 ;; - eval, apply
-;; - map, for-each
 ;; - multiple-value returns
 ;; - scheme-report-environment, null-environment
 
