@@ -1310,14 +1310,14 @@
              (set! global-variables-defined 
                    (cons (list name) global-variables-defined)))))
 
-;; Emit code to fetch from a global variable at such-and-such a label.
-(define (fetch-global-variable label)
+;; Emit code to fetch from a global variable
+(define (fetch-global-variable varname)
   (asm-push tos) 
-  (mov (indirect label) tos))
+  (mov (indirect (global-variable-label varname)) tos))
 
-;; Emit code to set a global variable at such-and-such a label.
-(define (set-global-variable label)
-  (mov tos (indirect label)))
+;; Emit code to set a global variable
+(define (set-global-variable varname)
+  (mov tos (indirect (global-variable-label varname))))
 
 ;; Return a list of undefined global variables.
 (define (undefined-global-variables)
@@ -1393,14 +1393,14 @@
 (define (compile-var var env)
   (let ((binding (assq var env)))
     (if binding (get-variable (cdr binding))
-        (fetch-global-variable (global-variable-label var)))))
+        (fetch-global-variable var))))
 
 ;; Compile a set! form
 (define (compile-set var defn env)
   (compile-expr defn env #f)
   (let ((binding (assq var env)))
     (if binding (set-variable (cdr binding))
-        (set-global-variable (global-variable-label var)))))
+        (set-global-variable var))))
 
 ;; compile an expression, discarding result, e.g. for toplevel
 ;; expressions
