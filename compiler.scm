@@ -176,12 +176,47 @@
 
 ;; emit: output a line of assembly by concatenating the strings in an
 ;; arbitrarily nested list structure
-(define (emit . stuff) (emit-inline stuff) (newline))
-(define (emit-inline stuff)
-  (cond ((null? stuff) #t)
-        ((pair? stuff) (emit-inline (car stuff)) (emit-inline (cdr stuff)))
-        ((string? stuff) (display stuff))
-        (else (error (list "emitting" stuff)))))
+(define assembly-diversions #f)
+(define diverted-assembly '())
+(define (asm-newline) (asm-display "\n"))
+(define (asm-display stuff)
+  (if assembly-diversions (set! diverted-assembly (cons stuff diverted-assembly))
+      (display stuff)))
+(define (push-assembly-diversion)
+  (assert (not assembly-diversions) "already diverted")
+  (set! assembly-diversions #t))
+(define (pop-diverted-assembly)
+  (let ((result (asm-flatten (reverse diverted-assembly))))
+    (set! assembly-diversions #f)
+    (set! diverted-assembly '())
+    result))
+(define (emit . stuff) (asm-display (asm-flatten stuff)) (asm-newline))
+(define (asm-flatten stuff)
+  (let ((buf (make-string (asm-flatten-size stuff))))
+    (asm-flatten-inner buf 0 stuff)
+    buf))
+(define (asm-flatten-size stuff)
+  (cond ((null? stuff) 0) 
+        ((pair? stuff) (+ (asm-flatten-size (car stuff))
+                          (asm-flatten-size (cdr stuff))))
+        ((string? stuff) (string-length stuff))
+        (else (error "flatten-size" stuff))))
+(define (asm-flatten-inner buf idx stuff)
+  (cond ((null? stuff) 
+         idx)
+        ((pair? stuff)
+         (asm-flatten-inner buf 
+                            (asm-flatten-inner buf idx (car stuff))
+                            (cdr stuff)))
+        ((string? stuff)
+         (string-blit stuff 0 (string-length stuff) buf idx)
+         (+ idx (string-length stuff)))
+        (else 
+         (error "flattening" stuff))))
+(define (string-blit src srcidx len dest destidx)
+  (if (= len 0) #f 
+      (begin (string-set! dest destidx (string-ref src srcidx))
+             (string-blit src (1+ srcidx) (1- len) dest (1+ destidx)))))
 
 ;; Emit an indented instruction
 (define (insn . insn) (emit (cons "        " insn)))
@@ -1928,6 +1963,7 @@
             (string-append-2 s1 s2 buf (1+ idx)))))
     ;; XXX we could get rid of this if we weren't using it for creating error msgs
     ;; (and now, again, number->string)
+    ;; XXX use string-blit
     (define (string-append s1 s2)       ; standard
       (string-append-2 s1 s2 (make-string (+ (string-length s1) 
                                              (string-length s2)))
