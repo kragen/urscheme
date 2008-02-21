@@ -1274,8 +1274,12 @@
 ;; character.
 (define (native-to-scheme-character reg) (sal reg) (inc reg) (sal reg))
 
+;; Return string to represent character in assembly language.
+;; Previously used 'a, 'b, 'c, etc., but that gets error-prone with
+;; things like backslash.  Much to my surprise it did work with space,
+;; tab, and newline, though...
 (define (tagged-character char)
-  (list enum-tag " + '" (char->string char) "<<2"))
+  (list enum-tag " + " (number->string (char->integer char)) "<<2"))
 
 ;; XXX these sure would be nice to inline :)
 (define-global-procedure 'integer->char 1
