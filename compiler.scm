@@ -1079,23 +1079,14 @@
   (mov (const "4") eax)                 ; __NR_write
   (syscall))                            ; return value is in %eax
 
-;; Emit code to output a string.
-;; XXX this needs to have a reasonable return value, and it doesn't!
-(define (target-display) 
-  (extract-string)
-  (comment "fd 1: stdout")
-  (mov (const "1") ebx)
-  (write_2))
-;; Emit code to output a newline.
-(define (target-newline)
-  (push-const "newline_string")
-  (target-display))
-(add-to-header (lambda () (constant-string-2 "\n" "newline_string")))
-
 (define-global-procedure 'display 1
   (lambda () (get-procedure-arg 0)
-             (target-display)))
-(define-global-procedure 'newline 0 target-newline) ; XXX rewrite in Lisp
+             (extract-string)
+             (comment "fd 1: stdout")
+             (mov (const "1") ebx)
+             (write_2)
+             (mov (const nil-value) tos)))
+
 (define-global-procedure 'eq? 2 
   (lambda () (get-procedure-arg 0)
              (get-procedure-arg 1)
@@ -2050,6 +2041,7 @@
 
 
     ;; etc.
+    (define (newline) (display "\n"))
     (define (error . args)
       (display-stderr "error: ")
       (for-each display-stderr args)
