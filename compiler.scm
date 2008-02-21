@@ -252,8 +252,10 @@
 (define (global-label lbl) (insn ".globl " lbl) (label lbl))
 
 ;; new-label: Allocate a new label (e.g. for a constant) and return it.
+(define constcounters '())
 (define constcounter 0)
 (define label-prefix "k")
+(define label-prefix-symbol 'k)
 ;; We set the label prefix (and reset the counter) periodically for
 ;; two reasons.  First, the assembly code is much more readable when
 ;; it says movl (_cdr_2), %eax; call ensure_procedure, rather than
@@ -263,14 +265,42 @@
 ;; assembly output, rather than changing hundreds or thousands of
 ;; labels, and all the references to them.  This makes the diff output
 ;; a lot more readable!
+
+;; However, occasionally we'll get the label-prefix set to the same
+;; thing twice, at different times.  This can occur because of
+;; quasi-name-collisions in the user program, duplicate defines of the
+;; same variable, or just somebody naming a variable "k".  So we have
+;; to check each time to find the old constcounter.
+
+(define (stringlist->string stringlist) 
+  (list->string (stringlist->string-2 stringlist 0)))
+(define (stringlist->string-2 stringlist idx)
+  (if (null? stringlist) '()
+      (if (= idx (string-length (car stringlist)))
+          (stringlist->string-2 (cdr stringlist) 0)
+          (cons (string-ref (car stringlist) idx)
+                (stringlist->string-2 stringlist (1+ idx))))))
+;; XXX boy, that would be a lot nicer imperatively
+;; buf = stringbuf(apply(+, map(string-length, stringlist)))
+;; idxo = 0
+;; for string in stringlist:
+;;     for char in string: buf[idxo++] = char
+
 (define (set-label-prefix new-prefix) 
-  ;; XXX we should avoid duplicates
-  (set! label-prefix (cons "_"
+  ;; save for later
+  (set! constcounters (cons (cons label-prefix-symbol constcounter) 
+                            constcounters))
+  (set! label-prefix (stringlist->string (cons "_"
      (escape (symbol->string new-prefix) 0 
              ;; XXX incomplete list
              '("+"    "-" "="  "?" ">"  "<"  "!"    "*")
-             '("Plus" "_" "Eq" "P" "Gt" "Lt" "Bang" "star"))))
-  (set! constcounter 0))
+             '("Plus" "_" "Eq" "P" "Gt" "Lt" "Bang" "star")))))
+  (set! label-prefix-symbol (string->symbol label-prefix))
+  (set! constcounter
+        (let ((counterthing (assq label-prefix-symbol constcounters)))
+          (if counterthing (cdr counterthing)
+              0)))
+)
 (define (new-label)
   (set! constcounter (1+ constcounter))
   (list label-prefix "_" (number->string constcounter)))
@@ -1321,7 +1351,11 @@
 ;; Emit code to create a mutable labeled cell for use as a global
 ;; variable, bound to a specific identifier.
 (define (define-global-variable name initial)
-  (if (assq name global-variables-defined) (error "double define" name)
+  (if (assq name global-variables-defined)
+      ;; In this case this is a duplicate definition; just silently
+      ;; overwrite the original since we have no way to issue a
+      ;; warning
+      (begin (push-const initial) (set-global-variable name))
       (begin (compile-global-variable (global-variable-label name) initial)
              (set! global-variables-defined 
                    (cons (list name) global-variables-defined)))))
