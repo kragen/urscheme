@@ -213,6 +213,22 @@
          (+ idx (string-length stuff)))
         (else 
          (error "flattening" stuff))))
+    
+;; Memoize a one-argument assembly-generating routine.
+(define (memo1-asm proc)
+  (let ((results '()))
+    (lambda (arg)
+      (let ((cached (assq arg results)))
+        (if cached (begin (asm-display (cadr cached)) (caddr cached))
+            (begin
+              (push-assembly-diversion)
+              (let ((result (proc arg)))
+                (let ((output (pop-diverted-assembly)))
+                  (set! results (cons (list arg output result) results))
+                  (asm-display output)
+                  result))))))))
+
+;; XXX move this
 (define (string-blit src srcidx len dest destidx)
   (if (= len 0) #f 
       (begin (string-set! dest destidx (string-ref src srcidx))
@@ -434,23 +450,25 @@
       (if-not-right-magic-jump procedure-magic "not_procedure")
       (ret)))
 (define (ensure-procedure) (call "ensure_procedure"))
-(define (compile-apply nargs)
-  (ensure-procedure)
-  (mov (offset tos 4) ebx)              ; address of actual procedure
-  (mov (const (number->string nargs)) edx)
-  (call (absolute ebx)))
-(define (compile-tail-apply nargs)
-  (comment "Tail call; nargs = " (number->string nargs))
-  (comment "Note %esp points at the last thing pushed,")
-  (comment "not the next thing to push.  So for 1 arg, we want %ebx=%esp")
-  (lea (offset esp (quadruple (1- nargs))) ebx)
-  (pop-stack-frame edx)
-  (copy-args ebx nargs 0)
-  (asm-push edx)
-  (ensure-procedure)
-  (mov (offset tos 4) ebx)
-  (mov (const (number->string nargs)) edx)
-  (jmp (absolute ebx)))
+(define compile-apply 
+  (memo1-asm (lambda (nargs)
+    (ensure-procedure)
+    (mov (offset tos 4) ebx)            ; address of actual procedure
+    (mov (const (number->string nargs)) edx)
+    (call (absolute ebx)))))
+(define compile-tail-apply 
+  (memo1-asm (lambda (nargs)
+    (comment "Tail call; nargs = " (number->string nargs))
+    (comment "Note %esp points at the last thing pushed,")
+    (comment "not the next thing to push.  So for 1 arg, we want %ebx=%esp")
+    (lea (offset esp (quadruple (1- nargs))) ebx)
+    (pop-stack-frame edx)
+    (copy-args ebx nargs 0)
+    (asm-push edx)
+    (ensure-procedure)
+    (mov (offset tos 4) ebx)
+    (mov (const (number->string nargs)) edx)
+    (jmp (absolute ebx)))))
 (define (copy-args basereg nargs i)
   (if (= nargs i) '()
       (begin (asm-push (offset basereg (- 0 (quadruple i))))
@@ -501,19 +519,20 @@
   (lea (offset esp 12) ebp)  ; 12 bytes to skip saved %ebp, %ebx, %eip
 
   (call "package_up_variadic_args"))
-    
-(define (compile-procedure-prologue nargs)
-  (if (null? nargs) (compile-variadic-prologue)
-      (begin
-        (comment "compute desired %esp on return in %ebx and push it")
-        (lea (offset (index-register esp edx 4) 4) ebx)
-        (asm-push ebx)
 
-        (asm-push ebp)                  ; save old %ebp
-        (lea (offset esp 12) ebp) ; 12 bytes to skip saved %ebp, %ebx, %eip
+(define compile-procedure-prologue 
+  (memo1-asm (lambda (nargs)
+    (if (null? nargs) (compile-variadic-prologue)
+        (begin
+          (comment "compute desired %esp on return in %ebx and push it")
+          (lea (offset (index-register esp edx 4) 4) ebx)
+          (asm-push ebx)
 
-        (cmp (const (number->string nargs)) edx)
-        (jnz "argument_count_wrong"))))
+          (asm-push ebp)                  ; save old %ebp
+          (lea (offset esp 12) ebp) ; 12 bytes to skip saved %ebp, %ebx, %eip
+
+          (cmp (const (number->string nargs)) edx)
+          (jnz "argument_count_wrong"))))))
 (define (compile-procedure-epilogue)
   (comment "procedure epilogue")
   (comment "get return address")
@@ -1434,20 +1453,6 @@
 ;; compile-quotable: called for auto-quoted things and (quote ...)
 ;; exprs
 (define (compile-quotable obj env) (push-const (compile-constant obj)))
-
-;; XXX move this
-(define (memo1-asm proc)
-  (let ((results '()))
-    (lambda (arg)
-      (let ((cached (assq arg results)))
-        (if cached (begin (asm-display (cadr cached)) (caddr cached))
-            (begin
-              (push-assembly-diversion)
-              (let ((result (proc arg)))
-                (let ((output (pop-diverted-assembly)))
-                  (set! results (cons (list arg output result) results))
-                  (asm-display output)
-                  result))))))))
 
 (define fetch-heap-var-pointer 
  (memo1-asm (lambda (slotnum)
