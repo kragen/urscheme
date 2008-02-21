@@ -276,15 +276,16 @@
   (list label-prefix "_" (number->string constcounter)))
 
 ;; stuff to output a Lisp string safely for assembly language
-(define (escape-char char dangerous escapes)
+(define (escape-char char dangerous escapes) ; duplicated in stdlib
   (cond ((null? dangerous) (char->string char))
         ((char=? char (string-ref (car dangerous) 0))
          (car escapes))
         (else (escape-char char (cdr dangerous) (cdr escapes)))))
-(define (escape string idx dangerous escapes)
+(define (escape string idx dangerous escapes) ; duplicated in stdlib
   (if (= idx (string-length string)) '()
       (cons (escape-char (string-ref string idx) dangerous escapes)
             (escape string (1+ idx) dangerous escapes))))
+;; Escape the three necessary characters.  duplicated in stdlib
 (define (backslash string) (escape string 0 '("\\"   "\n"  "\"") 
                                             '("\\\\" "\\n" "\\\"")))
 ;; Represent a string appropriately for the output assembly language file.
@@ -2010,6 +2011,42 @@
       (for-each display-stderr args)
       (display-stderr "\n")
       (exit 1))
+    (define (escape-char char dangerous escapes) ; duplicated in stdlib
+      (cond ((null? dangerous) (char->string char))
+            ((char=? char (string-ref (car dangerous) 0))
+             (car escapes))
+            (else (escape-char char (cdr dangerous) (cdr escapes)))))
+    (define (escape string idx dangerous escapes) ; duplicated in stdlib
+      (if (= idx (string-length string)) '()
+          (cons (escape-char (string-ref string idx) dangerous escapes)
+                (escape string (1+ idx) dangerous escapes))))
+    ;; Escape the three necessary characters.  duplicated in stdlib
+    (define (backslash string) (escape string 0 '("\\"   "\n"  "\"") 
+                                                '("\\\\" "\\n" "\\\"")))
+    (define (write x) (wthunk x display))
+    (define (wthunk x display)
+      (cond ((string? x) (wstring x display))
+            ((or (pair? x) (null? x)) (display "(") (wlist x display))
+            ((symbol? x) (display (symbol->string x)))
+            ((eq? x #t) (display "#t"))
+            ((eq? x #f) (display "#f"))
+            ((eq? x #\newline) (display "#\\newline"))
+            ((eq? x #\space) (display "#\\space"))
+            ((eq? x #\tab) (display "#\\tab"))
+            ((char? x) (display "#\\") (display (char->string x)))
+            (else (error "don't know how to write" x))))
+    (define (wstring x pr) (pr "\"") (for-each pr (backslash x)) (pr "\""))
+    (define (wlist x pr) 
+      (cond ((null? x)
+             (pr ")"))
+            ((pair? x)
+             (wthunk (car x) pr) 
+             (if (null? (cdr x)) #f (pr " "))
+             (wlist (cdr x) pr))
+            (else
+             (pr ". ")
+             (wthunk x pr)
+             (pr ")"))))
 ))
 
 ;;; Main Program
