@@ -505,6 +505,10 @@
   (asm-push tos)
   (mov (offset ebp (quadruple n)) tos))
 
+;; Emit code to mutate it.
+(define (set-procedure-arg n)
+  (mov tos (offset ebp (quadruple n))))
+
 (define-global-procedure 'procedure? 1
   (lambda () 
     (get-procedure-arg 0)
@@ -1377,11 +1381,16 @@
   (mov (offset tos 4) tos))
 
 ;; needs more cases for things other than stack variables?
+;; XXX move globals here?
 (define (get-variable vardefn)
   (case (car vardefn)
     ((stack) (get-procedure-arg (cadr vardefn)))
     ((heap-pointer) (fetch-heap-var (cadr vardefn)))
-    (else (error (list "unexpected var type" (car vardefn))))))
+    (else (error "unexpected var type" (car vardefn)))))
+(define (set-variable vardefn)
+  (case (car vardefn)
+    ((stack) (set-procedure-arg (cadr vardefn)))
+    (else (error "unexpected var type" vardefn))))
 
 ;; rather than getting the variable value, it gets the variable's
 ;; location in the heap.

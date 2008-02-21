@@ -10,12 +10,12 @@
 (set! global "global variable gets set!")
 (printglobal)
 
-; (define (printlocal local)
-;   (set! local "local variable always the same")
-;   (display local)
-;   (newline))
-; (printlocal "a")
-; (printlocal "b")
+(define (printlocal local)
+  (set! local "local variable always the same")
+  (display local)
+  (newline))
+(printlocal "a")
+(printlocal "b")
 
 ; (define heap-printer
 ;   (let ((val "original heap var"))
