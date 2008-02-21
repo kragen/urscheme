@@ -1,0 +1,177 @@
+<html><head><title>Ur-Scheme: A self-hosting compiler for a subset of R5RS Scheme to x86 asm</title>
+</head><body>
+<h1>Ur-Scheme: A self-hosting compiler for a subset of R5RS Scheme to x86 asm</h1>
+
+<p>Ur-Scheme is a compiler from a small subset of R5RS Scheme to x86
+assembly language.  It can compile itself.  It is free software,
+licensed under the GNU GPLv3+.  It might be useful as a base for a
+more practical implementation (or a more compact one), or it might be
+enjoyable to read, but it probably isn't that useful in its current
+form.</p>
+
+<p>Ur-Scheme is:</p>
+
+<ul>
+
+<li><b>Impractical.</b> It hardly implements anything beyond what's in
+R5RS, and it omits quite a bit of the stuff that is in R5RS; for
+example, files, macros, vectors, quasiquotation, call/cc, and
+floating-point ("inexact numbers").  Only things that were needed for
+the compiler to compile itself and run some unit tests are
+included.</li>
+
+<li><b>Small.</b> The implementation is about <a
+href="compiler.scm.html">1400 lines of Scheme</a>, plus 700 lines of
+comments and blank lines.  Compiled with itself on x86 Linux and
+stripped, the executable is 128kiB.  On my 700MHz laptop from the
+previous millennium, compiling it from scratch with MzScheme and gas
+takes under ten seconds.</li>
+
+<li><b>Safe.</b> Programs compiled with it do not crash or corrupt
+their memory unless there is a bug in the compiler (er, except if they
+run out of stack or heap).  All types and array indices are
+dynamically checked at run-time.</li>
+
+<li><b>Reasonably fast.</b> It <b>generates reasonably fast code</b>
+&mdash; when compiled with itself, it runs 35% faster than when it's
+compiled with Chicken, and faster than when it's interpreted by any of
+Guile, MzScheme, SCM, Elk, or Chicken's interpreter.  It also <b>runs
+reasonably fast</b>; on my laptop, it compiles about a thousand lines
+of Scheme per second, which is not fast in absolute terms (on the same
+hardware, gas assembles the resulting 50&nbsp;000-line assembly file
+in just over half a second, which is about 100&nbsp;000 lines of
+assembly per second) but seems to be faster than a lot of Scheme
+compilers.  I imagine that it would run faster if compiled with Ikarus
+or Stalin, but I haven't tried Ikarus and can't get Stalin to
+work.</li>
+
+<li><b>Portable.</b> Last time I checked, it could compile itself
+successfully in Guile, MzScheme (PLT Scheme), SCM, Elk, and Chicken,
+although not Bigloo, Stalin, RScheme, or TinyScheme.  Retargeting it
+to a different processor wouldn't be a huge pain (after all, it's only
+1400 lines of code) but wouldn't be that trivial either.</li>
+
+<li><b>Unit-tested.</b> It comes with a fairly comprehensive set of
+unit tests, and additionally, it compiles itself well enough that the
+compiled version produces the same assembly-language output,
+byte-for-byte, as when it's running interpreted in some other Scheme
+&mdash; at least when it's compiling itself.</li>
+
+</ul>
+
+<p>If you want to get it, you can <b>use Darcs to snarf the source
+repository</b>:</p>
+
+<pre>darcs get http://pobox.com/~kragens/sw/urscheme/</pre>
+
+<p>Or you can <b><a href="urscheme-0.tar.gz">download the source
+tarball of Ur-Scheme version 0</a></b>.</p>
+
+<h2>Limitations</h2>
+
+<ul>
+
+<li> The following are missing: macros, eval, quasiquotation,
+     first-class continuations, vectors, numerical constants with
+     radix prefixes, ports, two-argument "if", "let*", "letrec",
+     non-top-level defines ("internal definitions"), "do", promises,
+     non-integer numbers, bignums, load, apply,
+     case-insensitivity, multiple-value returns. </li>
+
+<li> Pairs are immutable, so there are no set-car! and set-cdr!.
+     Despite this, eqv? is not the same as equal? for lists.</li>
+
+<li> If you use some funky characters in identifiers, you'll get
+     syntactically invalid assembly-language output.</li>
+
+<li> Procedures are allowed to take fixed numbers of arguments, or any
+     arbitrary number of arguments, but the normal at-least-N syntax
+     (lambda (a b . rest) ...) is not supported. </li>
+
+<li> Rebinding standard procedures may break your program. </li>
+
+<li> However, some standard procedures are treated as special forms by
+     the compiler, so rebinding them will rarely have any effect. </li>
+
+<li> Integer arithmetic silently overflows. </li>
+
+<li> Most arithmetic operators are omitted; only +, -, quotient, and
+     remainder are present. </li>
+
+<li> Very many standard library procedures are missing.  Only the
+     following 55 procedures are actually present: procedure? string?
+     make-string string-set! string-ref string-length car cdr cons
+     pair? symbol? symbol->string string->symbol display newline eq?
+     current-input-port read-char integer? remainder quotient <
+     eof-object? char? integer->char char->integer list length assq
+     memq memv append not string-append char-whitespace? char<?
+     char<=? char-between? char-alphabetic? = char=? eqv? equal?
+     string=? null? boolean? number? for-each map reverse string->list
+     list->string number->string string->number write.
+
+<li> make-string only takes one argument. </li>
+
+<li> read-char takes a port argument and ignores it; write, display,
+     and newline do not take port arguments.  current-input-port
+     returns nil.</li>
+
+<li> map and for-each only take two arguments. </li>
+
+<li> number->string only takes one argument. </li>
+
+<li> string->symbol will be slow with enough symbols. </li>
+
+</ul>
+
+<h2>Extensions</h2>
+
+<ul>
+
+<li> (display-stderr foo) is like display, but uses stderr. </li>
+
+<li> (exit 37) makes the program exit with exit code 37. </li>
+
+<li> (error foo bar baz) aborts the program and sends to stderr
+     "error: " followed by foo, bar, and baz. </li>
+
+<li> 1+ and 1- are as in Common Lisp. </li>
+
+<li> (char->string c) is like (make-string 1 c). </li>
+
+<li> (escape string) returns a list of character strings which, when
+     concatenated, form a string representing the original string by
+     escaping all the backslashes, quotes, or newlines in the string
+     by preceding them with a backslash. </li>
+
+<li> #\tab is the tab character.  I wouldn't think to mention it but
+     apparently Stalin doesn't support this. </li>
+
+</ul>
+
+<h2>Bugs</h2>
+
+<p>Output is unbuffered, which makes it slow.</p>
+
+<p>I still don't have a garbage collector, and programs crash when
+they run out of memory.</p>
+
+<p>The values returned by output procedures are invalid.</p>
+
+<p>+ and - aren't first-class procedures.</p>
+
+<h2>Origins</h2>
+
+<p>In February 2007, I wanted to write a metacompiler for <a
+href="http://pobox.com/~kragen/sw/bicicleta" >Bicicleta</a>, but I was
+intimidated because I'd never written a compiler before, and nobody
+had ever written a compiler either <i>in</i> Bicicleta or <i>for</i>
+Bicicleta.  So I thought I'd pick a language that other people knew a
+lot about writing compilers for and that wasn't too hairy, write a
+compiler for it, and then use what I'd learned to write the Bicicleta
+compiler.</p>
+
+<p>It took me about 18 days from the time I started on the project to
+the time that the compiler could actually compile itself, which was a
+lot longer than I expected.</p>
+
+</body></html>

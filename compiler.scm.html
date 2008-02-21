@@ -1,0 +1,2162 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD HTML 4.01//EN">
+<!-- Created by htmlize-1.27 in css mode. -->
+<html>
+  <head>
+    <title>compiler.scm</title>
+    <style type="text/css">
+    <!--
+      body {
+        color: #000000;
+        background-color: #ffffff;
+      }
+      .comment {
+        /* font-lock-comment-face */
+        color: #b22222;
+      }
+      .function-name {
+        /* font-lock-function-name-face */
+        color: #0000ff;
+      }
+      .keyword {
+        /* font-lock-keyword-face */
+        color: #a020f0;
+      }
+      .string {
+        /* font-lock-string-face */
+        color: #bc8f8f;
+      }
+
+      a {
+        color: inherit;
+        background-color: inherit;
+        font: inherit;
+        text-decoration: inherit;
+      }
+      a:hover {
+        text-decoration: underline;
+      }
+    -->
+    </style>
+  </head>
+  <body>
+    <pre>
+<span class="comment">;;; UrScheme: A self-hosting compiler for a subset of R5RS Scheme to x86 asm
+;; Kragen Javier Sitaker, 2008-01-03 through 21
+</span>
+<span class="comment">;; From the Scheme 9 From Empty Space page:
+;;     Why in earth write another half-baked implementation of Scheme?
+;;     It is better than getting drunk at a bar.
+;; And anyway, I never metacircular compiler I didn't like. (Neil Van-Dyke)
+</span>
+<span class="comment">;; I had been working on this for a couple of days now when I ran across
+;http://www.iro.umontreal.ca/%7Eboucherd/mslug/meetings/20041020/minutes-en.html
+;; which says:
+;;     How to write a simple Scheme to C compiler, in Scheme. In only
+;;     90 minutes! And although not supporting the whole Scheme
+;;     standard, the compiler supports fully optimized proper tail
+;;     calls, continuations, and (of course) full closures.
+;; I was feeling pretty inferior until I started watching the video of
+;; the talk, in which Marc Feeley, the speaker, begins by explaining:
+;;     So, uh, let me clarify the, uh, the title of the presentation!
+;;     The 90 minutes is not the time to write the compiler, but to
+;;     explain it.
+</span>
+<span class="comment">;; I think this is nearly the smallest subset of R5RS Scheme that it's
+;; practical to write a Scheme compiler in, and I've tried to keep
+;; this implementation of it as simple as I can stand.  I kind of feel
+;; that someone more adept would be having more success at keeping it
+;; simple, but hey, it's my first compiler.
+</span>
+
+<span class="comment">;;; Implementation planned:
+;; ("D" means "done")
+;; D car, cdr, cons
+;; D null?
+;; D booleans
+;; D eq?, pair?, null?, symbol?, integer?, boolean?, string?, procedure?, char?
+;; D if (with three arguments)
+;; D lambda (with fixed numbers of arguments or with a single argument
+;;   that gets bound to the argument list (lambda &lt;var&gt; &lt;body&gt;)
+;; D begin
+;; D global variables
+;; D lexically-scoped local variables
+;; D nested scopes and closures
+;; D set! for global and local variables
+;; D top-level define of a variable (not a function)
+;; - read, for proper and improper lists, symbols, strings, integers,
+;;   #t and #f, and '  (written, just not provided to other programs yet)
+;; D consequently symbols need to store their strings, and we need
+;;   string-&gt;symbol; other parts of the compiler use symbol-&gt;string
+;; D eof-object?
+;; - garbage collection
+;; D strings, with string-set!, string-ref, string literals,
+;;   string-length, and make-string with one argument, and string=?
+;; D which unfortunately requires characters; char=? and character
+;;   literals
+;; D very basic arithmetic: two-argument +, -, quotient, remainder,
+;;   and = for integers, and decimal numeric constants
+;; D &lt; for integers
+;; D recursive procedure calls
+;; D display, for strings, and newline
+;; D error
+;; D several other standard procedures: list, length, assq, caar,
+;;   cdar, cadr, caddr, not, string-append, for-each (in a limited
+;;   fashion), map (in a limited fashion), memq, memv, eqv?,
+;;   string-&gt;list
+;; D several standard macros: cond (without =&gt;), case, or, let
+;;   (without tagged looping)
+</span>
+<span class="comment">;; D tail-call optimization
+</span>
+<span class="comment">;; All of this would be a little simpler if strings were just lists
+;; of small integers.
+</span>
+<span class="comment">;; Remaining to implement:
+;; - make read accessible to programs compiled with the compiler
+;;   somehow
+;; - garbage collection
+;; - maybe output buffering; compiled with itself, it uses less than
+;;   half the user CPU that it needs under MzScheme to compile itself
+;;   a second time, but because of its gigantic number of system
+;;   calls, takes 60% longer to run.  (It even takes 35% less user
+;;   time than when it's compiled with Chicken!)
+</span>
+<span class="comment">;; There were a bunch of parts of standard Scheme that I implemented
+;; at the top of the compiler, which was a little bit silly --- any
+;; program to be compiled by this compiler would either have to forgo
+;; using those same facilities, or reimplement them itself.
+</span>
+<span class="comment">;; Now I have moved them into a prelude called "standard-library" that
+;; gets compiled before the user's program, which considerably expands
+;; the subset of Scheme supported without adding any complexity to the
+;; overall system.  However, it does inflate output executables a bit.
+</span>
+<span class="comment">;;; Not implemented:
+;; - call/cc, dynamic-wind
+;; - macros, quasiquote
+;; - most of arithmetic
+;; - vectors
+;; - some of the language syntax ` , ,@
+;; - write
+;; - proper tail recursion
+;; - cond, case, and, or, do, not
+;; - let, let*, letrec
+;; - delay, force
+;; - internal definitions
+;; - most of the library procedures for handling lists, characters
+;; - eval, apply
+;; - map, for-each
+;; - multiple-value returns
+;; - scheme-report-environment, null-environment
+</span>
+<span class="comment">;;; Design notes:
+</span>
+<span class="comment">;; The strategy taken herein is to use the x86 as a stack machine
+;; (within each function, anyway).  %eax contains the top of stack;
+;; %esp points at a stack in memory containing the rest of the stack
+;; items.  This eliminates any need to allocate registers; for
+;; ordinary expressions, we just need to convert the Lisp code to RPN
+;; and glue together the instruction sequences that comprise them.
+</span>
+<span class="comment">;; We also use the ordinary x86 stack as a call stack.  See the
+;; section ";;; Procedure calls" for details.  This would pose
+;; problems for call/cc if I were going to implement it, but I'm not,
+;; so I don't care.  You might think it would cause problems for
+;; closures of indefinite extent, but the "Implementation of Lua 5.0"
+;; paper explains a fairly straightforward way of implementing
+;; closures, called "upvalues", that still lets us stack-allocate
+;; almost all of the time.
+</span>
+<span class="comment">;; Pointers are tagged in the low bits in more or less the usual way:
+;; - low bits binary 00: an actual pointer, to an object with an
+;;   embedded magic number; examine the magic number to see what it
+;;   is.
+;; - low bits binary 01: a signed integer, stored in the upper 30 bits.
+;; - low bits binary 10: one of a small number of unique objects.  The
+;;   first 256 are the chars; following these we have the empty list,
+;;   #t, #f, and the EOF object, in that order.  This means that eq?
+;;   works to compare chars in this implementation, but that isn't
+;;   guaranteed by R5RS, so we can't depend on that property inside
+;;   the compiler, since we want to be able to run it on other R5RS
+;;   Schemes.
+;; - low bits binary 11: unused.
+;; So, type-testing consists of testing the type-tag, then possibly
+;; testing the magic number.  In the usual case, we'll jump to an
+;; error routine if the type test fails, which will exit the program.
+;; I'll add more graceful exits later.
+</span>
+
+
+<span class="comment">;;; Basic Lisp Stuff
+;; Things that I can't find in R5RS, and so I'm not including in
+;; standard-library down below.
+</span>
+(<span class="keyword">define</span> (<span class="function-name">double</span> val) (+ val val))
+(<span class="keyword">define</span> (<span class="function-name">quadruple</span> val) (double (double val)))
+
+<span class="comment">;; These functions' names come from Common Lisp or Forth.
+</span>(<span class="keyword">define</span> (<span class="function-name">1+</span> x) (+ x 1))                 <span class="comment">; duplicated in stdlib
+</span>(<span class="keyword">define</span> (<span class="function-name">1-</span> x) (- x 1))                 <span class="comment">; duplicated in stdlib
+</span>
+(<span class="keyword">define</span> (<span class="function-name">filter</span> fn lst)  <span class="comment">; this must exist in r5rs but I can't find it
+</span>  (<span class="keyword">if</span> (null? lst) '()
+      (<span class="keyword">let</span> ((first (car lst)) (rest (filter fn (cdr lst))))
+        (<span class="keyword">if</span> (fn first) (cons first rest) rest))))
+
+(<span class="keyword">define</span> (<span class="function-name">char-&gt;string</span> char)             <span class="comment">; duplicated in stdlib
+</span>  (<span class="keyword">let</span> ((buf (make-string 1))) (string-set! buf 0 char) buf))
+
+<span class="comment">;; Boy, it sure causes a lot of hassle that Scheme has different types
+;; for strings and chars.
+</span>
+(<span class="keyword">define</span> (<span class="function-name">string-idx-2</span> string char idx)
+  (<span class="keyword">cond</span> ((= idx (string-length string)) #f)
+        ((char=? (string-ref string idx) char) idx)
+        (<span class="keyword">else</span> (string-idx-2 string char (1+ idx)))))
+<span class="comment">;; returns #f or index into string
+</span>(<span class="keyword">define</span> (<span class="function-name">string-idx</span> string char) (string-idx-2 string char 0))
+
+<span class="comment">;;; Basic Assembly Language Emission
+</span>
+<span class="comment">;; emit: output a line of assembly by concatenating the strings in an
+;; arbitrarily nested list structure
+</span>(<span class="keyword">define</span> (<span class="function-name">emit</span> . stuff) (emit-inline stuff) (newline))
+(<span class="keyword">define</span> (<span class="function-name">emit-inline</span> stuff)
+  (<span class="keyword">cond</span> ((null? stuff) #t)
+        ((pair? stuff) (emit-inline (car stuff)) (emit-inline (cdr stuff)))
+        ((string? stuff) (display stuff))
+        (<span class="keyword">else</span> (error (list <span class="string">"emitting"</span> stuff)))))
+
+<span class="comment">;; Emit an indented instruction
+</span>(<span class="keyword">define</span> (<span class="function-name">insn</span> . insn) (emit (cons <span class="string">"        "</span> insn)))
+(<span class="keyword">define</span> (<span class="function-name">comment</span> . comment) (insn <span class="string">"# "</span> comment))
+
+<span class="comment">;; Emit a two-argument instruction
+</span>(<span class="keyword">define</span> (<span class="function-name">twoarg</span> mnemonic) (<span class="keyword">lambda</span> (src dest) (insn mnemonic <span class="string">" "</span> src <span class="string">", "</span> dest)))
+<span class="comment">;; For example:
+</span>(<span class="keyword">define</span> <span class="function-name">mov</span> (twoarg <span class="string">"movl"</span>))  (<span class="keyword">define</span> <span class="function-name">movb</span> (twoarg <span class="string">"movb"</span>))
+(<span class="keyword">define</span> <span class="function-name">movzbl</span> (twoarg <span class="string">"movzbl"</span>))
+(<span class="keyword">define</span> <span class="function-name">test</span> (twoarg <span class="string">"test"</span>)) (<span class="keyword">define</span> <span class="function-name">cmp</span> (twoarg <span class="string">"cmpl"</span>))
+(<span class="keyword">define</span> <span class="function-name">lea</span> (twoarg <span class="string">"lea"</span>))
+(<span class="keyword">define</span> <span class="function-name">add</span> (twoarg <span class="string">"add"</span>))   (<span class="keyword">define</span> <span class="function-name">sub</span> (twoarg <span class="string">"sub"</span>))
+(<span class="keyword">define</span> <span class="function-name">xchg</span> (twoarg <span class="string">"xchg"</span>))
+(<span class="keyword">define</span> <span class="function-name">asm-and</span> (twoarg <span class="string">"and"</span>))
+
+<span class="comment">;; Emit a one-argument instruction
+</span>(<span class="keyword">define</span> (<span class="function-name">onearg</span> mnemonic) (<span class="keyword">lambda</span> (rand) (insn mnemonic <span class="string">" "</span> rand)))
+(<span class="keyword">define</span> <span class="function-name">asm-push</span> (onearg <span class="string">"push"</span>)) (<span class="keyword">define</span> <span class="function-name">asm-pop</span> (onearg <span class="string">"pop"</span>))
+(<span class="keyword">define</span> <span class="function-name">jmp</span> (onearg <span class="string">"jmp"</span>))       (<span class="keyword">define</span> <span class="function-name">jnz</span> (onearg <span class="string">"jnz"</span>))
+(<span class="keyword">define</span> <span class="function-name">je</span> (onearg <span class="string">"je"</span>))         (<span class="keyword">define</span> <span class="function-name">jz</span> je)
+(<span class="keyword">define</span> <span class="function-name">jnb</span> (onearg <span class="string">"jnb"</span>))       (<span class="keyword">define</span> <span class="function-name">jg</span> (onearg <span class="string">"jg"</span>))
+(<span class="keyword">define</span> <span class="function-name">js</span> (onearg <span class="string">"js"</span>))
+(<span class="keyword">define</span> <span class="function-name">call</span> (onearg <span class="string">"call"</span>))     (<span class="keyword">define</span> <span class="function-name">int</span> (onearg <span class="string">"int"</span>))
+(<span class="keyword">define</span> <span class="function-name">inc</span> (onearg <span class="string">"inc"</span>))       (<span class="keyword">define</span> <span class="function-name">dec</span> (onearg <span class="string">"dec"</span>))
+(<span class="keyword">define</span> <span class="function-name">idiv</span> (onearg <span class="string">"idiv"</span>))
+<span class="comment">;; These have two-arg forms too, but I'm not using them.
+</span>(<span class="keyword">define</span> <span class="function-name">sal</span> (onearg <span class="string">"sal"</span>))       (<span class="keyword">define</span> <span class="function-name">sar</span> (onearg <span class="string">"sar"</span>))
+
+<span class="comment">;; Currently only using three zero-argument instructions:
+</span>(<span class="keyword">define</span> (<span class="function-name">ret</span>) (insn <span class="string">"ret"</span>))
+(<span class="keyword">define</span> (<span class="function-name">rep-stosb</span>) (insn <span class="string">"rep stosb"</span>))
+(<span class="keyword">define</span> (<span class="function-name">repe-cmpsb</span>) (insn <span class="string">"repe cmpsb"</span>))
+
+<span class="comment">;; Registers:
+</span>(<span class="keyword">define</span> <span class="function-name">eax</span> <span class="string">"%eax"</span>)  (<span class="keyword">define</span> <span class="function-name">ebx</span> <span class="string">"%ebx"</span>)  
+(<span class="keyword">define</span> <span class="function-name">ecx</span> <span class="string">"%ecx"</span>)  (<span class="keyword">define</span> <span class="function-name">edx</span> <span class="string">"%edx"</span>)
+(<span class="keyword">define</span> <span class="function-name">ebp</span> <span class="string">"%ebp"</span>)  (<span class="keyword">define</span> <span class="function-name">esp</span> <span class="string">"%esp"</span>)
+(<span class="keyword">define</span> <span class="function-name">esi</span> <span class="string">"%esi"</span>)  (<span class="keyword">define</span> <span class="function-name">edi</span> <span class="string">"%edi"</span>)
+(<span class="keyword">define</span> <span class="function-name">al</span> <span class="string">"%al"</span>)
+
+<span class="comment">;; x86 addressing modes:
+</span>(<span class="keyword">define</span> (<span class="function-name">const</span> x) (list <span class="string">"$"</span> x))
+(<span class="keyword">define</span> (<span class="function-name">indirect</span> x) (list <span class="string">"("</span> x <span class="string">")"</span>))
+(<span class="keyword">define</span> (<span class="function-name">offset</span> x offset) (list (number-&gt;string offset) (indirect x)))
+(<span class="keyword">define</span> (<span class="function-name">absolute</span> x) (list <span class="string">"*"</span> x))
+<span class="comment">;; Use this one inside of "indirect" or "offset".
+</span>(<span class="keyword">define</span> (<span class="function-name">index-register</span> base index size)
+  (list base <span class="string">","</span> index <span class="string">","</span> (number-&gt;string size)))
+
+(<span class="keyword">define</span> (<span class="function-name">syscall</span>) (int (const <span class="string">"0x80"</span>)))
+
+
+<span class="comment">;; Other stuff for basic asm emission.
+</span>(<span class="keyword">define</span> (<span class="function-name">section</span> name) (insn <span class="string">".section "</span> name))
+(<span class="keyword">define</span> (<span class="function-name">rodata</span>) (section <span class="string">".rodata"</span>))
+(<span class="keyword">define</span> (<span class="function-name">text</span>) (insn <span class="string">".text"</span>))
+(<span class="keyword">define</span> (<span class="function-name">label</span> label) (emit label <span class="string">":"</span>))
+
+<span class="comment">;; define a .globl label
+</span>(<span class="keyword">define</span> (<span class="function-name">global-label</span> lbl) (insn <span class="string">".globl "</span> lbl) (label lbl))
+
+<span class="comment">;; new-label: Allocate a new label (e.g. for a constant) and return it.
+</span>(<span class="keyword">define</span> <span class="function-name">constcounters</span> '())
+(<span class="keyword">define</span> <span class="function-name">constcounter</span> 0)
+(<span class="keyword">define</span> <span class="function-name">label-prefix</span> <span class="string">"k"</span>)
+(<span class="keyword">define</span> <span class="function-name">label-prefix-symbol</span> 'k)
+<span class="comment">;; We set the label prefix (and reset the counter) periodically for
+;; two reasons.  First, the assembly code is much more readable when
+;; it says movl (_cdr_2), %eax; call ensure_procedure, rather than
+;; movl (k_321), %eax; call ensure_procedure.  Second, resetting the
+;; counter occasionally means that a compiler change that allocates
+;; one more or one less label will have a fairly local effect on the
+;; assembly output, rather than changing hundreds or thousands of
+;; labels, and all the references to them.  This makes the diff output
+;; a lot more readable!
+</span>
+<span class="comment">;; However, occasionally we'll get the label-prefix set to the same
+;; thing twice, at different times.  This can occur because of
+;; quasi-name-collisions in the user program, duplicate defines of the
+;; same variable, or just somebody naming a variable "k".  So we have
+;; to check each time to find the old constcounter.
+</span>
+(<span class="keyword">define</span> (<span class="function-name">stringlist-&gt;string</span> stringlist) 
+  (list-&gt;string (stringlist-&gt;string-2 stringlist 0)))
+(<span class="keyword">define</span> (<span class="function-name">stringlist-&gt;string-2</span> stringlist idx)
+  (<span class="keyword">if</span> (null? stringlist) '()
+      (<span class="keyword">if</span> (= idx (string-length (car stringlist)))
+          (stringlist-&gt;string-2 (cdr stringlist) 0)
+          (cons (string-ref (car stringlist) idx)
+                (stringlist-&gt;string-2 stringlist (1+ idx))))))
+<span class="comment">;; XXX boy, that would be a lot nicer imperatively
+;; buf = stringbuf(apply(+, map(string-length, stringlist)))
+;; idxo = 0
+;; for string in stringlist:
+;;     for char in string: buf[idxo++] = char
+</span>
+(<span class="keyword">define</span> (<span class="function-name">set-label-prefix</span> new-prefix) 
+  <span class="comment">;; save for later
+</span>  (set! constcounters (cons (cons label-prefix-symbol constcounter) 
+                            constcounters))
+  (set! label-prefix (stringlist-&gt;string (cons <span class="string">"_"</span>
+     (escape (symbol-&gt;string new-prefix) 0 
+             <span class="comment">;; XXX incomplete list
+</span>             '(<span class="string">"+"</span>    <span class="string">"-"</span> <span class="string">"="</span>  <span class="string">"?"</span> <span class="string">"&gt;"</span>  <span class="string">"&lt;"</span>  <span class="string">"!"</span>    <span class="string">"*"</span>)
+             '(<span class="string">"Plus"</span> <span class="string">"_"</span> <span class="string">"Eq"</span> <span class="string">"P"</span> <span class="string">"Gt"</span> <span class="string">"Lt"</span> <span class="string">"Bang"</span> <span class="string">"star"</span>)))))
+  (set! label-prefix-symbol (string-&gt;symbol label-prefix))
+  (set! constcounter
+        (<span class="keyword">let</span> ((counterthing (assq label-prefix-symbol constcounters)))
+          (<span class="keyword">if</span> counterthing (cdr counterthing)
+              0)))
+)
+(<span class="keyword">define</span> (<span class="function-name">new-label</span>)
+  (set! constcounter (1+ constcounter))
+  (list label-prefix <span class="string">"_"</span> (number-&gt;string constcounter)))
+
+<span class="comment">;; stuff to output a Lisp string safely for assembly language
+</span>(<span class="keyword">define</span> (<span class="function-name">escape-char</span> char dangerous escapes) <span class="comment">; duplicated in stdlib
+</span>  (<span class="keyword">cond</span> ((null? dangerous) (char-&gt;string char))
+        ((char=? char (string-ref (car dangerous) 0))
+         (car escapes))
+        (<span class="keyword">else</span> (escape-char char (cdr dangerous) (cdr escapes)))))
+(<span class="keyword">define</span> (<span class="function-name">escape</span> string idx dangerous escapes) <span class="comment">; duplicated in stdlib
+</span>  (<span class="keyword">if</span> (= idx (string-length string)) '()
+      (cons (escape-char (string-ref string idx) dangerous escapes)
+            (escape string (1+ idx) dangerous escapes))))
+<span class="comment">;; Escape the three necessary characters.  duplicated in stdlib
+</span>(<span class="keyword">define</span> (<span class="function-name">backslash</span> string) (escape string 0 '(<span class="string">"\\"</span>   <span class="string">"\n"</span>  <span class="string">"\""</span>) 
+                                            '(<span class="string">"\\\\"</span> <span class="string">"\\n"</span> <span class="string">"\\\""</span>)))
+<span class="comment">;; Represent a string appropriately for the output assembly language file.
+</span>(<span class="keyword">define</span> (<span class="function-name">asm-represent-string</span> string) (list <span class="string">"\""</span> (backslash string) <span class="string">"\""</span>))
+
+(<span class="keyword">define</span> (<span class="function-name">ascii</span> string) (insn <span class="string">".ascii "</span> (asm-represent-string string)))
+
+<span class="comment">;; emit a prologue for a datum to be assembled into .rodata
+</span>(<span class="keyword">define</span> (<span class="function-name">rodatum</span> labelname)
+  (rodata)
+  (comment <span class="string">"align pointers so they end in binary 00"</span>)
+  (insn <span class="string">".align 4"</span>)
+  (label labelname))
+
+(<span class="keyword">define</span> (<span class="function-name">compile-word</span> contents) (insn <span class="string">".int "</span> contents))
+
+<span class="comment">;;; Stack Machine Primitives
+;; As explained earlier, there's an "abstract stack" that includes
+;; %eax as well as the x86 stack.
+</span>
+(<span class="keyword">define</span> <span class="function-name">tos</span> eax)                        <span class="comment">; top-of-stack register
+</span>(<span class="keyword">define</span> <span class="function-name">nos</span> (indirect esp))   <span class="comment">; "next on stack", what's underneath TOS
+</span>
+<span class="comment">;; push-const: Emit code to push a constant onto the abstract stack
+</span>(<span class="keyword">define</span> (<span class="function-name">push-const</span> val) (asm-push tos) (mov (const val) tos))
+<span class="comment">;; pop: Emit code to discard top of stack.
+</span>(<span class="keyword">define</span> (<span class="function-name">pop</span>) (asm-pop tos))
+
+<span class="comment">;; dup: Emit code to copy top of stack.
+</span>(<span class="keyword">define</span> (<span class="function-name">dup</span>) (asm-push tos))
+
+<span class="comment">;; swap: Emit code to exchange top of stack with what's under it.
+</span>(<span class="keyword">define</span> (<span class="function-name">swap</span>) (xchg tos nos))
+
+<span class="comment">;;; Some convenience stuff for the structure of the program.
+</span>
+(<span class="keyword">define</span> <span class="function-name">stuff-to-put-in-the-header</span> (<span class="keyword">lambda</span> () #f))
+(<span class="keyword">define</span> (<span class="function-name">concatenate-thunks</span> a b) (<span class="keyword">lambda</span> () (a) (b)))
+(<span class="keyword">define</span> (<span class="function-name">add-to-header</span> proc) 
+  (set! stuff-to-put-in-the-header 
+        (concatenate-thunks stuff-to-put-in-the-header proc)))
+
+<span class="comment">;; Add code to the header to define an error message.
+</span>(<span class="keyword">define</span> (<span class="function-name">define-error-routine</span> labelname message)
+  (add-to-header (<span class="keyword">lambda</span> ()
+    (<span class="keyword">let</span> ((errlabel         
+           (constant-string (string-append <span class="string">"error: "</span> 
+                                           (string-append message <span class="string">"\n"</span>)))))
+      (label labelname)
+      (mov (const errlabel) tos)
+      (jmp <span class="string">"report_error"</span>)))))
+
+<span class="comment">;; Emit the code for the normal error-reporting routine
+</span>(add-to-header (<span class="keyword">lambda</span> ()
+    (label <span class="string">"report_error"</span>)
+    (extract-string)
+    (comment <span class="string">"fd 2: stderr"</span>)
+    (mov (const <span class="string">"2"</span>) ebx)
+    (write_2)
+    (mov (const <span class="string">"1"</span>) ebx)               <span class="comment">; exit code of program
+</span>    (mov (const <span class="string">"1"</span>) eax)               <span class="comment">; __NR_exit
+</span>    (syscall)))                         <span class="comment">; make system call to exit
+</span>
+(<span class="keyword">define</span> (<span class="function-name">compile-tag-check-procedure</span> desired-tag)
+  (get-procedure-arg 0)
+  (asm-and (const <span class="string">"3"</span>) tos)
+  (cmp (const desired-tag) tos)
+  (je <span class="string">"return_true"</span>)
+  (jmp <span class="string">"return_false"</span>))
+
+
+<span class="comment">;;; Procedure calls.
+;; Procedure values are at least 12 bytes:
+;; - 4 bytes: procedure magic number 0xca11ab1e
+;; - 4 bytes: pointer to procedure machine code
+;; - 4 bytes: number of closed-over variables --- zero for top-level
+;;   procedures.  This is not needed by the code inside the closure.
+;; Pointers to any closed-over variables follow.
+;; 
+;; The number of arguments is passed in %edx; on the machine stack is
+;; the return address, with the arguments underneath it; the address
+;; of the procedure value that was being called is in %eax.  Callee
+;; saves %ebp and pops their own arguments off the stack.  The
+;; prologue points %ebp at the arguments.  Return value goes in %eax.
+</span>(<span class="keyword">define</span> <span class="function-name">procedure-magic</span> <span class="string">"0xca11ab1e"</span>)
+(add-to-header (<span class="keyword">lambda</span> ()
+      (label <span class="string">"ensure_procedure"</span>)
+      (if-not-right-magic-jump procedure-magic <span class="string">"not_procedure"</span>)
+      (ret)))
+(<span class="keyword">define</span> (<span class="function-name">ensure-procedure</span>) (call <span class="string">"ensure_procedure"</span>))
+(<span class="keyword">define</span> (<span class="function-name">compile-apply</span> nargs)
+  (ensure-procedure)
+  (mov (offset tos 4) ebx)              <span class="comment">; address of actual procedure
+</span>  (mov (const (number-&gt;string nargs)) edx)
+  (call (absolute ebx)))
+(<span class="keyword">define</span> (<span class="function-name">compile-tail-apply</span> nargs)
+  (comment <span class="string">"Tail call; nargs = "</span> (number-&gt;string nargs))
+  (comment <span class="string">"Note %esp points at the last thing pushed,"</span>)
+  (comment <span class="string">"not the next thing to push.  So for 1 arg, we want %ebx=%esp"</span>)
+  (lea (offset esp (quadruple (1- nargs))) ebx)
+  (pop-stack-frame edx)
+  (copy-args ebx nargs 0)
+  (asm-push edx)
+  (ensure-procedure)
+  (mov (offset tos 4) ebx)
+  (mov (const (number-&gt;string nargs)) edx)
+  (jmp (absolute ebx)))
+(<span class="keyword">define</span> (<span class="function-name">copy-args</span> basereg nargs i)
+  (<span class="keyword">if</span> (= nargs i) '()
+      (<span class="keyword">begin</span> (asm-push (offset basereg (- 0 (quadruple i))))
+             (copy-args basereg nargs (1+ i)))))
+
+<span class="comment">;; package up variadic arguments into a list.  %ebp is fully set up,
+;; so we can index off of it to find each argument, and %edx is the
+;; total number of arguments.  Only trouble is that we have to push
+;; %edx and our loop counter and whatever if we want to save them
+;; across a call to cons.
+</span>(add-to-header 
+ (<span class="keyword">lambda</span> () 
+   (label <span class="string">"package_up_variadic_args"</span>)
+   (comment <span class="string">"we have %ebp pointing at args, %edx with count"</span>)
+   (comment <span class="string">"saved %ebp in %eax.  zero-iterations case: return nil"</span>)
+   (push-const nil-value)
+   (label <span class="string">"variadic_loop"</span>)
+   (dec edx)
+   (comment <span class="string">"fucking dec doesn't update carry flag, so jump if negative"</span>)
+   (js <span class="string">"variadic_loop_end"</span>)
+   (comment <span class="string">"calling cons clobbers registers, so push %edx"</span>)
+   (asm-push edx)
+   (comment <span class="string">"now push args for cons"</span>)
+   (asm-push eax)
+   (asm-push (offset (index-register ebp edx 4) 4))
+   (comment <span class="string">"give cons its argument count"</span>)
+   (mov (const <span class="string">"2"</span>) edx)
+   (call <span class="string">"cons"</span>)
+   (comment <span class="string">"now the args are popped and we have new list in %eax"</span>)
+   (asm-pop edx)
+   (jmp <span class="string">"variadic_loop"</span>)
+   (label <span class="string">"variadic_loop_end"</span>)
+   (comment <span class="string">"now we pretend procedure was called with the list as first arg"</span>)
+   (mov eax (indirect ebp))
+   (comment <span class="string">"restore %eax to value on entry to package_up_variadic_args"</span>)
+   (pop)
+   (ret)))
+(<span class="keyword">define</span> (<span class="function-name">compile-variadic-prologue</span>)
+  (comment <span class="string">"make space for variadic argument list"</span>)
+  (asm-pop ebx)
+  (asm-push ebx)
+  (asm-push ebx)
+  (comment <span class="string">"push desired %esp on return"</span>)
+  (lea (offset (index-register esp edx 4) 8) ebx)
+  (asm-push ebx)
+
+  (asm-push ebp)                        <span class="comment">; save old %ebp
+</span>  (lea (offset esp 12) ebp)  <span class="comment">; 12 bytes to skip saved %ebp, %ebx, %eip
+</span>
+  (call <span class="string">"package_up_variadic_args"</span>))
+    
+(<span class="keyword">define</span> (<span class="function-name">compile-procedure-prologue</span> nargs)
+  (<span class="keyword">if</span> (null? nargs) (compile-variadic-prologue)
+      (<span class="keyword">begin</span>
+        (comment <span class="string">"compute desired %esp on return in %ebx and push it"</span>)
+        (lea (offset (index-register esp edx 4) 4) ebx)
+        (asm-push ebx)
+
+        (asm-push ebp)                  <span class="comment">; save old %ebp
+</span>        (lea (offset esp 12) ebp) <span class="comment">; 12 bytes to skip saved %ebp, %ebx, %eip
+</span>
+        (cmp (const (number-&gt;string nargs)) edx)
+        (jnz <span class="string">"argument_count_wrong"</span>))))
+(<span class="keyword">define</span> (<span class="function-name">compile-procedure-epilogue</span>)
+  (comment <span class="string">"procedure epilogue"</span>)
+  (comment <span class="string">"get return address"</span>)
+  (pop-stack-frame edx)
+  (jmp (absolute edx)))
+
+(<span class="keyword">define</span> (<span class="function-name">pop-stack-frame</span> return-address-register)
+  (mov (offset ebp -4) return-address-register)
+  (mov (offset ebp -8) esp)
+  (mov (offset ebp -12) ebp))
+
+(define-error-routine <span class="string">"not_procedure"</span> <span class="string">"not a procedure"</span>)
+(define-error-routine <span class="string">"argument_count_wrong"</span> <span class="string">"wrong number of arguments"</span>)
+
+<span class="comment">;; Compiles a procedure into the text segment at a given label.
+</span>(<span class="keyword">define</span> (<span class="function-name">compile-procedure</span> bodylabel nargs body)
+  (text)
+  (label bodylabel)
+  (compile-procedure-prologue nargs)
+  (body)
+  (compile-procedure-epilogue))      <span class="comment">; maybe we should just centralize
+</span>                                     <span class="comment">; that and jump to it? :)
+</span>
+<span class="comment">;; Define a built-in procedure so we can refer to it by label and
+;; push-const that label and expect to get a procedure value.
+</span>(<span class="keyword">define</span> (<span class="function-name">compile-procedure-labeled</span> labelname nargs body)
+  (<span class="keyword">let</span> ((bodylabel (new-label)))
+    (rodatum labelname)
+    (compile-word procedure-magic)
+    (compile-word bodylabel)
+    (compile-word <span class="string">"0"</span>)                    <span class="comment">; closed over zero artifacts
+</span>    (compile-procedure bodylabel nargs body)))
+
+
+<span class="comment">;; Add code to define a global procedure known by a certain global
+;; variable name to the header
+</span>(<span class="keyword">define</span> (<span class="function-name">define-global-procedure</span> symbolname nargs body)
+  (add-to-header 
+    (<span class="keyword">lambda</span> () 
+      (set-label-prefix symbolname)
+      (<span class="keyword">let</span> ((procedure-value-label (new-label)))
+        (define-global-variable symbolname procedure-value-label)
+        (compile-procedure-labeled procedure-value-label nargs body)))))
+
+<span class="comment">;; Emit code to fetch the Nth argument of the innermost procedure.
+</span>(<span class="keyword">define</span> (<span class="function-name">get-procedure-arg</span> n) 
+  (asm-push tos)
+  (mov (offset ebp (quadruple n)) tos))
+
+<span class="comment">;; Emit code to mutate it.
+</span>(<span class="keyword">define</span> (<span class="function-name">set-procedure-arg</span> n)
+  (mov tos (offset ebp (quadruple n))))
+
+(define-global-procedure 'procedure? 1
+  (<span class="keyword">lambda</span> () 
+    (get-procedure-arg 0)
+    (if-not-right-magic-jump procedure-magic <span class="string">"return_false"</span>)
+    (jmp <span class="string">"return_true"</span>)))
+
+
+<span class="comment">;;; Closures and closure handling.
+;; If a particular variable is captured by some nested
+;; lambda-expression, we heap-allocate that variable.  But that
+;; requires knowing which variables are so captured.
+</span>
+<span class="comment">;; With respect to a particular lambda-expression, any particular
+;; variable can be in one of five categories:
+;; - not mentioned;
+;; - a stack argument --- one that isn't captured by any inner
+;;   lambdas;
+;; - a heap argument --- one that is captured by inner lambdas;
+;; - an "artifact" --- inherited from some enclosing lexical scope;
+;; - a global variable.
+</span>
+<span class="comment">;; First, some basic set arithmetic.
+</span>(<span class="keyword">define</span> (<span class="function-name">set-subtract</span> a b) (filter (<span class="keyword">lambda</span> (x) (not (memq x b))) a))
+(<span class="keyword">define</span> (<span class="function-name">set-equal</span> a b) (eq? (set-subtract a b) (set-subtract b a)))
+(<span class="keyword">define</span> (<span class="function-name">add-if-not-present</span> obj set) (<span class="keyword">if</span> (memq obj set) set (cons obj set)))
+(<span class="keyword">define</span> (<span class="function-name">set-union</span> a b) (<span class="keyword">if</span> (null? b) a 
+                            (add-if-not-present (car b) (set-union (cdr b) a))))
+(<span class="keyword">define</span> (<span class="function-name">set-intersect</span> a b) (filter (<span class="keyword">lambda</span> (x) (memq x b)) a))
+
+(<span class="keyword">define</span> (<span class="function-name">assert</span> x why) (<span class="keyword">if</span> (not x) (error <span class="string">"surprise! error"</span> why) '()))
+(assert (set-equal '() '()) <span class="string">"empty set equality"</span>)
+(assert (set-equal '(a) '(a)) <span class="string">"set equality with one item"</span>)
+(assert (not (set-equal '(a) '(b))) <span class="string">"set inequality with one item"</span>)
+(assert (not (set-equal '() '(a))) <span class="string">"set inequality () (a)"</span>)
+(assert (not (set-equal '(a) '())) <span class="string">"set inequality (a) ()"</span>)
+(assert (set-equal '(a a) '(a)) <span class="string">"set equality (a a) (a)"</span>)
+(assert (set-equal '(a b) '(b a)) <span class="string">"set equality sequence varies"</span>)
+(assert (= (length (add-if-not-present 'a '())) 1) <span class="string">"add to empty set"</span>)
+(assert (= (length (add-if-not-present 'a '(a))) 1) <span class="string">"redundant add"</span>)
+(assert (= (length (add-if-not-present 'a '(b))) 2) <span class="string">"nonredundant add"</span>)
+(<span class="keyword">define</span> <span class="function-name">sample-abcd</span> (set-union '(a b c) '(b c d)))
+(assert (= (length sample-abcd) 4) <span class="string">"set union"</span>)
+(assert (memq 'a sample-abcd) <span class="string">"member from set 1"</span>)
+(assert (memq 'd sample-abcd) <span class="string">"member from set 2"</span>)
+(assert (not (memq '() sample-abcd)) <span class="string">"nil not in set"</span>)
+
+(<span class="keyword">define</span> (<span class="function-name">assert-set-equal</span> a b) (assert (set-equal a b) (list 'set-equal a b)))
+(assert-set-equal (set-intersect '(a b c) '(b c d)) '(b c))
+
+
+<span class="comment">;; Returns vars captured by some lambda inside expr, i.e. vars that
+;; occurs free inside a lambda inside expr.
+</span>(<span class="keyword">define</span> (<span class="function-name">captured-vars</span> expr)
+    (<span class="keyword">if</span> (not (pair? expr)) '()
+        (<span class="keyword">case</span> (car expr)
+          ((<span class="keyword">lambda</span>)    (free-vars-lambda (cadr expr) (cddr expr)))
+          ((<span class="keyword">if</span> %begin) (all-captured-vars (cdr expr)))
+          ((quote)    '())
+          ((set!)      (captured-vars (caddr expr))) <span class="comment">; redundant
+</span>          (<span class="keyword">else</span>        (all-captured-vars expr)))))
+
+<span class="comment">;; Returns true if var is captured by a lambda inside any of exprs.
+</span>(<span class="keyword">define</span> (<span class="function-name">all-captured-vars</span> exprs) 
+  (<span class="keyword">if</span> (null? exprs) '()
+      (set-union (captured-vars (car exprs))
+                 (all-captured-vars (cdr exprs)))))
+
+<span class="comment">;; Returns a list of the vars that are bound by a particular lambda arg list.
+</span>(<span class="keyword">define</span> (<span class="function-name">vars-bound</span> args) (<span class="keyword">if</span> (symbol? args) (list args) args))
+
+<span class="comment">;; Returns vars that occur free inside a lambda-abstraction with given
+;; args and body.
+</span>(<span class="keyword">define</span> (<span class="function-name">free-vars-lambda</span> args body) 
+  (set-subtract (all-free-vars body) (vars-bound args)))
+
+<span class="comment">;; Returns vars that occur free inside of expr.
+</span>(<span class="keyword">define</span> (<span class="function-name">free-vars</span> expr)
+  (<span class="keyword">cond</span> ((symbol? expr) (list expr))
+        ((not (pair? expr)) '())
+        (<span class="keyword">else</span> (<span class="keyword">case</span> (car expr)
+                ((<span class="keyword">lambda</span>)    (free-vars-lambda (cadr expr) (cddr expr)))
+                ((<span class="keyword">if</span> %begin) (all-free-vars (cdr expr)))
+                ((quote)     '())
+                ((set!)      (add-if-not-present (cadr expr) 
+                                                 (free-vars (caddr expr))))
+                (<span class="keyword">else</span>        (all-free-vars expr))))))
+<span class="comment">;; Returns vars that occur free inside of any of exprs.
+</span>(<span class="keyword">define</span> (<span class="function-name">all-free-vars</span> exprs) (<span class="keyword">if</span> (null? exprs) '()
+                                  (set-union (free-vars (car exprs))
+                                             (all-free-vars (cdr exprs)))))
+
+<span class="comment">;; Returns the free vars of a lambda found somewhere in its lexical
+;; environment.  This needs access to the lexical environment to
+;; distinguish artifacts from globals.
+</span>(<span class="keyword">define</span> (<span class="function-name">artifacts</span> vars body env) (filter (<span class="keyword">lambda</span> (x) (assq x env)) 
+                                          (free-vars-lambda vars body)))
+
+
+<span class="comment">;; Compiles code to store the requested heap arguments; returns an
+;; environment containing them as well as the original contents of the
+;; environment.
+</span>(<span class="keyword">define</span> (<span class="function-name">compile-heap-args</span> heap-args heap-slots-used env)
+  (comment <span class="string">"discarding useless value in %eax"</span>)
+  (pop)
+  (compile-heap-args-2 heap-args heap-slots-used env))
+(<span class="keyword">define</span> (<span class="function-name">compile-heap-args-2</span> heap-args heap-slots-used env)
+  (<span class="keyword">if</span> (null? heap-args) env
+      <span class="comment">;; XXX compile-var doesn't need a tail? argument!
+</span>      (<span class="keyword">let</span> ((var (car heap-args)))
+        (<span class="keyword">begin</span> 
+          (comment <span class="string">"move arg from stack to heap: "</span> (symbol-&gt;string var))
+          (compile-var var env)
+          (move-var-to-heap-arg)
+          <span class="comment">;; Now we have the heap arg pointer on the stack, hopefully
+</span>          <span class="comment">;; in the right place.
+</span>          (compile-heap-args-2 (cdr heap-args) (1+ heap-slots-used) 
+                               (cons (list var 'heap-pointer
+                                           heap-slots-used) env))))))
+
+(<span class="keyword">define</span> (<span class="function-name">push-artifacts</span> artifacts) (push-artifacts-2 artifacts 0))
+(<span class="keyword">define</span> (<span class="function-name">push-artifacts-2</span> artifacts slotnum)
+  (<span class="keyword">if</span> (null? artifacts) '()
+      (<span class="keyword">let</span> ((var (car artifacts)))
+        (comment <span class="string">"fetch artifact from closure: "</span> (number-&gt;string slotnum) 
+                 <span class="string">" "</span> (symbol-&gt;string var))
+        <span class="comment">;; 12 skips the magic number, code pointer, and artifact count.
+</span>        (asm-push (offset eax (+ 12 (quadruple slotnum))))
+        (cons (list var 'heap-pointer slotnum) 
+              (push-artifacts-2 (cdr artifacts) (1+ slotnum))))))
+
+(<span class="keyword">define</span> (<span class="function-name">push-closure</span> label artifacts env)
+  (push-const (tagged-integer (+ 12 (quadruple (length artifacts)))))
+  (emit-malloc)
+  (mov tos ebx)
+  (mov (const procedure-magic) (indirect ebx))
+  (mov (const label) (offset ebx 4))
+  (mov (const (number-&gt;string (length artifacts))) (offset ebx 8))
+  (store-closure-artifacts ebx 12 artifacts env))
+
+(<span class="keyword">define</span> (<span class="function-name">store-closure-artifacts</span> reg off artifacts env)
+  (<span class="keyword">if</span> (null? artifacts) '()
+      (<span class="keyword">begin</span> (get-heap-var (assq (car artifacts) env))
+             (mov tos (offset reg off))
+             (pop)
+             (store-closure-artifacts reg (+ off 4) (cdr artifacts) env))))
+
+<span class="comment">;; Heap variable objects are 8 bytes: a magic number and their current value.
+</span>(<span class="keyword">define</span> <span class="function-name">heap-var-magic</span> <span class="string">"0x1ce11ed"</span>)
+(<span class="keyword">define</span> (<span class="function-name">move-var-to-heap-arg</span>)
+  (comment <span class="string">"moving top of stack to newly allocated heap var"</span>)
+  (push-const (tagged-integer 8))
+  (emit-malloc)
+  (mov (const heap-var-magic) (indirect tos))
+  (asm-pop (offset tos 4)))
+
+<span class="comment">;; Some basic unit tests for closure handling.
+</span>
+(<span class="keyword">define</span> <span class="function-name">sample-closure-expression</span>    
+  '(<span class="keyword">lambda</span> (a b)
+     (<span class="keyword">lambda</span> (c d)
+       (<span class="keyword">lambda</span> (e f) (+ e f c a)))))
+
+(assert-set-equal (free-vars sample-closure-expression) '(+))
+(assert-set-equal (captured-vars sample-closure-expression) '(+))
+
+(<span class="keyword">define</span> <span class="function-name">sample-inner-lambda-1</span> (caddr sample-closure-expression))
+(assert-set-equal (free-vars sample-inner-lambda-1) '(a +))
+(assert-set-equal (captured-vars sample-inner-lambda-1) '(a +))
+
+(<span class="keyword">define</span> <span class="function-name">sample-inner-lambda-2</span> (caddr sample-inner-lambda-1))
+(assert-set-equal (free-vars sample-inner-lambda-2) '(a c +))
+(assert-set-equal (captured-vars sample-inner-lambda-2) '(a c +))
+(assert-set-equal (artifacts '(e f) (caddr sample-inner-lambda-2)
+                             '((c whatever) (d whatever)
+                               (a whatever) (b whatever)))
+                  '(a c))
+
+<span class="comment">;; Some tests for the other cases.
+</span>(<span class="keyword">define</span> <span class="function-name">sample-quoted-expr</span> '(foo bar '(a b c)))
+(assert-set-equal (free-vars sample-quoted-expr) '(foo bar))
+(assert-set-equal (captured-vars sample-quoted-expr) '())
+
+(<span class="keyword">define</span> <span class="function-name">sample-if-expr</span> '(<span class="keyword">if</span> a b c))
+(assert-set-equal (free-vars sample-if-expr) '(a b c))
+(assert-set-equal (captured-vars sample-if-expr) '())
+
+(<span class="keyword">define</span> <span class="function-name">sample-begin-expr</span> '(<span class="keyword">if</span> a b c))
+(assert-set-equal (free-vars sample-begin-expr) '(a b c))
+(assert-set-equal (captured-vars sample-begin-expr) '())
+
+<span class="comment">;; In particular, multiple expressions in a lambda body here.
+</span>(assert-set-equal (captured-vars '(<span class="keyword">begin</span> (<span class="keyword">if</span> x (<span class="keyword">lambda</span> (y) (z a) (y c)) d) e))
+                  '(z a c))
+
+(assert-set-equal (captured-vars '(<span class="keyword">lambda</span> x (x y z))) '(y z))
+
+(<span class="keyword">define</span> (<span class="function-name">heap-args</span> varlist body)
+  (set-intersect varlist (all-captured-vars body)))
+
+(assert-set-equal '(a) (heap-args (cadr sample-closure-expression)
+                                  (cddr sample-closure-expression)))
+(assert-set-equal '(c) (heap-args (cadr sample-inner-lambda-1)
+                                  (cddr sample-inner-lambda-1)))
+(assert-set-equal '() (heap-args (cadr sample-inner-lambda-2)
+                                 (cddr sample-inner-lambda-2)))
+(assert-set-equal '(message)
+                  (heap-args '(message) 
+                             '((<span class="keyword">lambda</span> (message2) 
+                                 (display message)
+                                 (display message2)
+                                 (newline)))))
+
+(assert-set-equal '(a b) (free-vars '(set! a b)))
+(assert-set-equal '() (captured-vars '(set! a b)))
+
+<span class="comment">;;; Memory management.
+</span>
+(add-to-header
+ (<span class="keyword">lambda</span> () 
+   (insn <span class="string">".bss"</span>)
+   (label <span class="string">"the_arena"</span>)
+   (insn <span class="string">".space 128*1048576"</span>)          <span class="comment">; no GC yet!
+</span>   (compile-global-variable <span class="string">"arena_pointer"</span> <span class="string">"the_arena"</span>)))
+
+<span class="comment">;; Emit code to bump a pointer in a register up, if necessary, to be
+;; divisible by 4.
+</span>(<span class="keyword">define</span> (<span class="function-name">align4</span> reg)
+  (add (const <span class="string">"3"</span>) reg)
+  (asm-and (const <span class="string">"~3"</span>) reg))
+
+(<span class="keyword">define</span> (<span class="function-name">emit-malloc</span>)
+  (comment <span class="string">"code to allocate memory; tagged number of bytes in %eax"</span>)
+  (ensure-integer)
+  (scheme-to-native-integer eax)
+  (align4 eax)
+  (mov (indirect <span class="string">"arena_pointer"</span>) ebx)
+  (add ebx eax)
+  (mov eax (indirect <span class="string">"arena_pointer"</span>))
+  (mov ebx eax)
+  (comment <span class="string">"now %eax points to newly allocated memory"</span>))
+
+<span class="comment">;; XXX still need to implement deallocation and a GC
+</span>
+
+<span class="comment">;;; Strings (on the target)
+;; A string consists of the following, contiguous in memory:
+;; - 4 bytes of a string magic number 0xbabb1e
+;; - 4 bytes of string length "N";
+;; - N bytes of string data.
+</span>(<span class="keyword">define</span> <span class="function-name">string-magic</span> <span class="string">"0xbabb1e"</span>)
+
+(<span class="keyword">define</span> (<span class="function-name">constant-string-2</span> contents labelname)
+  (rodatum labelname)
+  (compile-word string-magic)
+  (compile-word (number-&gt;string (string-length contents)))
+  (ascii contents)
+  (text)
+  labelname)
+<span class="comment">;; constant-string: Emit code to represent a constant string.
+</span>(<span class="keyword">define</span> (<span class="function-name">constant-string</span> contents) (constant-string-2 contents (new-label)))
+
+(<span class="keyword">define</span> (<span class="function-name">if-not-right-magic-jump</span> magic destlabel)
+  (comment <span class="string">"test whether %eax has magic: "</span> magic)
+  (comment <span class="string">"first, ensure that it's a pointer, not something unboxed"</span>)
+  (test (const <span class="string">"3"</span>) tos)              <span class="comment">; test low two bits
+</span>  (jnz destlabel)
+  (comment <span class="string">"now, test its magic number"</span>)
+  (cmp (const magic) (indirect tos))
+  (jnz destlabel))
+
+(define-error-routine <span class="string">"notstring"</span> <span class="string">"not a string"</span>)
+(add-to-header (<span class="keyword">lambda</span> ()
+    (label <span class="string">"ensure_string"</span>)
+    (if-not-right-magic-jump string-magic <span class="string">"notstring"</span>)
+    (ret)))
+<span class="comment">;; Emit code to ensure that %eax is a string
+</span>(<span class="keyword">define</span> (<span class="function-name">ensure-string</span>) (call <span class="string">"ensure_string"</span>))
+
+(define-global-procedure 'string? 1
+  (<span class="keyword">lambda</span> ()
+    (get-procedure-arg 0)
+    (if-not-right-magic-jump string-magic <span class="string">"return_false"</span>)
+    (jmp <span class="string">"return_true"</span>)))
+
+<span class="comment">;; Emit code to pull the string pointer and count out of a string
+;; being pointed to and push them on the abstract stack
+</span>(<span class="keyword">define</span> (<span class="function-name">extract-string</span>)
+  (ensure-string)
+  (lea (offset tos 8) ebx)              <span class="comment">; string pointer
+</span>  (asm-push ebx)
+  (mov (offset tos 4) tos))             <span class="comment">; string length
+</span>
+(define-global-procedure 'make-string 1
+  (<span class="keyword">lambda</span> () (get-procedure-arg 0)
+             (ensure-integer)
+             (comment <span class="string">"we need 8 bytes more than the string length"</span>)
+             (push-const (tagged-integer 8))
+             (emit-integer-addition)
+             (emit-malloc)
+             (mov (const string-magic) (indirect tos))
+             (mov tos ebx)
+             (comment <span class="string">"push address to return, get string length and store it"</span>)
+             (get-procedure-arg 0)
+             (scheme-to-native-integer tos)
+             (mov tos (offset ebx 4))
+             (comment <span class="string">"fill string with Xes"</span>)
+             (lea (offset ebx 8) edi)
+             (mov tos ecx)
+             (mov (const <span class="string">"'X"</span>) eax)
+             (rep-stosb)
+             (comment <span class="string">"now pop and return the address"</span>)
+             (pop)))
+
+(<span class="keyword">define</span> (<span class="function-name">check-array-bounds</span> )
+  (comment <span class="string">"verify that tagged %eax is in [0, untagged NOS)"</span>)
+  (ensure-integer)
+
+  <span class="comment">;; Intel manual 253667 explains, "[The SUB instruction]
+</span>  <span class="comment">;; evaluates the result for both signed and unsigned integer
+</span>  <span class="comment">;; operands and sets the OF and CF flags to indicate an overflow
+</span>  <span class="comment">;; in the signed or unsigned result, respectively. The SF flag
+</span>  <span class="comment">;; indicates the sign of the signed result."  
+</span>
+  (scheme-to-native-integer eax)
+  <span class="comment">;; We can do this with a single unsigned comparison; negative
+</span>  <span class="comment">;; array indices will look like very large positive numbers and
+</span>  <span class="comment">;; therefore be out of bounds.
+</span>  (comment <span class="string">"set flags by (unsigned array index - array max)"</span>)
+  (cmp nos tos)
+  (comment <span class="string">"now we expect unsigned overflow, i.e. borrow/carry."</span>)
+  (jnb <span class="string">"index_out_of_bounds"</span>)
+  (comment <span class="string">"now discard both the index and the bound"</span>)
+  (pop) (pop))
+
+(define-error-routine <span class="string">"index_out_of_bounds"</span> <span class="string">"array index out of bounds"</span>)
+
+(define-global-procedure 'string-set! 3
+  (<span class="keyword">lambda</span> () 
+    (comment <span class="string">"string-set! primitive procedure"</span>)
+    (get-procedure-arg 0)
+    (extract-string)
+    (get-procedure-arg 1)
+    (check-array-bounds)
+    (get-procedure-arg 1)
+    (scheme-to-native-integer tos)
+    (mov tos edi)
+    (comment <span class="string">"now retrieve the address of string bytes from the stack"</span>)
+    (pop)
+    (mov tos ebx)
+    (get-procedure-arg 2)
+    (ensure-character)
+    (scheme-to-native-character tos)
+    (movb al (indirect (index-register ebx edi 1)))
+    (comment <span class="string">"discard the character and base address"</span>)
+    (pop) (pop)
+    (comment <span class="string">"but we need a return value..."</span>)
+    (get-procedure-arg 0)))
+
+(define-global-procedure 'string-ref 2
+  (<span class="keyword">lambda</span> ()
+    (comment <span class="string">"string-ref primitive procedure"</span>)
+    (get-procedure-arg 0)
+    (extract-string)
+    (get-procedure-arg 1)
+    (check-array-bounds)
+    (get-procedure-arg 1)
+    (scheme-to-native-character tos)
+    (comment <span class="string">"get base address of string data from stack"</span>)
+    (asm-pop ebx)
+    (movzbl (indirect (index-register tos ebx 1)) tos)
+    (native-to-scheme-character tos)))
+
+(define-global-procedure 'string-length 1
+  (<span class="keyword">lambda</span> ()
+    (comment <span class="string">"string-length primitive procedure"</span>)
+    (get-procedure-arg 0)
+    (extract-string)
+    (asm-pop ebx)
+    (native-to-scheme-integer tos)))
+
+<span class="comment">;;; conses
+;; They're 12 bytes: magic number, car, cdr.  That's all, folks.
+</span>
+(<span class="keyword">define</span> <span class="function-name">cons-magic</span> <span class="string">"0x2ce11ed"</span>)
+(<span class="keyword">define</span> (<span class="function-name">ensure-cons</span>) (call <span class="string">"ensure_cons"</span>))
+(add-to-header (<span class="keyword">lambda</span> () (label <span class="string">"ensure_cons"</span>)
+                          (if-not-right-magic-jump cons-magic <span class="string">"not_cons"</span>)
+                          (ret)))
+(define-error-routine <span class="string">"not_cons"</span> <span class="string">"not a cons"</span>)
+(define-global-procedure 'car 1
+  (<span class="keyword">lambda</span> ()
+    (get-procedure-arg 0)
+    (ensure-cons)
+    (mov (offset tos 4) tos)))
+(define-global-procedure 'cdr 1
+  (<span class="keyword">lambda</span> ()
+    (get-procedure-arg 0)
+    (ensure-cons)
+    (mov (offset tos 8) tos)))
+<span class="comment">;; We define a label here before the procedure prologue so that other
+;; asm routines can call cons
+</span>(add-to-header (<span class="keyword">lambda</span> () (text) (label <span class="string">"cons"</span>)))
+(define-global-procedure 'cons 2
+  (<span class="keyword">lambda</span> ()
+    (push-const (tagged-integer 12))
+    (emit-malloc)
+    (mov (const cons-magic) (indirect tos))
+    (mov tos ebx)
+    (get-procedure-arg 0)
+    (mov tos (offset ebx 4))
+    (pop)
+    (get-procedure-arg 1)
+    (mov tos (offset ebx 8))
+    (pop)))
+<span class="comment">;; Compile a quoted cons cell.
+</span>(<span class="keyword">define</span> (<span class="function-name">compile-cons</span> car-contents cdr-contents labelname)
+  (rodatum labelname)
+  (compile-word cons-magic)
+  (compile-word car-contents)
+  (compile-word cdr-contents)
+  (text))
+
+(define-global-procedure 'pair? 1
+  (<span class="keyword">lambda</span> ()
+    (get-procedure-arg 0)
+    (if-not-right-magic-jump cons-magic <span class="string">"return_false"</span>)
+    (jmp <span class="string">"return_true"</span>)))
+(add-to-header 
+ (<span class="keyword">lambda</span> ()
+   (label <span class="string">"return_true"</span>)
+   (mov (const true-value) tos)
+   (compile-procedure-epilogue)
+   (label <span class="string">"return_false"</span>)
+   (mov (const false-value) tos)
+   (compile-procedure-epilogue)))
+
+<span class="comment">;;; Symbols.
+;; In-memory structures with magic number "0x1abe1" (for now.)
+</span>(<span class="keyword">define</span> <span class="function-name">symbol-magic</span> <span class="string">"0x1abe1"</span>)
+<span class="comment">;; XXX refactor these if-not-right-magic-jump predicates
+</span>(define-global-procedure 'symbol? 1
+  (<span class="keyword">lambda</span> ()
+    (get-procedure-arg 0)
+    (if-not-right-magic-jump symbol-magic <span class="string">"return_false"</span>)
+    (jmp <span class="string">"return_true"</span>)))
+(<span class="keyword">define</span> <span class="function-name">interned-symbol-list</span> '())
+(<span class="keyword">define</span> (<span class="function-name">intern</span> symbol)
+  (interning symbol interned-symbol-list))
+(<span class="keyword">define</span> (<span class="function-name">interning</span> symbol symlist)
+  (<span class="keyword">cond</span> ((null? symlist) 
+         <span class="comment">;; XXX isn't this kind of duplicative with the global variables stuff?
+</span>         (set! interned-symbol-list 
+               (cons (list symbol (new-label)) interned-symbol-list))
+         (car interned-symbol-list))
+        ((eq? symbol (caar symlist)) (car symlist))
+        (<span class="keyword">else</span> (interning symbol (cdr symlist)))))
+(<span class="keyword">define</span> (<span class="function-name">symbol-value</span> symbol) (cadr (intern symbol)))
+
+(<span class="keyword">define</span> (<span class="function-name">emit-symbols</span>)
+  (comment <span class="string">"symbols"</span>)
+  (emit-symbols-from <span class="string">"0"</span> interned-symbol-list))
+(<span class="keyword">define</span> (<span class="function-name">emit-symbols-from</span> last-pointer remaining)
+  (<span class="keyword">if</span> (null? remaining) (emit-symbol-list-header last-pointer)
+      (<span class="keyword">let</span> ((symlabel (car remaining)))
+        (comment <span class="string">"symbol: "</span> (symbol-&gt;string (car symlabel)))
+        (<span class="keyword">let</span> ((stringlabel (compile-constant (symbol-&gt;string (car symlabel)))))
+          (rodatum (cdr symlabel))
+          (compile-word symbol-magic)
+          (compile-word stringlabel)
+          (compile-word last-pointer)
+          (emit-symbols-from (cdr symlabel) (cdr remaining))))))
+(<span class="keyword">define</span> (<span class="function-name">emit-symbol-list-header</span> last-pointer)
+  (section <span class="string">".data"</span>)
+  (label <span class="string">"symbol_table"</span>)
+  (compile-word last-pointer))
+
+(add-to-header (<span class="keyword">lambda</span> () (label <span class="string">"ensure_symbol"</span>)
+                          (if-not-right-magic-jump symbol-magic <span class="string">"not_symbol"</span>)
+                          (ret)))
+(define-error-routine <span class="string">"not_symbol"</span> <span class="string">"not a symbol"</span>)
+(<span class="keyword">define</span> (<span class="function-name">ensure-symbol</span>) (call <span class="string">"ensure_symbol"</span>))
+
+(define-global-procedure 'symbol-&gt;string 1
+  (<span class="keyword">lambda</span> () (get-procedure-arg 0)
+             (ensure-symbol)
+             (mov (offset tos 4) tos)))
+
+<span class="comment">;; XXX maybe this could use the normal string=?, or vice versa?
+</span>(define-global-procedure 'string-&gt;symbol 1
+  (<span class="keyword">lambda</span> ()
+    (get-procedure-arg 0)
+    (extract-string)
+    (comment <span class="string">"now string length is in %eax and string data pointer at (%esp)"</span>)
+    (mov (indirect <span class="string">"symbol_table"</span>) ebx)
+    (label <span class="string">"string_to_symbol_loop"</span>)
+    (test ebx ebx)
+    (jz <span class="string">"intern_new_symbol"</span>)
+    (comment <span class="string">"fetch pointer to string value"</span>)
+    (mov (offset ebx 4) edx)
+    (comment <span class="string">"fetch string length"</span>)
+    (mov (offset edx 4) ecx)
+    (cmp ecx eax)
+    (jnz <span class="string">"wrong_symbol_thanks_for_playing"</span>)
+    (comment <span class="string">"fetch string pointer"</span>)
+    (lea (offset edx 8) esi)
+    (mov nos edi)
+    (repe-cmpsb)
+    (jnz <span class="string">"wrong_symbol_thanks_for_playing"</span>)
+    (comment <span class="string">"found the right symbol"</span>)
+    (pop)
+    (mov ebx tos)
+    (jmp <span class="string">"string_symbol_return"</span>)
+    (label <span class="string">"wrong_symbol_thanks_for_playing"</span>)
+    (comment <span class="string">"get address of next symbol"</span>)
+    (mov (offset ebx 8) ebx)
+    (jmp <span class="string">"string_to_symbol_loop"</span>)
+    (label <span class="string">"intern_new_symbol"</span>)
+    (comment <span class="string">"get string pointer"</span>)
+    (get-procedure-arg 0)
+    (comment <span class="string">"symbols are 12 bytes"</span>)
+    (push-const (tagged-integer 12))
+    (emit-malloc)
+    (mov (const symbol-magic) (indirect tos))
+    (comment <span class="string">"store string pointer for new symbol"</span>)
+    (mov nos ebx)
+    (mov ebx (offset tos 4))
+    (mov (indirect <span class="string">"symbol_table"</span>) ebx)
+    (mov ebx (offset tos 8))
+    (mov tos (indirect <span class="string">"symbol_table"</span>))
+    (label <span class="string">"string_symbol_return"</span>)))    
+
+<span class="comment">;;; I/O: input and output.  Putout and Vladimir.
+</span>
+<span class="comment">;; Emit code which, given a byte count on top of stack and a string
+;; pointer underneath it, outputs the string.
+</span>(<span class="keyword">define</span> (<span class="function-name">write_2</span>)
+  (mov tos edx)                         <span class="comment">; byte count in arg 3
+</span>  (asm-pop ecx)                         <span class="comment">; byte string in arg 2
+</span>  (mov (const <span class="string">"4"</span>) eax)                 <span class="comment">; __NR_write
+</span>  (syscall))                            <span class="comment">; return value is in %eax
+</span>
+<span class="comment">;; Emit code to output a string.
+;; XXX this needs to have a reasonable return value, and it doesn't!
+</span>(<span class="keyword">define</span> (<span class="function-name">target-display</span>) 
+  (extract-string)
+  (comment <span class="string">"fd 1: stdout"</span>)
+  (mov (const <span class="string">"1"</span>) ebx)
+  (write_2))
+<span class="comment">;; Emit code to output a newline.
+</span>(<span class="keyword">define</span> (<span class="function-name">target-newline</span>)
+  (push-const <span class="string">"newline_string"</span>)
+  (target-display))
+(add-to-header (<span class="keyword">lambda</span> () (constant-string-2 <span class="string">"\n"</span> <span class="string">"newline_string"</span>)))
+
+(define-global-procedure 'display 1
+  (<span class="keyword">lambda</span> () (get-procedure-arg 0)
+             (target-display)))
+(define-global-procedure 'newline 0 target-newline)
+(define-global-procedure 'eq? 2 
+  (<span class="keyword">lambda</span> () (get-procedure-arg 0)
+             (get-procedure-arg 1)
+             (target-eq?)))
+
+(define-global-procedure 'current-input-port 0
+  (<span class="keyword">lambda</span> () (comment <span class="string">"We don't have ports right now, so return nil"</span>)
+             (push-const nil-value)))
+
+(define-global-procedure 'read-char '()
+  (<span class="keyword">lambda</span> () (comment <span class="string">"We don't care about our args."</span>)
+             (comment <span class="string">"(maybe somebody passed us (current-input-port))"</span>)
+             (section <span class="string">".data"</span>)
+             (label <span class="string">"read_char_buffer"</span>)
+             (compile-word <span class="string">"0"</span>)
+             (text)
+             (comment <span class="string">"__NR_read; see asm-i486/unistd.h"</span>)
+             (mov (const <span class="string">"3"</span>) eax)
+             (comment <span class="string">"stdin"</span>)
+             (mov (const <span class="string">"0"</span>) ebx)
+             (mov (const <span class="string">"read_char_buffer"</span>) ecx)
+             (mov (const <span class="string">"1"</span>) edx)
+             (syscall)
+             (test eax eax)
+             (je <span class="string">"return_eof"</span>)
+             (movzbl (indirect <span class="string">"read_char_buffer"</span>) tos)
+             (native-to-scheme-character tos)
+             (jmp <span class="string">"read_char_return"</span>)
+             (label <span class="string">"return_eof"</span>)
+             (mov (const eof-value) tos)
+             (label <span class="string">"read_char_return"</span>)))  
+
+<span class="comment">;; We don't have ports, but we do have a special procedure to print
+;; strings on stderr!
+</span>(define-global-procedure 'display-stderr 1
+  (<span class="keyword">lambda</span> () (get-procedure-arg 0)
+             (extract-string)
+             (comment <span class="string">"fd 2: stderr"</span>)
+             (mov (const <span class="string">"2"</span>) ebx)
+             (write_2)))
+<span class="comment">;; System call to exit the program.
+</span>(define-global-procedure 'exit 1
+  (<span class="keyword">lambda</span> () (get-procedure-arg 0)
+             (ensure-integer)
+             (scheme-to-native-integer tos)
+             (mov tos ebx)
+             (mov (const <span class="string">"1"</span>) eax)      <span class="comment">; __NR_exit
+</span>             (syscall)))
+
+<span class="comment">;;; Integers
+</span>(<span class="keyword">define</span> (<span class="function-name">tagshift</span> str) (list (number-&gt;string str) <span class="string">"&lt;&lt;2"</span>))
+(<span class="keyword">define</span> <span class="function-name">integer-tag</span> <span class="string">"1"</span>)
+(define-global-procedure 'integer? 1 
+  (<span class="keyword">lambda</span> () (compile-tag-check-procedure integer-tag)))
+(<span class="keyword">define</span> (<span class="function-name">tagged-integer</span> int) (list integer-tag <span class="string">" + "</span> (tagshift int)))
+(add-to-header (<span class="keyword">lambda</span> ()
+    (label <span class="string">"ensure_integer"</span>)
+    (test (const <span class="string">"1"</span>) tos)
+    (jz <span class="string">"not_an_integer"</span>)
+    (test (const <span class="string">"2"</span>) tos)
+    (jnz <span class="string">"not_an_integer"</span>)
+    (ret)))
+(define-error-routine <span class="string">"not_an_integer"</span> <span class="string">"not an integer"</span>)
+
+(<span class="keyword">define</span> (<span class="function-name">ensure-integer</span>) (call <span class="string">"ensure_integer"</span>))
+<span class="comment">;; XXX I just added equal? to the required subset of the language
+</span>(<span class="keyword">define</span> (<span class="function-name">assert-equal</span> a b) (<span class="keyword">if</span> (equal? a b) #t (error <span class="string">"not equal"</span> (list a b))))
+<span class="comment">;; Emit code to add NOS to TOS; assumes they're already tag-checked
+</span>(<span class="keyword">define</span> (<span class="function-name">emit-integer-addition</span>) (asm-pop ebx)
+                                (add ebx tos)
+                                (dec tos)) <span class="comment">; fix up tag
+</span>
+(<span class="keyword">define</span> (<span class="function-name">integer-add</span> rands env tail?)
+  (comment <span class="string">"integer add operands"</span>)
+  (assert-equal 2 (compile-args rands env))
+  (comment <span class="string">"now execute integer add"</span>)
+  (ensure-integer)
+  (swap)
+  (ensure-integer)
+  (emit-integer-addition))
+(<span class="keyword">define</span> (<span class="function-name">integer-sub</span> rands env tail?)
+  (comment <span class="string">"integer subtract operands"</span>)
+  (assert-equal 2 (compile-args rands env))
+  (comment <span class="string">"now execute integer subtract"</span>)
+  (ensure-integer)
+  (swap)
+  (ensure-integer)
+  (sub tos nos)
+  (pop)
+  (inc tos))                            <span class="comment">; fix up tag
+</span>
+<span class="comment">;; Emit code to convert a native integer to a tagged integer.
+</span>(<span class="keyword">define</span> (<span class="function-name">native-to-scheme-integer</span> reg) (sal reg) (sal reg) (inc reg))
+<span class="comment">;; Emit code to convert a tagged integer to a native integer.    
+</span>(<span class="keyword">define</span> (<span class="function-name">scheme-to-native-integer</span> reg) (sar reg) (sar reg))
+
+<span class="comment">;; Emit code to divide procedure arg 0 by procedure arg 1
+;; This merely zeroes out the tags rather than shifting them off.  The
+;; normal tagged representation of an integer N is N*4+1.
+;; Unfortunately (N*4+1)/(M*4+1) and (N*4+1) % (M*4+1) don't seem to
+;; have particularly nice properties, so we divide (N*4) by (M*4)
+;; instead.  (N*4) / (M*4) = N/M, and (N*4) % (M*4) = (N%M) * 4.
+;; (Barring overflow.)
+</span>(<span class="keyword">define</span> (<span class="function-name">emit-division-code</span>)
+  (get-procedure-arg 1)
+  (ensure-integer)
+  (comment <span class="string">"fetch dividend second; idiv wants it in %eax"</span>)
+  (get-procedure-arg 0)
+  (ensure-integer)
+  (comment <span class="string">"zero out the tag"</span>)
+  (dec tos)
+  (asm-pop ebx)
+  (dec ebx)
+  (comment <span class="string">"zero the top half of the dividend"</span>)
+  (sub edx edx)
+  (idiv ebx))
+
+(define-global-procedure 'remainder 2
+  (<span class="keyword">lambda</span> () (emit-division-code)
+             (comment <span class="string">"remainder (&lt;&lt;2) is in %edx"</span>)
+             (mov edx tos)
+             (comment <span class="string">"put the tag back"</span>)
+             (inc tos)))
+(define-global-procedure 'quotient 2
+  (<span class="keyword">lambda</span> () (emit-division-code)
+             (native-to-scheme-integer tos)))
+
+(define-global-procedure '&lt; 2
+  (<span class="keyword">lambda</span> ()
+    (comment <span class="string">"procedure &lt;: (&lt; x y) returns true if x &lt; y"</span>)
+    (get-procedure-arg 0)
+    (ensure-integer)
+    (get-procedure-arg 1)
+    (ensure-integer)
+    (cmp tos nos)
+    (pop)
+    (jg <span class="string">"return_false"</span>)
+    (jmp <span class="string">"return_true"</span>)))
+
+<span class="comment">;;; Booleans and other misc. types
+</span>(<span class="keyword">define</span> <span class="function-name">enum-tag</span> <span class="string">"2"</span>)
+(<span class="keyword">define</span> (<span class="function-name">enum-value</span> offset) (list enum-tag <span class="string">" + "</span> (tagshift offset)))
+(<span class="keyword">define</span> <span class="function-name">nil-value</span> (enum-value 256))
+(<span class="keyword">define</span> <span class="function-name">true-value</span> (enum-value 257))
+(<span class="keyword">define</span> <span class="function-name">false-value</span> (enum-value 258))
+(<span class="keyword">define</span> <span class="function-name">eof-value</span> (enum-value 259))
+(define-global-procedure 'eof-object? 1
+  (<span class="keyword">lambda</span> ()
+    (get-procedure-arg 0)
+    (cmp (const eof-value) tos)
+    (je <span class="string">"return_true"</span>)
+    (jmp <span class="string">"return_false"</span>)))
+
+(<span class="keyword">define</span> (<span class="function-name">jump-if-false</span> label)
+  (cmp (const false-value) tos)
+  (pop)
+  (je label))
+
+<span class="comment">;; Emit code to push a boolean in place of the top two stack items.
+;; It will be #t if they are equal, #f if they are not.
+</span>(<span class="keyword">define</span> (<span class="function-name">target-eq?</span>)
+  (<span class="keyword">let</span> ((label1 (new-label)))
+    <span class="comment">;; Nested let so output doesn't depend on argument evaluation
+</span>    <span class="comment">;; order.
+</span>    (<span class="keyword">let</span> ((label2 (new-label)))
+      (asm-pop ebx)
+      (cmp ebx tos)
+      (je label1)
+      (mov (const false-value) tos)
+      (jmp label2)
+      (label label1)
+      (mov (const true-value) tos)
+      (label label2))))
+
+<span class="comment">;;; Characters (chars).
+;; These are unboxed and use "enum-tag" (2).
+</span>
+<span class="comment">;; Emit code to jump if TOS isn't a character.
+</span>(<span class="keyword">define</span> (<span class="function-name">jump-if-not-char</span> label)
+  (test (const <span class="string">"1"</span>) tos)
+  (jnz label)
+  (test (const <span class="string">"2"</span>) tos)
+  (jz label)
+  <span class="comment">;; Intel manual 253666 says, "The comparison is
+</span>  <span class="comment">;; performed by subtracting the second operand
+</span>  <span class="comment">;; from the first operand and then setting the
+</span>  <span class="comment">;; status flags in the same manner as the SUB
+</span>  <span class="comment">;; instruction."  Here we're using AT&amp;T syntax, so
+</span>  <span class="comment">;; that means "the first operand from the second
+</span>  <span class="comment">;; operand", so we expect to set the carry flag
+</span>  <span class="comment">;; here.
+</span>  (cmp (const (enum-value 256)) tos)
+  (jnb label))
+
+<span class="comment">;; Emit code to generate an error if TOS isn't a character.
+</span>(<span class="keyword">define</span> (<span class="function-name">ensure-character</span>) (jump-if-not-char <span class="string">"not_a_character"</span>))
+(define-error-routine <span class="string">"not_a_character"</span> <span class="string">"not a character"</span>)
+
+(define-global-procedure 'char? 1 
+  (<span class="keyword">lambda</span> ()
+    (get-procedure-arg 0)
+    (jump-if-not-char <span class="string">"return_false"</span>)
+    (jmp <span class="string">"return_true"</span>)))
+
+<span class="comment">;; Emit code to leave an unsigned native character in the register,
+;; converting from a tagged character.
+</span>(<span class="keyword">define</span> <span class="function-name">scheme-to-native-character</span> scheme-to-native-integer)
+<span class="comment">;; Emit code to convert from an unsigned native character to a tagged
+;; character.
+</span>(<span class="keyword">define</span> (<span class="function-name">native-to-scheme-character</span> reg) (sal reg) (inc reg) (sal reg))
+
+<span class="comment">;; Return string to represent character in assembly language.
+;; Previously used 'a, 'b, 'c, etc., but that gets error-prone with
+;; things like backslash.  Much to my surprise it did work with space,
+;; tab, and newline, though...
+</span>(<span class="keyword">define</span> (<span class="function-name">tagged-character</span> char)
+  (list enum-tag <span class="string">" + "</span> (number-&gt;string (char-&gt;integer char)) <span class="string">"&lt;&lt;2"</span>))
+
+<span class="comment">;; XXX these sure would be nice to inline :)
+</span>(define-global-procedure 'integer-&gt;char 1
+  (<span class="keyword">lambda</span> () (get-procedure-arg 0)
+             (inc tos)
+             (ensure-character)))
+(define-global-procedure 'char-&gt;integer 1
+  (<span class="keyword">lambda</span> () (get-procedure-arg 0)
+             (ensure-character)
+             (dec tos)))
+
+
+<span class="comment">;;; Global variable handling.
+</span>
+(<span class="keyword">define</span> <span class="function-name">global-variable-labels</span> '())
+(<span class="keyword">define</span> <span class="function-name">global-variables-defined</span> '())
+
+(<span class="keyword">define</span> (<span class="function-name">allocate-new-global-variable-label!</span> name)
+  (<span class="keyword">let</span> ((label (new-label)))
+    (set! global-variable-labels 
+          (cons (cons name label) global-variable-labels))
+    label))
+
+<span class="comment">;; Return a label representing this global variable, allocating a new
+;; one if necessary.
+</span>(<span class="keyword">define</span> (<span class="function-name">global-variable-label</span> name) 
+  (<span class="keyword">let</span> ((binding (assq name global-variable-labels)))
+    (<span class="keyword">if</span> binding (cdr binding) (allocate-new-global-variable-label! name))))
+
+<span class="comment">;; Emit code to create a mutable labeled cell, for example for use as
+;; a global variable, with a specific assembly label.
+</span>(<span class="keyword">define</span> (<span class="function-name">compile-global-variable</span> varlabel initial)
+  (section <span class="string">".data"</span>)
+  (label varlabel)
+  (compile-word initial)
+  (text))
+
+<span class="comment">;; Emit code to create a mutable labeled cell for use as a global
+;; variable, bound to a specific identifier.
+</span>(<span class="keyword">define</span> (<span class="function-name">define-global-variable</span> name initial)
+  (<span class="keyword">if</span> (assq name global-variables-defined)
+      <span class="comment">;; In this case this is a duplicate definition; just silently
+</span>      <span class="comment">;; overwrite the original since we have no way to issue a
+</span>      <span class="comment">;; warning
+</span>      (<span class="keyword">begin</span> (push-const initial) (set-global-variable name))
+      (<span class="keyword">begin</span> (compile-global-variable (global-variable-label name) initial)
+             (set! global-variables-defined 
+                   (cons (list name) global-variables-defined)))))
+
+<span class="comment">;; Emit code to fetch from a global variable
+</span>(<span class="keyword">define</span> (<span class="function-name">fetch-global-variable</span> varname)
+  (asm-push tos) 
+  (mov (indirect (global-variable-label varname)) tos))
+
+<span class="comment">;; Emit code to set a global variable
+;; XXX should define-handling use this?
+</span>(<span class="keyword">define</span> (<span class="function-name">set-global-variable</span> varname)
+  (mov tos (indirect (global-variable-label varname))))
+
+<span class="comment">;; Return a list of undefined global variables.
+</span>(<span class="keyword">define</span> (<span class="function-name">undefined-global-variables</span>)
+  (filter (<span class="keyword">lambda</span> (pair) (not (assq (car pair) global-variables-defined)))
+          global-variable-labels))
+
+<span class="comment">;; This runs at the end of compilation to report any undefined
+;; globals.  The assumption is that you're recompiling frequently
+;; enough that there will normally only be one...
+</span>(<span class="keyword">define</span> (<span class="function-name">assert-no-undefined-global-variables</span>)
+  (<span class="keyword">if</span> (not (null? (undefined-global-variables)))
+      (error <span class="string">"error: undefined global"</span> (undefined-global-variables))
+      #t))
+
+
+<span class="comment">;;; Compilation of particular kinds of expressions
+</span>
+(<span class="keyword">define</span> (<span class="function-name">compile-quote-3</span> expr labelname)
+  (<span class="keyword">cond</span> ((string? expr) (constant-string-2 expr labelname))
+        <span class="comment">;; Explicit let here to avoid output dependency on argument
+</span>        <span class="comment">;; evaluation order.
+</span>        ((pair? expr) (<span class="keyword">let</span> ((compiled-car (compile-constant (car expr))))
+                        (compile-cons compiled-car (compile-constant (cdr expr))
+                                      labelname)))
+        (<span class="keyword">else</span> (error <span class="string">"unquotable"</span> expr)))
+  labelname)
+<span class="comment">;; Return a thing you can stick into instructions to name the constant.
+</span>(<span class="keyword">define</span> (<span class="function-name">compile-constant</span> expr)
+  (<span class="keyword">cond</span> ((null? expr)    nil-value)
+        ((symbol? expr)  (symbol-value expr))
+        ((integer? expr) (tagged-integer expr))
+        ((boolean? expr) (<span class="keyword">if</span> expr true-value false-value))
+        ((char? expr)    (tagged-character expr))
+        (<span class="keyword">else</span>            (compile-quote-3 expr (new-label)))))
+<span class="comment">;; compile-quotable: called for auto-quoted things and (quote ...)
+;; exprs
+</span>(<span class="keyword">define</span> (<span class="function-name">compile-quotable</span> obj env) (push-const (compile-constant obj)))
+
+(<span class="keyword">define</span> (<span class="function-name">fetch-heap-var-pointer</span> slotnum)
+  (comment <span class="string">"fetching heap var pointer "</span> (number-&gt;string slotnum))
+  <span class="comment">;; below %ebp is return address, %esp, and saved %ebp; so the first
+</span>  <span class="comment">;; heap var slot is at ebp - 16, and the next one is at ebp - 20.
+</span>  (dup)
+  (mov (offset ebp (- -16 (quadruple slotnum))) tos))
+
+(define-error-routine <span class="string">"not_heap_var"</span> <span class="string">"heap-var indirection to non-heap-var"</span>)
+(add-to-header (<span class="keyword">lambda</span> ()
+    (label <span class="string">"ensure_heap_var"</span>)
+    (if-not-right-magic-jump heap-var-magic <span class="string">"not_heap_var"</span>)
+    (ret)))
+<span class="comment">;; It should be impossible for a user program to cause this check to
+;; fail, but it did help me track down a few compiler bugs early on.
+</span>(<span class="keyword">define</span> (<span class="function-name">ensure-heap-var</span>) (call <span class="string">"ensure_heap_var"</span>))
+
+(<span class="keyword">define</span> (<span class="function-name">fetch-heap-var</span> slotnum)
+  (fetch-heap-var-pointer slotnum)
+  (comment <span class="string">"now fetching current value from the heap"</span>)
+  (ensure-heap-var)
+  (mov (offset tos 4) tos))
+
+(<span class="keyword">define</span> (<span class="function-name">set-heap-var</span> slotnum)
+  (fetch-heap-var-pointer slotnum)
+  (ensure-heap-var)
+  (mov nos ebx)
+  (mov ebx (offset tos 4))
+  (pop))
+
+<span class="comment">;; needs more cases for things other than stack variables?
+;; XXX move globals here?
+</span>(<span class="keyword">define</span> (<span class="function-name">get-variable</span> vardefn)
+  (<span class="keyword">case</span> (car vardefn)
+    ((stack) (get-procedure-arg (cadr vardefn)))
+    ((heap-pointer) (fetch-heap-var (cadr vardefn)))
+    (<span class="keyword">else</span> (error <span class="string">"unexpected var type"</span> (car vardefn)))))
+(<span class="keyword">define</span> (<span class="function-name">set-variable</span> vardefn)
+  (<span class="keyword">case</span> (car vardefn)
+    ((stack) (set-procedure-arg (cadr vardefn)))
+    ((heap-pointer) (set-heap-var (cadr vardefn)))
+    (<span class="keyword">else</span> (error <span class="string">"unexpected var type"</span> vardefn))))
+
+<span class="comment">;; rather than getting the variable value, it gets the variable's
+;; location in the heap.
+</span>(<span class="keyword">define</span> (<span class="function-name">get-heap-var</span> vardefn)
+  (<span class="keyword">if</span> (eq? (cadr vardefn) 'heap-pointer) 
+      (fetch-heap-var-pointer (caddr vardefn))
+      (error <span class="string">"trying to fetch the heap var pointer for "</span> vardefn)))
+
+(<span class="keyword">define</span> (<span class="function-name">compile-var</span> var env)
+  (<span class="keyword">let</span> ((binding (assq var env)))
+    (<span class="keyword">if</span> binding (get-variable (cdr binding))
+        (fetch-global-variable var))))
+
+<span class="comment">;; Compile a set! form
+</span>(<span class="keyword">define</span> (<span class="function-name">compile-set</span> var defn env)
+  (compile-expr defn env #f)
+  (<span class="keyword">let</span> ((binding (assq var env)))
+    (<span class="keyword">if</span> binding (set-variable (cdr binding))
+        (set-global-variable var))))
+
+<span class="comment">;; compile an expression, discarding result, e.g. for toplevel
+;; expressions
+</span>(<span class="keyword">define</span> (<span class="function-name">compile-discarding</span> expr env) (compile-expr expr env #f) (pop))
+
+<span class="comment">;; Construct an environment binding the local variables of the lambda
+;; to bits of code to fetch them.
+</span>(<span class="keyword">define</span> (<span class="function-name">lambda-environment</span> env vars idx)
+  (<span class="keyword">if</span> (null? vars) '()
+      (cons (list (car vars) 'stack idx)
+            (lambda-environment env (cdr vars) (1+ idx)))))
+
+(<span class="keyword">define</span> (<span class="function-name">compile-lambda</span> rands env tail?) 
+  (<span class="keyword">let</span> ((vars (car rands)) (body (cdr rands)))
+    (<span class="keyword">let</span> ((varlist (<span class="keyword">if</span> (symbol? vars) (list vars) vars))
+          (nargs (<span class="keyword">if</span> (symbol? vars) '() (length vars))))
+      (<span class="keyword">let</span> ((artifacts (artifacts varlist body env))
+            (jumplabel (new-label))
+            (stack-env (lambda-environment env varlist 0))
+            (heap-arg-list (heap-args varlist body)))
+        <span class="comment">;; Nested let so that output doesn't depend on argument
+</span>        <span class="comment">;; evaluation order.
+</span>        (<span class="keyword">let</span> ((proclabel (new-label)))
+          (comment <span class="string">"jump past the body of the lambda"</span>)
+          (jmp jumplabel)
+          (<span class="keyword">if</span> (null? artifacts)
+              (<span class="keyword">begin</span>
+                <span class="comment">;; There are no artifacts, so we don't need to create a
+</span>                <span class="comment">;; closure.
+</span>                (compile-procedure-labeled proclabel nargs
+                  (<span class="keyword">lambda</span> () 
+                    <span class="comment">;; But there may be inner closures...
+</span>                    (<span class="keyword">let</span> ((inner-env (compile-heap-args heap-arg-list 0
+                                                        stack-env)))
+                      (compile-begin body inner-env #t))))
+                (label jumplabel)
+                <span class="comment">;; And we can just push-const it instead of creating a
+</span>                <span class="comment">;; new closure.
+</span>                (push-const proclabel))
+              (<span class="keyword">begin</span>
+                (compile-procedure proclabel nargs 
+                  (<span class="keyword">lambda</span> ()
+                    <span class="comment">;; There may still be inner closures.
+</span>                    (<span class="keyword">let</span> ((artifacts-env (push-artifacts artifacts)))
+                      (<span class="keyword">let</span> ((inner-env (compile-heap-args 
+                                        heap-arg-list
+                                        (length artifacts) <span class="comment">; follow artifacts
+</span>                                        (append artifacts-env stack-env))))
+                        (compile-begin body inner-env #t)))))
+                (label jumplabel)
+                (push-closure proclabel artifacts env))))))))
+
+(<span class="keyword">define</span> (<span class="function-name">compile-begin</span> rands env tail?)
+  (<span class="keyword">cond</span> ((null? rands) (push-const <span class="string">"31"</span>)) <span class="comment">; XXX do something reasonable
+</span>        ((null? (cdr rands)) (compile-expr (car rands) env tail?))
+        <span class="comment">;; hey, we can avoid discarding the results from
+</span>        <span class="comment">;; intermediate expressions if we're at the top level of a
+</span>        <span class="comment">;; function...
+</span>        (<span class="keyword">else</span>
+         (<span class="keyword">begin</span> (<span class="keyword">if</span> tail? (compile-expr (car rands) env #f)
+                    (compile-discarding (car rands) env))
+                (compile-begin (cdr rands) env tail?)))))
+
+(<span class="keyword">define</span> (<span class="function-name">compile-if</span> rands env tail?)
+  (<span class="keyword">if</span> (not (= (length rands) 3))
+      (error <span class="string">"if arguments length "</span> (length rands) <span class="string">" != 3"</span>)
+      (<span class="keyword">let</span> ((<span class="keyword">cond</span> (car rands)) (then (cadr rands)) (<span class="keyword">else</span> (caddr rands))
+            (falselabel (new-label)))
+        <span class="comment">;; Nested let so that output doesn't depend on argument
+</span>        <span class="comment">;; evaluation order.
+</span>        (<span class="keyword">let</span> ((endlabel (new-label)))
+          (compile-expr cond env #f)
+          (jump-if-false falselabel)
+          (compile-expr then env tail?)
+          (jmp endlabel)
+          (label falselabel)
+          (compile-expr else env tail?)
+          (label endlabel)))))
+
+
+<span class="comment">;; if, lambda, quote, and set! are the standard Scheme set of
+;; primitive special forms.
+</span>(<span class="keyword">define</span> (<span class="function-name">compile-combination</span> rator rands env tail?)
+  (<span class="keyword">case</span> rator
+    ((%begin) (compile-begin rands env tail?))
+    ((<span class="keyword">if</span>)     (compile-if rands env tail?))
+    ((<span class="keyword">lambda</span>) (compile-lambda rands env tail?))
+    ((quote)  (assert-equal 1 (length rands))
+              (compile-quotable (car rands) env))
+    ((set!)   (assert-equal 2 (length rands))
+              (compile-set (car rands) (cadr rands) env))
+    ((+)      (integer-add rands env tail?))
+    ((-)      (integer-sub rands env tail?))
+    (<span class="keyword">else</span>     (<span class="keyword">let</span> ((nargs (compile-args rands env)))
+                (comment <span class="string">"get the procedure"</span>)
+                (compile-expr rator env #f)
+                (comment <span class="string">"now apply the procedure"</span>)
+                (<span class="keyword">if</span> tail? (compile-tail-apply nargs)
+                    (compile-apply nargs))))))
+
+(<span class="keyword">define</span> (<span class="function-name">compile-expr</span> expr env tail?)
+  (<span class="keyword">cond</span> ((pair? expr)   (compile-combination (car expr) (cdr expr) env tail?))
+        ((symbol? expr) (compile-var expr env))
+        ((<span class="keyword">or</span> (string? expr) (boolean? expr) (integer? expr) (char? expr))
+                        (compile-quotable expr env))
+        (<span class="keyword">else</span> (error <span class="string">"don't know how to compile"</span> expr))))
+
+(<span class="keyword">define</span> (<span class="function-name">compile-args-2</span> args env n)
+  (compile-expr (car args) env #f)      <span class="comment">; args are never in tail position
+</span>  (1+ n))
+<span class="comment">;; Compile arguments for a procedure application.  Returns number of
+;; arguments compiled.
+</span>(<span class="keyword">define</span> (<span class="function-name">compile-args</span> args env)
+  (<span class="keyword">if</span> (null? args) 0
+      (compile-args-2 args env (compile-args (cdr args) env))))
+
+(<span class="keyword">define</span> (<span class="function-name">compile-toplevel-define</span> name body env)
+  (define-global-variable name nil-value)
+  (comment <span class="string">"compute initial value for global variable"</span>)
+  (compile-expr body env #f)
+  (comment <span class="string">"initialize global variable with value"</span>)
+  (mov tos (indirect (global-variable-label name)))
+  (pop))
+
+(<span class="keyword">define</span> <span class="function-name">global-env</span> '())
+
+
+<span class="comment">;;; Macros.
+</span>
+(<span class="keyword">define</span> <span class="function-name">macros</span> '())
+(<span class="keyword">define</span> (<span class="function-name">define-ur-macro</span> name fun)
+  (set! macros (cons (list name fun) macros)))
+
+(<span class="keyword">define</span> (<span class="function-name">relevant-macro-definition</span> expr)
+  (<span class="keyword">if</span> (pair? expr) (assq (car expr) macros) #f))
+(<span class="keyword">define</span> (<span class="function-name">macroexpand-1</span> expr)
+  (<span class="keyword">if</span> (relevant-macro-definition expr) 
+      ((cadr (relevant-macro-definition expr)) (cdr expr))
+      expr))
+
+<span class="comment">;; This is just a sort of test macro to verify that the macro system
+;; works.
+</span>(define-ur-macro 'begin (<span class="keyword">lambda</span> (args) (cons '%begin args)))
+<span class="comment">;; Limited definition of cond.
+</span>(define-ur-macro 'cond
+  (<span class="keyword">lambda</span> (args)
+    (<span class="keyword">cond</span> ((null? args) #f)
+          ((eq? (caar args) 'else) (cons 'begin (cdar args)))
+          (<span class="keyword">else</span> (list 'if (caar args) (cons 'begin (cdar args))
+                      (cons 'cond (cdr args)))))))
+(define-ur-macro 'define 
+  (<span class="keyword">lambda</span> (args) 
+    (<span class="keyword">if</span> (pair? (car args)) (list '%define (caar args) 
+                                 (cons 'lambda (cons (cdar args) (cdr args))))
+        (cons '%define args))))
+(define-ur-macro 'let
+  (<span class="keyword">lambda</span> (args)
+    (cons (cons 'lambda (cons (<span class="keyword">map</span> car (car args)) (cdr args)))
+          (<span class="keyword">map</span> cadr (car args)))))
+(define-ur-macro 'case
+  (<span class="keyword">lambda</span> (args)
+    (<span class="keyword">cond</span> ((pair? (car args)) 
+           <span class="comment">;; Avoid evaluating expression more than once.  XXX unhygienic
+</span>           (list 'let (list (list 'case-atom-key (car args)))
+                 (cons 'case (cons 'case-atom-key (cdr args)))))
+          ((null? (cdr args)) (list 'begin)) <span class="comment">; XXX indeterminate
+</span>          <span class="comment">;; XXX here we unwarrantedly assume there's nothing after an
+</span>          <span class="comment">;; else clause
+</span>          ((eq? (caadr args) 'else) (cons 'begin (cdadr args)))
+          (<span class="keyword">else</span> (list 'if (list 'memv (car args) (list 'quote (caadr args)))
+                      (cons 'begin (cdadr args))
+                      (cons 'case (cons (car args) (cddr args))))))))
+
+(define-ur-macro 'or
+  (<span class="keyword">lambda</span> (args)
+    (<span class="keyword">cond</span> ((null? args) #f)
+          ((= 1 (length args)) (car args))
+          <span class="comment">;; XXX unhygienic
+</span>          (<span class="keyword">else</span> (list 'let (list (list 'or-internal-argument (car args)))
+                      (list 'if 'or-internal-argument 'or-internal-argument
+                            (cons 'or (cdr args))))))))
+(define-ur-macro 'and
+  (<span class="keyword">lambda</span> (args)
+    (<span class="keyword">cond</span> ((null? args) #t)
+          ((= 1 (length args)) (car args))
+          (<span class="keyword">else</span> (list 'if (car args) (cons 'and (cdr args)) #f)))))
+
+<span class="comment">;; Expand all macros in expr, recursively.
+</span>(<span class="keyword">define</span> (<span class="function-name">totally-macroexpand</span> expr)
+  (<span class="keyword">cond</span> ((relevant-macro-definition expr) 
+         (totally-macroexpand (macroexpand-1 expr)))
+        ((not (pair? expr))      expr)
+        (<span class="keyword">else</span> (<span class="keyword">case</span> (car expr)
+                ((quote) expr)
+                ((<span class="keyword">lambda</span>) (cons 'lambda (cons (cadr expr) 
+                                              (<span class="keyword">map</span> totally-macroexpand 
+                                                   (cddr expr)))))
+                <span class="comment">;; It's harmless to totally-macroexpand set!, if, and
+</span>                <span class="comment">;; begin special forms.
+</span>                (<span class="keyword">else</span> (<span class="keyword">map</span> totally-macroexpand expr))))))
+
+<span class="comment">;; tests for macros
+</span>(assert-equal (totally-macroexpand 'foo) 'foo)
+(assert-equal (totally-macroexpand '(<span class="keyword">if</span> a b c)) '(<span class="keyword">if</span> a b c))
+(assert (relevant-macro-definition '(<span class="keyword">begin</span> a b c)) <span class="string">"no begin defn"</span>)
+(assert-equal (totally-macroexpand '(<span class="keyword">begin</span> a b c)) '(%begin a b c))
+(assert-equal (totally-macroexpand '(<span class="keyword">cond</span> ((eq? x 3) 4 '(<span class="keyword">cond</span> 3)) 
+                                          ((eq? x 4) 8)
+                                          (<span class="keyword">else</span> 6 7)))
+              '(<span class="keyword">if</span> (eq? x 3) (%begin 4 '(<span class="keyword">cond</span> 3))
+                   (<span class="keyword">if</span> (eq? x 4) (%begin 8)
+                       (%begin 6 7))))
+(assert-equal (totally-macroexpand '(<span class="keyword">let</span> () a b c)) '((<span class="keyword">lambda</span> () a b c)))
+(assert-equal (totally-macroexpand '(<span class="keyword">let</span> ((a 1) (b 2)) a b c))
+              '((<span class="keyword">lambda</span> (a b) a b c) 1 2))
+(assert-equal (totally-macroexpand '(<span class="keyword">and</span> a b c)) '(<span class="keyword">if</span> a (<span class="keyword">if</span> b c #f) #f))
+(assert-equal (totally-macroexpand '(<span class="keyword">or</span> a b c))
+              (totally-macroexpand
+               '(<span class="keyword">let</span> ((or-internal-argument a)) 
+                  (<span class="keyword">if</span> or-internal-argument or-internal-argument
+                      (<span class="keyword">let</span> ((or-internal-argument b))
+                        (<span class="keyword">if</span> or-internal-argument or-internal-argument
+                            c))))))
+<span class="comment">;; This test ensures we don't try to macro-expand lambda argument
+;; lists.
+</span>(assert-equal (totally-macroexpand
+               '(<span class="keyword">let</span> ((<span class="keyword">cond</span> (car rands)) (then (cadr rands)) 
+                      (<span class="keyword">else</span> (caddr rands)) (falselabel (new-label)) 
+                      (endlabel (new-label)))
+                  (compile-expr cond env #f)
+                  (jump-if-false falselabel)))
+              '((<span class="keyword">lambda</span> (<span class="keyword">cond</span> then else falselabel endlabel) 
+                  (compile-expr cond env #f)
+                  (jump-if-false falselabel)
+                  ) (car rands) (cadr rands) (caddr rands) 
+                    (new-label) (new-label)))
+
+<span class="comment">;;; Top-level compilation with macro-expansion.
+</span>
+(<span class="keyword">define</span> (<span class="function-name">compile-toplevel</span> expr)
+  (compile-toplevel-expanded (totally-macroexpand expr)))
+(<span class="keyword">define</span> (<span class="function-name">compile-toplevel-expanded</span> expr)
+  <span class="comment">;; XXX missing case where it's an atom
+</span>  (<span class="keyword">if</span> (eq? (car expr) '%define) 
+      (<span class="keyword">begin</span>
+        (set-label-prefix (cadr expr))
+        (compile-toplevel-define (cadr expr) (caddr expr) global-env))
+      (compile-discarding expr global-env)))
+
+<span class="comment">;;; Parsing: file handling
+</span>
+<span class="comment">;; "ungettable" wraps an input stream with a thunk s that you can read
+;; a character from (with (s)) or back up by a character (with (s
+;; 'unget)).  You pass in a thunk that returns a character when it's
+;; called.
+</span>
+<span class="comment">;; XXX come up with a better name.  back-up-able?
+</span>
+<span class="comment">;; It would be nice if we could map eof objects into 'eof or something
+;; to simplify the parsing transition rules, but then we have to have
+;; a way to return them so that (read) can return them, but that took
+;; this definition from 5 lines to 16.
+</span>(<span class="keyword">define</span> (<span class="function-name">ungettable</span> thunk)
+  (<span class="keyword">let</span> ((ungot #f) (last #f))
+    (<span class="keyword">lambda</span> cmd (<span class="keyword">cond</span> ((not (null? cmd)) (set! ungot last))
+                      (ungot (<span class="keyword">let</span> ((result ungot)) (set! ungot #f) result))
+                      (<span class="keyword">else</span> (set! last (thunk)) last)))))
+
+<span class="comment">;; read-from-string returns a thunk that returns successive characters
+;; of a string, and then 'eof-indicator after the end of the string.
+</span>
+<span class="comment">;; SRFI 6 defines a way to use file operations on strings (in this
+;; case, using open-input-string), but at least my version of SCM
+;; doesn't support it.  But we need something like it for testing.
+</span>(<span class="keyword">define</span> (<span class="function-name">read-from-string</span> string)
+  (<span class="keyword">let</span> ((pos 0))
+    (<span class="keyword">lambda</span> () (<span class="keyword">if</span> (= pos (string-length string)) 'eof-indicator
+                   (<span class="keyword">begin</span> (set! pos (1+ pos)) (string-ref string (1- pos)))))))
+<span class="comment">;; unit tests:
+</span>(<span class="keyword">define</span> <span class="function-name">sample-sr</span> (read-from-string <span class="string">"foo"</span>))
+(assert-equal (sample-sr) #\f)
+(assert-equal (sample-sr) #\o)
+(assert-equal (sample-sr) #\o)
+(assert-equal (sample-sr) 'eof-indicator)
+(assert-equal (sample-sr) 'eof-indicator)
+
+(<span class="keyword">define</span> <span class="function-name">sample-unget</span> (ungettable (read-from-string <span class="string">"foo"</span>)))
+(assert-equal (sample-unget) #\f)
+(sample-unget 'unget)
+(assert-equal (sample-unget) #\f)
+(assert-equal (sample-unget) #\o)
+(assert-equal (sample-unget) #\o)
+(assert-equal (sample-unget) 'eof-indicator)
+
+<span class="comment">;; Actual Parsing.
+</span>
+(<span class="keyword">define</span> (<span class="function-name">parse</span> s) 
+  (<span class="keyword">let</span> ((c (after-wsp s)))
+    (<span class="keyword">if</span> (parse-eof? c) c
+        (<span class="keyword">case</span> c
+          (( #\( ) (parse-list s))
+          (( #\' ) (list 'quote (parse s)))
+          (( #\" ) (parse-string-literal s))
+          (( #\# ) (parse-hashy-thing s))
+          (<span class="keyword">else</span> (s 'unget) (parse-atom s))))))
+(<span class="keyword">define</span> (<span class="function-name">parse-list</span> s)
+  (<span class="keyword">let</span> ((c (after-wsp s)))
+    (<span class="keyword">if</span> (parse-eof? c) (error <span class="string">"missing right paren"</span>)
+        (<span class="keyword">case</span> c
+          (( #\) ) '())
+          (( #\. ) (read-dotted-tail s))
+          (<span class="keyword">else</span> (<span class="keyword">let</span> ((hd (<span class="keyword">begin</span> (s 'unget) (parse s))))
+                  (cons hd (parse-list s))))))))
+(<span class="keyword">define</span> (<span class="function-name">read-dotted-tail</span> s)
+  (<span class="keyword">let</span> ((rv (parse s)))
+    (<span class="keyword">if</span> (eqv? #\) (after-wsp s)) rv (error <span class="string">"funky dotted list"</span>))))
+(<span class="keyword">define</span> <span class="function-name">whitespace-chars</span> <span class="string">"\n "</span>)
+(<span class="keyword">define</span> (<span class="function-name">after-wsp</span> s) 
+  (<span class="keyword">let</span> ((c (s))) (<span class="keyword">case</span> c
+                   ((#\space #\newline #\tab) (after-wsp s))
+                   (( #\; ) (discard-comment s) (after-wsp s))
+                   (<span class="keyword">else</span> c))))
+(<span class="keyword">define</span> (<span class="function-name">discard-comment</span> s) (<span class="keyword">if</span> (eqv? (s) #\newline) #f (discard-comment s)))
+(<span class="keyword">define</span> (<span class="function-name">parse-atom</span> s) 
+  (<span class="keyword">let</span> ((atom (parse-atom-2 s)))
+    (<span class="keyword">if</span> (parsed-number? atom) (string-&gt;number (list-&gt;string atom))
+        (string-&gt;symbol (list-&gt;string atom)))))
+(<span class="keyword">define</span> (<span class="function-name">char-numeric?</span> char)            <span class="comment">; XXX standard
+</span>  (<span class="keyword">if</span> (string-idx <span class="string">"0123456789"</span> char) #t #f))
+(<span class="keyword">define</span> (<span class="function-name">parsed-number?</span> lst)
+  (<span class="keyword">cond</span> ((null? lst) #f)
+        ((char-numeric? (car lst)) (all-numeric? (cdr lst)))
+        ((string-idx <span class="string">"+-"</span> (car lst)) (<span class="keyword">and</span> (not (null? (cdr lst))) 
+                                          (all-numeric? (cdr lst))))
+        (<span class="keyword">else</span> #f)))
+(<span class="keyword">define</span> (<span class="function-name">all-numeric?</span> lst)
+  (<span class="keyword">or</span> (null? lst) (<span class="keyword">and</span> (char-numeric? (car lst)) (all-numeric? (cdr lst)))))
+(<span class="keyword">define</span> (<span class="function-name">parse-atom-2</span> s) 
+  (<span class="keyword">let</span> ((c (s))) 
+    (<span class="keyword">if</span> (parse-eof? c) '()
+        (<span class="keyword">case</span> c
+          (( #\space #\newline #\tab #\; #\( #\) #\' #\" ) (s 'unget) '())
+          (<span class="keyword">else</span> (cons c (parse-atom-2 s)))))))
+(<span class="keyword">define</span> (<span class="function-name">parse-string-literal</span> s) (list-&gt;string (parse-string-literal-2 s)))
+(<span class="keyword">define</span> (<span class="function-name">parse-string-literal-2</span> s)
+  (<span class="keyword">let</span> ((c (s))) 
+    (<span class="keyword">case</span> c                             <span class="comment">; XXX eof in string
+</span>      (( #\\ ) 
+       (<span class="keyword">let</span> ((next (s)))
+         (<span class="keyword">let</span> ((decoded
+                (<span class="keyword">case</span> next ((#\n) #\newline) ((#\t) #\tab) (<span class="keyword">else</span> next))))
+           (cons decoded (parse-string-literal-2 s)))))
+       (( #\" ) 
+        '())
+       (<span class="keyword">else</span>
+        (cons c (parse-string-literal-2 s))))))
+(<span class="keyword">define</span> (<span class="function-name">parse-hashy-thing</span> s)
+  (<span class="keyword">let</span> ((c (s))) 
+    (<span class="keyword">if</span> (parse-eof? c) (error <span class="string">"eof after #"</span>)
+        (<span class="keyword">case</span> c
+          (( #\t ) #t)
+          (( #\f ) #f)
+          (( #\\ ) (parse-char-literal s))
+          (<span class="keyword">else</span> (error <span class="string">"Unimplemented #"</span> c))))))
+(<span class="keyword">define</span> (<span class="function-name">parse-char-literal</span> s)
+  (<span class="keyword">let</span> ((c (s))) (<span class="keyword">cond</span> ((parse-eof? c) (error <span class="string">"eof in char literal"</span>))
+                       ((char-alphabetic? c) (s 'unget) (parse-named-char s))
+                       (<span class="keyword">else</span> c))))
+(<span class="keyword">define</span> (<span class="function-name">parse-named-char</span> s)
+  (<span class="keyword">let</span> ((name (parse-atom-2 s)))
+    (<span class="keyword">if</span> (= 1 (length name)) (car name)
+        (<span class="keyword">case</span> (string-&gt;symbol (list-&gt;string name))
+          ((space) #\space)
+          ((newline) #\newline)
+          ((tab) #\tab)
+          (<span class="keyword">else</span> (error <span class="string">"Unrecognized character name"</span>
+                       (string-&gt;symbol (list-&gt;string name))))))))
+                    
+
+(<span class="keyword">define</span> (<span class="function-name">parse-string</span> string) (parse (ungettable (read-from-string string))))
+(<span class="keyword">define</span> (<span class="function-name">read-expr</span> file) (parse (ungettable (<span class="keyword">lambda</span> () (read-char file)))))
+<span class="comment">;; Because we can't make a real eof-object portably, we fake it with this:
+</span>(<span class="keyword">define</span> (<span class="function-name">parse-eof?</span> x) (<span class="keyword">or</span> (eof-object? x) (eq? x 'eof-indicator)))
+
+<span class="comment">;; Unit tests for parsing.  Unfortunately, there's no portable
+;; exception system in Scheme, so this doesn't include any tests of
+;; error handling!  (Even (error ...) isn't in R5RS.)
+</span>(assert-equal (parse-string <span class="string">"()"</span>) '())
+(assert-equal (parse-string <span class="string">" ()"</span>) '())
+(assert-equal (parse-string <span class="string">"\n()"</span>) '())
+(assert-equal (parse-string <span class="string">" ( )"</span>) '())
+(assert-equal (parse-string <span class="string">";hi\n(;hi\n)"</span>) '())
+(assert-equal (parse-string <span class="string">"x "</span>) 'x)
+(assert-equal (parse-string <span class="string">"x"</span>) 'x)    <span class="comment">; terminated by eof
+</span>(assert-equal (parse-string <span class="string">"xyz"</span>) 'xyz)
+(assert-equal (parse-string <span class="string">"(xyz)"</span>) '(xyz))
+(assert-equal (parse-string <span class="string">"(x y z)"</span>) '(x y z))
+(assert-equal (parse-string <span class="string">"(x y . z)"</span>) '(x y . z))
+(assert-equal (parse-string <span class="string">"(define (1+ x) (+ x 1))"</span>)
+              '(<span class="keyword">define</span> (<span class="function-name">1+</span> x) (+ x 1)))
+(assert-equal 
+ (parse-string <span class="string">"(define (filter fn lst)  ; foo\n  (if (null? lst) '()))"</span>)
+ '(<span class="keyword">define</span> (<span class="function-name">filter</span> fn lst) (<span class="keyword">if</span> (null? lst) (quote ()))))
+(parse-string <span class="string">"(char-&gt;string (string-ref \"0123456789\"))"</span>) <span class="comment">; digit)))")
+</span>(assert-equal (parse-string <span class="string">"(char-&gt;string (string-ref \"0123456789\" digit)))"</span>)
+             '(char-&gt;string (string-ref <span class="string">"0123456789"</span> digit)))
+(assert-equal (parse-string <span class="string">"(foo\"3\"()\"5\")"</span>) '(foo <span class="string">"3"</span> () <span class="string">"5"</span>))
+(assert-equal (parse-string <span class="string">"(b a #t #f)"</span>) '(b a #t #f))
+(assert-equal (parse-string <span class="string">"(mov (offset ebp -8) esp)"</span>) 
+              '(mov (offset ebp -8) esp))
+(assert (parse-eof? (parse-string <span class="string">""</span>)) <span class="string">"parsing at end of file"</span>)
+
+(assert-equal 
+ (parse-string <span class="string">"(#\\a #\\newline #\\tab #\\space #\\( #\\) #\\# #\\\\)"</span>)
+ '(#\a #\newline #\tab #\space #\( #\) #\# #\\))
+
+(assert-equal (parse-string <span class="string">"\"hello\\n\\tthere\""</span>) <span class="string">"hello\n\tthere"</span>)
+
+<span class="comment">;;; Library of (a few) standard Scheme procedures defined in Scheme
+</span>
+(<span class="keyword">define</span> <span class="function-name">standard-library</span> 
+  '(
+    <span class="comment">;; basics
+</span>    (<span class="keyword">define</span> (<span class="function-name">1+</span> x) (+ x 1))
+    (<span class="keyword">define</span> (<span class="function-name">1-</span> x) (- x 1))
+    (<span class="keyword">define</span> (<span class="function-name">list</span> . args) args)         <span class="comment">; standard
+</span>    (<span class="keyword">define</span> (<span class="function-name">length</span> list)               <span class="comment">; standard
+</span>      (<span class="keyword">if</span> (null? list) 0 (1+ (length (cdr list)))))
+    (<span class="keyword">define</span> (<span class="function-name">assq</span> obj alist)            <span class="comment">; standard
+</span>      (<span class="keyword">cond</span> ((null? alist)          #f)
+            ((eq? obj (caar alist)) (car alist))
+            (<span class="keyword">else</span>                   (assq obj (cdr alist)))))
+    (<span class="keyword">define</span> (<span class="function-name">memq</span> obj list)             <span class="comment">; standard
+</span>      (<span class="keyword">cond</span> ((null? list)         #f)
+            ((eq? obj (car list)) list)
+            (<span class="keyword">else</span>                 (memq obj (cdr list)))))
+    (<span class="keyword">define</span> <span class="function-name">memv</span> memq)                  <span class="comment">; standard
+</span>    (<span class="keyword">define</span> (<span class="function-name">append</span> a b)                <span class="comment">; standard
+</span>      (<span class="keyword">if</span> (null? a) b (cons (car a) (append (cdr a) b))))
+
+    <span class="comment">;; identical to standard caar, cdar, etc.
+</span>    (<span class="keyword">define</span> (<span class="function-name">caar</span> val) (car (car val)))
+    (<span class="keyword">define</span> (<span class="function-name">cdar</span> val) (cdr (car val)))
+    (<span class="keyword">define</span> (<span class="function-name">cadr</span> val) (car (cdr val)))
+    (<span class="keyword">define</span> (<span class="function-name">cddr</span> val) (cdr (cdr val)))
+    (<span class="keyword">define</span> (<span class="function-name">caddr</span> val) (car (cddr val)))
+    (<span class="keyword">define</span> (<span class="function-name">caadr</span> val) (car (cadr val)))
+    (<span class="keyword">define</span> (<span class="function-name">cdadr</span> val) (cdr (cadr val)))
+    (<span class="keyword">define</span> (<span class="function-name">cadar</span> val) (car (cdar val)))
+    (<span class="keyword">define</span> (<span class="function-name">not</span> x) (<span class="keyword">if</span> x #f #t))       <span class="comment">; standard
+</span>
+
+    <span class="comment">;; string manipulation
+</span>    (<span class="keyword">define</span> (<span class="function-name">string-append-3</span> length s2 buf idx)
+      (<span class="keyword">if</span> (= idx (string-length buf)) buf
+          (<span class="keyword">begin</span>
+            (string-set! buf idx (string-ref s2 (- idx length)))
+            (string-append-3 length s2 buf (1+ idx)))))
+    (<span class="keyword">define</span> (<span class="function-name">string-append-2</span> s1 s2 buf idx)
+      (<span class="keyword">if</span> (= idx (string-length s1)) 
+          (string-append-3 (string-length s1) s2 buf idx)
+          (<span class="keyword">begin</span>
+            (string-set! buf idx (string-ref s1 idx))
+            (string-append-2 s1 s2 buf (1+ idx)))))
+    <span class="comment">;; XXX we could get rid of this if we weren't using it for creating error msgs
+</span>    <span class="comment">;; (and now, again, number-&gt;string)
+</span>    (<span class="keyword">define</span> (<span class="function-name">string-append</span> s1 s2)       <span class="comment">; standard
+</span>      (string-append-2 s1 s2 (make-string (+ (string-length s1) 
+                                             (string-length s2)))
+                       0))
+
+
+    <span class="comment">;; chars
+</span>    (<span class="keyword">define</span> (<span class="function-name">char-whitespace?</span> c)
+      (<span class="keyword">case</span> c ((#\space #\newline #\tab) #t) (<span class="keyword">else</span> #f)))
+    (<span class="keyword">define</span> (<span class="function-name">char&lt;?</span> a b) (&lt; (char-&gt;integer a) (char-&gt;integer b)))
+    (<span class="keyword">define</span> (<span class="function-name">char&lt;=?</span> a b) (<span class="keyword">or</span> (eqv? a b) (char&lt;? a b)))
+    (<span class="keyword">define</span> (<span class="function-name">char-between?</span> a b c) (<span class="keyword">and</span> (char&lt;=? a b) (char&lt;=? b c)))
+    (<span class="keyword">define</span> (<span class="function-name">char-alphabetic?</span> x) (<span class="keyword">or</span> (char-between? #\A x #\Z) 
+                                     (char-between? #\a x #\z)))
+
+    <span class="comment">;; equality
+</span>    (<span class="keyword">define</span> <span class="function-name">=</span> eq?)
+    <span class="comment">;; because chars are unboxed, char=? is eq?
+</span>    (<span class="keyword">define</span> <span class="function-name">char=?</span> eq?)
+    <span class="comment">;; and all our numbers are unboxed too
+</span>    (<span class="keyword">define</span> <span class="function-name">eqv?</span> eq?)
+
+    <span class="comment">;; equal? is a little trickier
+</span>    (<span class="keyword">define</span> (<span class="function-name">equal?</span> a b)
+      (<span class="keyword">cond</span> ((eq? a b) #t)
+            ((string? a) (<span class="keyword">and</span> (string? b) (string=? a b)))
+            ((pair? a) (<span class="keyword">and</span> (pair? b) (equal? (car a) (car b))
+                            (equal? (cdr a) (cdr b))))
+            (<span class="keyword">else</span> #f)))
+
+    <span class="comment">;; string=? needs a loop
+</span>    (<span class="keyword">define</span> (<span class="function-name">string=?</span> a b)
+      (<span class="keyword">and</span> (= (string-length a) (string-length b)) (string=?-2 a b 0)))
+    (<span class="keyword">define</span> (<span class="function-name">string=?-2</span> a b idx)
+      (<span class="keyword">or</span> (= idx (string-length a))
+          (<span class="keyword">and</span> (char=? (string-ref a idx) (string-ref b idx))
+               (string=?-2 a b (1+ idx)))))
+
+
+    <span class="comment">;; type tests
+</span>    (<span class="keyword">define</span> (<span class="function-name">null?</span> x) (eq? x '()))
+    (<span class="keyword">define</span> (<span class="function-name">boolean?</span> x) (<span class="keyword">if</span> (eq? x #t) #t (eq? x #f)))
+    <span class="comment">;; we don't have any other kinds of numbers
+</span>    (<span class="keyword">define</span> <span class="function-name">number?</span> integer?)    
+
+
+    <span class="comment">;; list utils
+</span>    (<span class="keyword">define</span> (<span class="function-name">for-each</span> proc list)   <span class="comment">; subset of standard: one list only
+</span>      (<span class="keyword">if</span> (null? list) #f
+          (<span class="keyword">begin</span>
+            (proc (car list))
+            (<span class="keyword">for-each</span> proc (cdr list)))))
+    (<span class="keyword">define</span> (<span class="function-name">map</span> proc list)        <span class="comment">; subset of standard: one list only
+</span>      (<span class="keyword">if</span> (null? list) '() (cons (proc (car list)) (<span class="keyword">map</span> proc (cdr list)))))
+
+    (<span class="keyword">define</span> (<span class="function-name">reverse</span> lst) (reverse-plus '() lst))
+    (<span class="keyword">define</span> (<span class="function-name">reverse-plus</span> tail lst) 
+      (<span class="keyword">if</span> (null? lst) tail (reverse-plus (cons (car lst) tail) (cdr lst))))
+
+
+    <span class="comment">;; conversions
+</span>    (<span class="keyword">define</span> (<span class="function-name">string-&gt;list</span> string)       <span class="comment">; standard
+</span>      (string-&gt;list-2 string (string-length string) '()))
+    (<span class="keyword">define</span> (<span class="function-name">string-&gt;list-2</span> string n rest)
+      (<span class="keyword">if</span> (= n 0) rest
+          (string-&gt;list-2 string (- n 1)
+                          (cons (string-ref string (- n 1)) rest))))
+
+    (<span class="keyword">define</span> (<span class="function-name">list-&gt;string</span> lst)
+      (list-&gt;string-2 (make-string (length lst)) lst 0))
+    (<span class="keyword">define</span> (<span class="function-name">list-&gt;string-2</span> buf lst idx)
+      (<span class="keyword">if</span> (null? lst) buf
+          (<span class="keyword">begin</span> (string-set! buf idx (car lst))
+                 (list-&gt;string-2 buf (cdr lst) (1+ idx)))))
+
+    (<span class="keyword">define</span> (<span class="function-name">char-&gt;string</span> char)
+      (<span class="keyword">let</span> ((buf (make-string 1))) (string-set! buf 0 char) buf))
+
+    (<span class="keyword">define</span> (<span class="function-name">string-digit</span> digit) 
+      (char-&gt;string (string-ref <span class="string">"0123456789"</span> digit)))
+    (<span class="keyword">define</span> (<span class="function-name">number-&gt;string-2</span> num tail)
+      (<span class="keyword">if</span> (= num 0) tail
+          (number-&gt;string-2 (quotient num 10)
+                            (string-append (string-digit (remainder num 10)) 
+                                           tail))))
+    <span class="comment">;; Converts a number into a string of digits.
+</span>    (<span class="keyword">define</span> (<span class="function-name">number-&gt;string</span> num)        <span class="comment">; standard
+</span>      (<span class="keyword">cond</span> ((= num 0) <span class="string">"0"</span>)
+            ((&lt; num 0) (string-append <span class="string">"-"</span> (number-&gt;string-2 (- 0 num) <span class="string">""</span>)))
+            (<span class="keyword">else</span> (number-&gt;string-2 num <span class="string">""</span>))))
+
+    <span class="comment">;; Converts a string of digits into a number.
+</span>    (<span class="keyword">define</span> (<span class="function-name">string-&gt;number</span> str)
+      (<span class="keyword">if</span> (string=? str <span class="string">""</span>) (error <span class="string">"string-&gt;number of empty string"</span>)
+          (<span class="keyword">case</span> (string-ref str 0)
+            (( #\+ )      (string-&gt;number-2 str 1 0))
+            (( #\- ) (- 0 (string-&gt;number-2 str 1 0)))
+            (<span class="keyword">else</span>         (string-&gt;number-2 str 0 0)))))
+    (<span class="keyword">define</span> (<span class="function-name">string-&gt;number-2</span> str idx sofar)
+      (<span class="keyword">if</span> (= idx (string-length str)) sofar
+          (<span class="keyword">let</span> ((c (string-ref str idx)))
+            (<span class="keyword">if</span> (not (char-between? #\0 c #\9)) 
+                (error <span class="string">"non-numeric char"</span> c str)
+                (string-&gt;number-2
+                 str
+                 (1+ idx)
+                 (+ (10* sofar) (- (char-&gt;integer c) (char-&gt;integer #\0))))))))
+    (<span class="keyword">define</span> (<span class="function-name">10*</span> x) (+ (8* x) (2* x)))
+    (<span class="keyword">define</span> (<span class="function-name">2*</span> x) (+ x x))
+    (<span class="keyword">define</span> (<span class="function-name">8*</span> x) (2* (2* (2* x))))
+
+
+    <span class="comment">;; etc.
+</span>    (<span class="keyword">define</span> (<span class="function-name">error</span> . args)
+      (display-stderr <span class="string">"error: "</span>)
+      (<span class="keyword">for-each</span> display-stderr args)
+      (display-stderr <span class="string">"\n"</span>)
+      (exit 1))
+    (<span class="keyword">define</span> (<span class="function-name">escape-char</span> char dangerous escapes) <span class="comment">; duplicated in stdlib
+</span>      (<span class="keyword">cond</span> ((null? dangerous) (char-&gt;string char))
+            ((char=? char (string-ref (car dangerous) 0))
+             (car escapes))
+            (<span class="keyword">else</span> (escape-char char (cdr dangerous) (cdr escapes)))))
+    (<span class="keyword">define</span> (<span class="function-name">escape</span> string idx dangerous escapes) <span class="comment">; duplicated in stdlib
+</span>      (<span class="keyword">if</span> (= idx (string-length string)) '()
+          (cons (escape-char (string-ref string idx) dangerous escapes)
+                (escape string (1+ idx) dangerous escapes))))
+    <span class="comment">;; Escape the three necessary characters.  duplicated in stdlib
+</span>    (<span class="keyword">define</span> (<span class="function-name">backslash</span> string) (escape string 0 '(<span class="string">"\\"</span>   <span class="string">"\n"</span>  <span class="string">"\""</span>) 
+                                                '(<span class="string">"\\\\"</span> <span class="string">"\\n"</span> <span class="string">"\\\""</span>)))
+    (<span class="keyword">define</span> (<span class="function-name">write</span> x) (wthunk x display))
+    (<span class="keyword">define</span> (<span class="function-name">wthunk</span> x display)
+      (<span class="keyword">cond</span> ((string? x) (wstring x display))
+            ((<span class="keyword">or</span> (pair? x) (null? x)) (display <span class="string">"("</span>) (wlist x display))
+            ((symbol? x) (display (symbol-&gt;string x)))
+            ((eq? x #t) (display <span class="string">"#t"</span>))
+            ((eq? x #f) (display <span class="string">"#f"</span>))
+            ((eq? x #\newline) (display <span class="string">"#\\newline"</span>))
+            ((eq? x #\space) (display <span class="string">"#\\space"</span>))
+            ((eq? x #\tab) (display <span class="string">"#\\tab"</span>))
+            ((char? x) (display <span class="string">"#\\"</span>) (display (char-&gt;string x)))
+            (<span class="keyword">else</span> (error <span class="string">"don't know how to write"</span> x))))
+    (<span class="keyword">define</span> (<span class="function-name">wstring</span> x pr) (pr <span class="string">"\""</span>) (<span class="keyword">for-each</span> pr (backslash x)) (pr <span class="string">"\""</span>))
+    (<span class="keyword">define</span> (<span class="function-name">wlist</span> x pr) 
+      (<span class="keyword">cond</span> ((null? x)
+             (pr <span class="string">")"</span>))
+            ((pair? x)
+             (wthunk (car x) pr) 
+             (<span class="keyword">if</span> (null? (cdr x)) #f (pr <span class="string">" "</span>))
+             (wlist (cdr x) pr))
+            (<span class="keyword">else</span>
+             (pr <span class="string">". "</span>)
+             (wthunk x pr)
+             (pr <span class="string">")"</span>))))
+))
+
+<span class="comment">;;; Main Program
+</span>
+(<span class="keyword">define</span> (<span class="function-name">compile-program</span> body)
+  (stuff-to-put-in-the-header)
+
+  (global-label <span class="string">"_start"</span>)             <span class="comment">; allow compiling with -nostdlib
+</span>  (insn <span class="string">".weak _start"</span>)         <span class="comment">; but also allow compiling with stdlib
+</span>  (global-label <span class="string">"main"</span>)         <span class="comment">; with entry point of main, not _start
+</span>  (mov (const <span class="string">"0x610ba1"</span>) ebp)          <span class="comment">; global-scope ebp
+</span>
+  (<span class="keyword">for-each</span> compile-toplevel standard-library)
+  (comment <span class="string">"(end of standard library prologue)"</span>)
+
+  (body)
+
+  (mov (const <span class="string">"1"</span>) eax)             <span class="comment">; __NR_exit
+</span>  (mov (const <span class="string">"0"</span>) ebx)             <span class="comment">; exit code
+</span>  (syscall)
+  (emit-symbols)
+  (assert-no-undefined-global-variables))
+
+(<span class="keyword">define</span> (<span class="function-name">read-compile-loop</span>)
+  (<span class="keyword">let</span> ((expr (read-expr (current-input-port))))
+    (<span class="keyword">if</span> (eof-object? expr) #t
+        (<span class="keyword">begin</span> (compile-toplevel expr)
+               (read-compile-loop)))))
+
+(compile-program read-compile-loop)
+</pre>
+  </body>
+</html>
