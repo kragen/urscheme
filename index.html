@@ -15,7 +15,7 @@ form.</p>
 
 <li><b>Impractical.</b> It hardly implements anything beyond what's in
 R5RS, and it omits quite a bit of the stuff that is in R5RS; for
-example, files, macros, vectors, quasiquotation, call/cc, and
+example, files, macros, vectors, eval, quasiquotation, call/cc, and
 floating-point ("inexact numbers").  Only things that were needed for
 the compiler to compile itself and run some unit tests are
 included.</li>
@@ -59,13 +59,18 @@ byte-for-byte, as when it's running interpreted in some other Scheme
 
 </ul>
 
-<p>If you want to get it, you can <b>use Darcs to snarf the source
-repository</b>:</p>
+<h2>Downloading</h2>
+
+<p>If you want to get it, even though it's impractical, you can <b>use
+Darcs to snarf the source repository</b>:</p>
 
 <pre>darcs get http://pobox.com/~kragens/sw/urscheme/</pre>
 
 <p>Or you can <b><a href="urscheme-0.tar.gz">download the source
 tarball of Ur-Scheme version 0</a></b>.</p>
+
+<p>If you have MzScheme installed, you can build it by just typing
+"<tt>make</tt>".</p>
 
 <h2>Limitations</h2>
 
@@ -101,13 +106,13 @@ tarball of Ur-Scheme version 0</a></b>.</p>
 <li> Very many standard library procedures are missing.  Only the
      following 55 procedures are actually present: procedure? string?
      make-string string-set! string-ref string-length car cdr cons
-     pair? symbol? symbol->string string->symbol display newline eq?
-     current-input-port read-char integer? remainder quotient <
-     eof-object? char? integer->char char->integer list length assq
-     memq memv append not string-append char-whitespace? char<?
-     char<=? char-between? char-alphabetic? = char=? eqv? equal?
-     string=? null? boolean? number? for-each map reverse string->list
-     list->string number->string string->number write.
+     pair? symbol? symbol-&gt;string string-&gt;symbol display newline eq?
+     current-input-port read-char integer? remainder quotient &lt;
+     eof-object? char? integer-&gt;char char-&gt;integer list length assq
+     memq memv append not string-append char-whitespace? char&lt;?
+     char&lt;=? char-between? char-alphabetic? = char=? eqv? equal?
+     string=? null? boolean? number? for-each map reverse string-&gt;list
+     list-&gt;string number-&gt;string string-&gt;number write. </li>
 
 <li> make-string only takes one argument. </li>
 
@@ -117,13 +122,15 @@ tarball of Ur-Scheme version 0</a></b>.</p>
 
 <li> map and for-each only take two arguments. </li>
 
-<li> number->string only takes one argument. </li>
+<li> number-&gt;string only takes one argument. </li>
 
-<li> string->symbol will be slow with enough symbols. </li>
+<li> string-&gt;symbol will be slow with enough symbols. </li>
 
 </ul>
 
 <h2>Extensions</h2>
+
+<p>These are not in R5RS.</p>
 
 <ul>
 
@@ -136,7 +143,7 @@ tarball of Ur-Scheme version 0</a></b>.</p>
 
 <li> 1+ and 1- are as in Common Lisp. </li>
 
-<li> (char->string c) is like (make-string 1 c). </li>
+<li> (char-&gt;string c) is like (make-string 1 c). </li>
 
 <li> (escape string) returns a list of character strings which, when
      concatenated, form a string representing the original string by
@@ -161,8 +168,9 @@ they run out of memory.</p>
 
 <h2>Origins</h2>
 
-<p>In February 2007, I wanted to write a metacompiler for <a
-href="http://pobox.com/~kragen/sw/bicicleta" >Bicicleta</a>, but I was
+<p>In February 2008, <b>I wanted to write a metacompiler for <a
+href="http://pobox.com/~kragen/sw/bicicleta" 
+>Bicicleta</a></b>, but I was
 intimidated because I'd never written a compiler before, and nobody
 had ever written a compiler either <i>in</i> Bicicleta or <i>for</i>
 Bicicleta.  So I thought I'd pick a language that other people knew a
@@ -173,5 +181,178 @@ compiler.</p>
 <p>It took me about 18 days from the time I started on the project to
 the time that the compiler could actually compile itself, which was a
 lot longer than I expected.</p>
+
+<p>I learned a bunch from doing it.  Here are some of the main things
+I learned:</p>
+
+<ol>
+
+<li><b>Metainterpreters are a better way to bootstrap.</b>
+Interpreters are a lot simpler than compilers, especially if they
+don't have to run fast, and especially if you can write them in a
+language like Scheme that gives you garbage collection and closures
+for free.  The restriction that the compiler had to be correct both in
+R5RS Scheme and in the language that it could compile was really a
+pain.  For example, although I could add new syntactic forms to the
+language that it could compile, and I could add new syntactic forms
+with R5RS macro definitions, I couldn't simplify the compiler by
+adding new syntactic forms, because the compiler can't compile R5RS
+macro definitions.  (There's a portable implementation of R5RS macros
+out there, but it's about twice the size of the entire Ur-Scheme
+compiler.)  Similarly, I was stuck with a bunch of the boneheaded
+design decisions of the Scheme built-in types &mdash; no auto-growing
+mutable containers, separate types for strings and characters, and the
+difficulty of doing any string processing without arithmetic and side
+effects, for example.</li>
+
+<li><b>Start with the simplest thing that could possibly work.</b> I
+keep on learning this every year.  In this case, the really expensive
+thing was that I wanted normal function calls to be fast, so I used
+normal C-style stack frames for their arguments.  This seems to have
+paid off in speed, but it meant I spent four days and about 200 lines
+of code implementing lexical closures of unlimited extent.  (Really!
+According to my change log, from February 13 to February 16, I
+basically didn't do anything else except add macros.)  If I'd just
+allocated all my call frames on the heap, the result would have been
+slow, but I would have gotten done a lot sooner.
+</li>
+
+<li><b>Tail-recursion makes your code hard to read.</b> More
+traditional control structures, such as explicit loops, are both
+terser and clearer.  This is the largest Scheme program I've written.
+</li>
+
+</ol>
+
+<h2>Future Work</h2>
+
+<p>First, of course, there are the bugs to fix, especially including
+the absence of a <b>garbage collector</b>.</p>
+
+<p>If this compiler has any merit at all, it is in its small size and
+comprehensibility.  <a
+href="http://www.accesscom.com/~darius/hacks/ichbins.tar.gz" >Darius
+Bacon's brilliant 385-line "<b>ichbins</b>" self-compiling Lisp-to-C
+compiler</a> is much better at that, being less than one-fifth of the
+size.  So one direction of evolution is to <b>figure out what can be
+stripped out of it</b>.  ichbins has no arithmetic, no closures, no
+separate string or symbol type, and only one side effect.</p>
+
+<p>There's probably a lot that could be made clearer, as well.</p>
+
+<p>Another direction is to try to <b>improve the speed and size</b> of
+its output code a bit.  For example:
+
+<ul>
+
+<li> <b>Lambda-lifting</b> would keep let-expressions from consing
+storage for all of the arguments of the outer procedure, and if you
+were slightly more ambitious, you could even optimize away the
+procedure call entirely.</li>
+
+<li> A number of the built-in procedures, especially some of the most
+common ones, are rather small and would benefit from <b>inlining</b>.
+Also, the existing inlining would benefit from a preliminary scanning
+pass to see which <b>globals are never mutated</b> and can therefore
+be inlined safely without breaking Scheme's semantics.  This could
+also remove the type-check, the two fetches, and the computed call
+instruction, on the vast majority of procedure calls, and the
+argument-count check in the vast majority of procedure prologues.</li>
+
+<li> Especially <b>conditional expressions</b> could benefit from
+inlining into their parent <tt>if</tt>.  Something like half of the
+conditional expressions in the compiler are either <tt>(if (null? ...)
+...)</tt> or <tt>(if (eq? ...) ...)</tt> or their inverses, and in
+both cases the actual test is a single machine instruction; even the
+call is six instructions, and is followed by two instructions to turn
+the result-in-a-register back to a flag you can jump on.  The
+implementation of <tt>case</tt> is particularly inefficient because it
+actually calls <tt>memv</tt>.</li>
+
+<li> A little bit of <b>peephole optimization</b> usually goes a long
+way, but I'm not sure it would in this case; we could get a little bit
+of dead-code removal (e.g. procedure epilogues preceded by an
+unconditional jump) and there's the occasional <tt>pop %eax; push %eax;
+movl foo, %eax</tt> sequence.
+</li>
+
+<li> The <b>procedure prologues and epilogues</b> are pretty large,
+and they could probably be shrunk quite a bit, especially for
+non-variadic procedures.  It might be possible to arrange the stack
+frame so that a simple <tt>leave; ret $12</tt> sequence, or something
+similarly simple, could replace the current eleven bytes of crap, at
+least for non-variadic procedures. Tail calls are particularly
+horrific; here's a three-argument tail call:
+<blockquote><pre>
+ 804977f:	50                   	push   %eax
+ 8049780:	a1 20 89 06 08       	mov    0x8068920,%eax
+ 8049785:	8d 5c 24 08          	lea    0x8(%esp),%ebx
+ 8049789:	8b 55 fc             	mov    0xfffffffc(%ebp),%edx
+ 804978c:	8b 65 f8             	mov    0xfffffff8(%ebp),%esp
+ 804978f:	8b 6d f4             	mov    0xfffffff4(%ebp),%ebp
+ 8049792:	ff 33                	pushl  (%ebx)
+ 8049794:	ff 73 fc             	pushl  0xfffffffc(%ebx)
+ 8049797:	ff 73 f8             	pushl  0xfffffff8(%ebx)
+ 804979a:	52                   	push   %edx
+ 804979b:	e8 fb e8 ff ff       	call   804809b &lt;ensure_procedure&gt;
+ 80497a0:	8b 58 04             	mov    0x4(%eax),%ebx
+ 80497a3:	ba 03 00 00 00       	mov    $0x3,%edx
+ 80497a8:	ff e3                	jmp    *%ebx
+</pre></blockquote>
+
+<p>That's 43 bytes of code!  In this case, as is typical, the function
+being called (<tt>char-between?</tt>) is never redefined; it takes a
+fixed number of arguments and is never called with any other number of
+arguments; and it is not a closure.  These observations would allow
+the following abbreviated version:</p>
+
+<blockquote><pre>
+50                   	push   %eax
+8d 5c 24 08          	lea    0x8(%esp),%ebx
+8b 55 fc             	mov    0xfffffffc(%ebp),%edx
+8b 65 f8             	mov    0xfffffff8(%ebp),%esp
+8b 6d f4             	mov    0xfffffff4(%ebp),%ebp
+ff 33                	pushl  (%ebx)
+ff 73 fc             	pushl  0xfffffffc(%ebx)
+ff 73 f8             	pushl  0xfffffff8(%ebx)
+52                   	push   %edx
+e9 xx xx xx xx          jmp    _char_betweenP_4
+</pre></blockquote>
+
+<p>That's only 28 bytes, a substantial improvement, but still ugly.
+If we could skip the prologue of tail-called non-closure procedures
+and just jump directly to the body, then in cases where the caller has
+at least as many arguments as the callee, we could also avoid copying
+the saved %esp, %ebp, and return address to a new location on the
+stack. In that case we could simply do something like this:</p>
+
+<blockquote><pre>
+8d 5c 24 08          	lea    0x8(%esp),%ebx
+8b 65 f8             	mov    0xfffffff8(%ebp),%esp
+ff 33                	pushl  (%ebx)
+ff 73 fc             	pushl  0xfffffffc(%ebx)
+50                   	push   %eax
+e9 xx xx xx xx          jmp    _char_betweenP_4
+</pre></blockquote>
+
+<p>That's only 18 bytes.  Still not that pretty, but no longer
+disgusting.</p>
+
+</li>
+
+<li> Storing <b>symbols in a skip list or hash table</b> would
+probably help a lot with programs like compilers that use
+<tt>string->symbol</tt> a lot. </li>
+
+</ul>
+
+<p>Another direction is to <b>make it more practical</b>.  For
+example, improved error-reporting, a profiler, an FFI, and access to
+files and sockets would be handy.</p>
+
+<p>Another direction is to <b>make it faster</b>.  Its assembly output
+is largely comprised of fixed sequences of instructions stuck
+together, but those instructions are recreated through many layers of
+calling every time.</p>
 
 </body></html>
