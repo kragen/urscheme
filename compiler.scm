@@ -616,7 +616,7 @@
       (let ((var (car heap-args)))
         (begin 
           (comment "move arg from stack to heap: " (symbol->string var))
-          (compile-var var env #f)
+          (compile-var var env)
           (move-var-to-heap-arg)
           ;; Now we have the heap arg pointer on the stack, hopefully
           ;; in the right place.
@@ -1390,7 +1390,7 @@
       (fetch-heap-var-pointer (caddr vardefn))
       (error "trying to fetch the heap var pointer for " vardefn)))
 
-(define (compile-var var env tail?)
+(define (compile-var var env)
   (let ((binding (assq var env)))
     (if binding (get-variable (cdr binding))
         (fetch-global-variable (global-variable-label var)))))
@@ -1498,7 +1498,7 @@
 
 (define (compile-expr expr env tail?)
   (cond ((pair? expr)   (compile-combination (car expr) (cdr expr) env tail?))
-        ((symbol? expr) (compile-var expr env tail?))
+        ((symbol? expr) (compile-var expr env))
         ((or (string? expr) (boolean? expr) (integer? expr) (char? expr))
                         (compile-quotable expr env))
         (else (error "don't know how to compile" expr))))
