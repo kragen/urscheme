@@ -17,16 +17,16 @@
 (printlocal "a")
 (printlocal "b")
 
-; (define heap-printer
-;   (let ((val "original heap var"))
-;     (lambda (cmd arg)
-;       (case cmd
-;         ((set!) (set! val arg))
-;         ((print) (display val) (newline))
-;         (else (error "bad cmd" cmd))))))
+(define heap-printer
+  (let ((val "original heap var"))
+    (lambda (cmd arg)
+      (case cmd
+        ((set!) (set! val arg))
+        ((print) (display val) (newline))
+        (else (error "bad cmd" cmd))))))
 
-; (heap-printer 'print 0)
-; (heap-printer 'set! "heap var")
-; (heap-printer 'print 0)
-; (heap-printer 'set! "heap var changes!")
-; (heap-printer 'print 0)
+(heap-printer 'print 0)
+(heap-printer 'set! "heap var")
+(heap-printer 'print 0)
+(heap-printer 'set! "heap var changes!")
+(heap-printer 'print 0)

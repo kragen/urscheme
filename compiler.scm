@@ -1320,6 +1320,7 @@
   (mov (indirect (global-variable-label varname)) tos))
 
 ;; Emit code to set a global variable
+;; XXX should define-handling use this?
 (define (set-global-variable varname)
   (mov tos (indirect (global-variable-label varname))))
 
@@ -1380,6 +1381,13 @@
   (ensure-heap-var)
   (mov (offset tos 4) tos))
 
+(define (set-heap-var slotnum)
+  (fetch-heap-var-pointer slotnum)
+  (ensure-heap-var)
+  (mov nos ebx)
+  (mov ebx (offset tos 4))
+  (pop))
+
 ;; needs more cases for things other than stack variables?
 ;; XXX move globals here?
 (define (get-variable vardefn)
@@ -1390,6 +1398,7 @@
 (define (set-variable vardefn)
   (case (car vardefn)
     ((stack) (set-procedure-arg (cadr vardefn)))
+    ((heap-pointer) (set-heap-var (cadr vardefn)))
     (else (error "unexpected var type" vardefn))))
 
 ;; rather than getting the variable value, it gets the variable's
