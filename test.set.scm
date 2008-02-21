@@ -5,13 +5,27 @@
 (define global "global")
 (define (printglobal) (display global) (newline))
 (printglobal)
-(set! global "global variable")
+;; We'd like to ensure that the stack effect of set! (all three kinds)
+;; is correct.  It should return exactly one value, not zero or two.
+;; But we can't care about what its actual value is, because it's
+;; probably something different in the reference Scheme
+;; implementation.
+
+;; Executing it in what you'd call void context in C doesn't tell us
+;; anything; it's unlikely we'll crash the program by popping off too
+;; many stack items, and leaving extra stack items there is safe.  So
+;; we have to pass it as an argument to something.  But it has to be
+;; in a position where we're using the stuff underneath it; at the
+;; moment, that means it needs to be the first argument.
+
+(display (cdr (cons (set! global "global variable") "and ")))
 (printglobal)
 (set! global "global variable gets set!")
 (printglobal)
 
 (define (printlocal local)
-  (set! local "local variable always the same")
+  (display (cdr (cons (set! local "local variable always the same")
+                      "the right stuff: ")))
   (display local)
   (newline))
 (printlocal "a")
@@ -21,7 +35,7 @@
   (let ((val "original heap var"))
     (lambda (cmd arg)
       (case cmd
-        ((set!) (set! val arg))
+        ((set!) (display (cdr (cons (set! val arg) "set-"))))
         ((print) (display val) (newline))
         (else (error "bad cmd" cmd))))))
 
