@@ -22,7 +22,10 @@ listing=tmp.s.lst
 # file.  (It's unusual to have an assembly file that can compile both
 # with and without -nostdlib, but this is one.)
 asflags = -nostdlib -Wa,-adhlns=$(listing)
-all: test tests
+all: urscheme-compiler
+urscheme-compiler: test tests compiler.scm
+	$(scheme) compiler.scm < compiler.scm > compiler.s
+	$(CC) $(asflags) compiler.s -o $@
 test: a.out
 	./a.out
 a.out: tmp.s
