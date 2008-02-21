@@ -560,10 +560,11 @@
 (define (captured-vars expr)
     (if (not (pair? expr)) '()
         (case (car expr)
-          ((lambda)   (free-vars-lambda (cadr expr) (cddr expr)))
+          ((lambda)    (free-vars-lambda (cadr expr) (cddr expr)))
           ((if %begin) (all-captured-vars (cdr expr)))
           ((quote)    '())
-          (else       (all-captured-vars expr)))))
+          ((set!)      (captured-vars (caddr expr))) ; redundant
+          (else        (all-captured-vars expr)))))
 
 ;; Returns true if var is captured by a lambda inside any of exprs.
 (define (all-captured-vars exprs) 
@@ -587,6 +588,8 @@
                 ((lambda)    (free-vars-lambda (cadr expr) (cddr expr)))
                 ((if %begin) (all-free-vars (cdr expr)))
                 ((quote)     '())
+                ((set!)      (add-if-not-present (cadr expr) 
+                                                 (free-vars (caddr expr))))
                 (else        (all-free-vars expr))))))
 ;; Returns vars that occur free inside of any of exprs.
 (define (all-free-vars exprs) (if (null? exprs) '()
@@ -713,6 +716,9 @@
                                  (display message)
                                  (display message2)
                                  (newline)))))
+
+(assert-set-equal '(a b) (free-vars '(set! a b)))
+(assert-set-equal '() (captured-vars '(set! a b)))
 
 ;;; Memory management.
 
@@ -1304,10 +1310,14 @@
              (set! global-variables-defined 
                    (cons (list name) global-variables-defined)))))
 
-;; Emit code to fetch from a named global variable.
-(define (fetch-global-variable varname)
+;; Emit code to fetch from a global variable at such-and-such a label.
+(define (fetch-global-variable label)
   (asm-push tos) 
-  (mov (indirect varname) tos))
+  (mov (indirect label) tos))
+
+;; Emit code to set a global variable at such-and-such a label.
+(define (set-global-variable label)
+  (mov tos (indirect label)))
 
 ;; Return a list of undefined global variables.
 (define (undefined-global-variables)
@@ -1384,6 +1394,13 @@
   (let ((binding (assq var env)))
     (if binding (get-variable (cdr binding))
         (fetch-global-variable (global-variable-label var)))))
+
+;; Compile a set! form
+(define (compile-set var defn env)
+  (compile-expr defn env #f)
+  (let ((binding (assq var env)))
+    (if binding (set-variable (cdr binding))
+        (set-global-variable (global-variable-label var)))))
 
 ;; compile an expression, discarding result, e.g. for toplevel
 ;; expressions
@@ -1468,6 +1485,8 @@
     ((lambda) (compile-lambda rands env tail?))
     ((quote)  (assert-equal 1 (length rands))
               (compile-quotable (car rands) env))
+    ((set!)   (assert-equal 2 (length rands))
+              (compile-set (car rands) (cadr rands) env))
     ((+)      (integer-add rands env tail?))
     ((-)      (integer-sub rands env tail?))
     (else     (let ((nargs (compile-args rands env)))
@@ -1574,6 +1593,8 @@
                 ((lambda) (cons 'lambda (cons (cadr expr) 
                                               (map totally-macroexpand 
                                                    (cddr expr)))))
+                ;; It's harmless to totally-macroexpand set!, if, and
+                ;; begin special forms.
                 (else (map totally-macroexpand expr))))))
 
 ;; tests for macros
