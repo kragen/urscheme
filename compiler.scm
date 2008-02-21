@@ -39,7 +39,7 @@
 ;; D global variables
 ;; D lexically-scoped local variables
 ;; D nested scopes and closures
-;; - set! for global and local variables
+;; D set! for global and local variables
 ;; D top-level define of a variable (not a function)
 ;; - read, for proper and improper lists, symbols, strings, integers,
 ;;   #t and #f, and '  (written, just not provided to other programs yet)
@@ -70,19 +70,14 @@
 ;; of small integers.
 
 ;; Remaining to implement:
-;; D current-input-port
-;; D read-char
-;; D char-alphabetic?
-;; D and
-;; D symbol->string, string->symbol
-;; D string->number
-;; D list->string (already have string->list)
-;; D char?
-;; - set!
-;; D error
-;; - something for the double-define of 1+
 ;; - make read accessible to programs compiled with the compiler
 ;;   somehow
+;; - garbage collection
+;; - maybe output buffering; compiled with itself, it uses less than
+;;   half the user CPU that it needs under MzScheme to compile itself
+;;   a second time, but because of its gigantic number of system
+;;   calls, takes 60% longer to run.  (It even takes 35% less user
+;;   time than when it's compiled with Chicken!)
 
 ;; There were a bunch of parts of standard Scheme that I implemented
 ;; at the top of the compiler, which was a little bit silly --- any
@@ -92,7 +87,7 @@
 ;; Now I have moved them into a prelude called "standard-library" that
 ;; gets compiled before the user's program, which considerably expands
 ;; the subset of Scheme supported without adding any complexity to the
-;; overall system.
+;; overall system.  However, it does inflate output executables a bit.
 
 ;;; Not implemented:
 ;; - call/cc, dynamic-wind
