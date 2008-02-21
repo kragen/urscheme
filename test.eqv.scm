@@ -6,6 +6,9 @@
 ;;; Incidentally, eq? works fine in RScheme, Guile, MzScheme, Elk,
 ;;; Bigloo, and SCM (as well as Ur-Scheme), but not in tinyscheme.
 
+(define (char->string char)             ; copied from compiler.scm
+  (let ((buf (make-string 1))) (string-set! buf 0 char) buf))
+
 (define (sqrow xs ys)
   (if (null? xs) (newline)
       (begin
