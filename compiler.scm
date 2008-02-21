@@ -1258,15 +1258,18 @@
 ;; Emit code to push a boolean in place of the top two stack items.
 ;; It will be #t if they are equal, #f if they are not.
 (define (target-eq?)
-  (let ((label1 (new-label)) (label2 (new-label)))
-    (asm-pop ebx)
-    (cmp ebx tos)
-    (je label1)
-    (mov (const false-value) tos)
-    (jmp label2)
-    (label label1)
-    (mov (const true-value) tos)
-    (label label2)))
+  (let ((label1 (new-label)))
+    ;; Nested let so output doesn't depend on argument evaluation
+    ;; order.
+    (let ((label2 (new-label)))
+      (asm-pop ebx)
+      (cmp ebx tos)
+      (je label1)
+      (mov (const false-value) tos)
+      (jmp label2)
+      (label label1)
+      (mov (const true-value) tos)
+      (label label2))))
 
 ;;; Characters (chars).
 ;; These are unboxed and use "enum-tag" (2).
@@ -1388,9 +1391,11 @@
 
 (define (compile-quote-3 expr labelname)
   (cond ((string? expr) (constant-string-2 expr labelname))
-        ((pair? expr) (compile-cons (compile-constant (car expr))
-                                    (compile-constant (cdr expr))
-                                    labelname))
+        ;; Explicit let here to avoid output dependency on argument
+        ;; evaluation order.
+        ((pair? expr) (let ((compiled-car (compile-constant (car expr))))
+                        (compile-cons compiled-car (compile-constant (cdr expr))
+                                      labelname)))
         (else (error "unquotable" expr)))
   labelname)
 ;; Return a thing you can stick into instructions to name the constant.
@@ -1482,38 +1487,40 @@
     (let ((varlist (if (symbol? vars) (list vars) vars))
           (nargs (if (symbol? vars) '() (length vars))))
       (let ((artifacts (artifacts varlist body env))
-            (proclabel (new-label))
             (jumplabel (new-label))
             (stack-env (lambda-environment env varlist 0))
             (heap-arg-list (heap-args varlist body)))
-        (comment "jump past the body of the lambda")
-        (jmp jumplabel)
-        (if (null? artifacts)
-            (begin
-              ;; There are no artifacts, so we don't need to create a
-              ;; closure.
-              (compile-procedure-labeled proclabel nargs
-                (lambda () 
-                  ;; But there may be inner closures...
-                  (let ((inner-env (compile-heap-args heap-arg-list 0
-                                                      stack-env)))
-                    (compile-begin body inner-env #t))))
-              (label jumplabel)
-              ;; And we can just push-const it instead of creating a
-              ;; new closure.
-              (push-const proclabel))
-            (begin
-              (compile-procedure proclabel nargs 
-                (lambda ()
-                  ;; There may still be inner closures.
-                  (let ((artifacts-env (push-artifacts artifacts)))
-                    (let ((inner-env (compile-heap-args 
-                                      heap-arg-list
-                                      (length artifacts) ; follow artifacts
-                                      (append artifacts-env stack-env))))
-                      (compile-begin body inner-env #t)))))
-              (label jumplabel)
-              (push-closure proclabel artifacts env)))))))
+        ;; Nested let so that output doesn't depend on argument
+        ;; evaluation order.
+        (let ((proclabel (new-label)))
+          (comment "jump past the body of the lambda")
+          (jmp jumplabel)
+          (if (null? artifacts)
+              (begin
+                ;; There are no artifacts, so we don't need to create a
+                ;; closure.
+                (compile-procedure-labeled proclabel nargs
+                  (lambda () 
+                    ;; But there may be inner closures...
+                    (let ((inner-env (compile-heap-args heap-arg-list 0
+                                                        stack-env)))
+                      (compile-begin body inner-env #t))))
+                (label jumplabel)
+                ;; And we can just push-const it instead of creating a
+                ;; new closure.
+                (push-const proclabel))
+              (begin
+                (compile-procedure proclabel nargs 
+                  (lambda ()
+                    ;; There may still be inner closures.
+                    (let ((artifacts-env (push-artifacts artifacts)))
+                      (let ((inner-env (compile-heap-args 
+                                        heap-arg-list
+                                        (length artifacts) ; follow artifacts
+                                        (append artifacts-env stack-env))))
+                        (compile-begin body inner-env #t)))))
+                (label jumplabel)
+                (push-closure proclabel artifacts env))))))))
 
 (define (compile-begin rands env tail?)
   (cond ((null? rands) (push-const "31")) ; XXX do something reasonable
@@ -1530,14 +1537,17 @@
   (if (not (= (length rands) 3))
       (error "if arguments length " (length rands) " != 3")
       (let ((cond (car rands)) (then (cadr rands)) (else (caddr rands))
-            (falselabel (new-label)) (endlabel (new-label)))
-        (compile-expr cond env #f)
-        (jump-if-false falselabel)
-        (compile-expr then env tail?)
-        (jmp endlabel)
-        (label falselabel)
-        (compile-expr else env tail?)
-        (label endlabel))))
+            (falselabel (new-label)))
+        ;; Nested let so that output doesn't depend on argument
+        ;; evaluation order.
+        (let ((endlabel (new-label)))
+          (compile-expr cond env #f)
+          (jump-if-false falselabel)
+          (compile-expr then env tail?)
+          (jmp endlabel)
+          (label falselabel)
+          (compile-expr else env tail?)
+          (label endlabel)))))
 
 
 ;; if, lambda, quote, and set! are the standard Scheme set of
