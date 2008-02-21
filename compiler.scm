@@ -1600,7 +1600,7 @@
 ;;; Macros.
 
 (define macros '())
-(define (define-macro name fun)
+(define (define-ur-macro name fun)
   (set! macros (cons (list name fun) macros)))
 
 (define (relevant-macro-definition expr)
@@ -1612,24 +1612,24 @@
 
 ;; This is just a sort of test macro to verify that the macro system
 ;; works.
-(define-macro 'begin (lambda (args) (cons '%begin args)))
+(define-ur-macro 'begin (lambda (args) (cons '%begin args)))
 ;; Limited definition of cond.
-(define-macro 'cond
+(define-ur-macro 'cond
   (lambda (args)
     (cond ((null? args) #f)
           ((eq? (caar args) 'else) (cons 'begin (cdar args)))
           (else (list 'if (caar args) (cons 'begin (cdar args))
                       (cons 'cond (cdr args)))))))
-(define-macro 'define 
+(define-ur-macro 'define 
   (lambda (args) 
     (if (pair? (car args)) (list '%define (caar args) 
                                  (cons 'lambda (cons (cdar args) (cdr args))))
         (cons '%define args))))
-(define-macro 'let
+(define-ur-macro 'let
   (lambda (args)
     (cons (cons 'lambda (cons (map car (car args)) (cdr args)))
           (map cadr (car args)))))
-(define-macro 'case
+(define-ur-macro 'case
   (lambda (args)
     (cond ((pair? (car args)) 
            ;; Avoid evaluating expression more than once.  XXX unhygienic
@@ -1643,7 +1643,7 @@
                       (cons 'begin (cdadr args))
                       (cons 'case (cons (car args) (cddr args))))))))
 
-(define-macro 'or
+(define-ur-macro 'or
   (lambda (args)
     (cond ((null? args) #f)
           ((= 1 (length args)) (car args))
@@ -1651,7 +1651,7 @@
           (else (list 'let (list (list 'or-internal-argument (car args)))
                       (list 'if 'or-internal-argument 'or-internal-argument
                             (cons 'or (cdr args))))))))
-(define-macro 'and
+(define-ur-macro 'and
   (lambda (args)
     (cond ((null? args) #t)
           ((= 1 (length args)) (car args))
@@ -1793,7 +1793,6 @@
                    (( #\; ) (discard-comment s) (after-wsp s))
                    (else c))))
 (define (discard-comment s) (if (eqv? (s) #\newline) #f (discard-comment s)))
-;; XXX list->string
 (define (parse-atom s) 
   (let ((atom (parse-atom-2 s)))
     (if (parsed-number? atom) (string->number (list->string atom))

@@ -3,9 +3,14 @@
 scheme = mzscheme -r
 # SCM gives nice stack traces:
 #scheme = scm -f
-# Bigloo produces lots of warnings but used to work:
+# Bigloo produces lots of warnings but used to work, but it demands
+# that you pass only a single argument to (error ...)
 #scheme = bigloo -i
 #scheme = elk -l
+# The Chicken Scheme interpreter:
+#scheme = csi -s
+# Stalin doesn't work because it doesn't recognize #\tab, but I seem
+# to recall that it had some deeper problem as well.
 listing=tmp.s.lst
 
 # Unfortunately RScheme's interpreter "rs" outputs warnings to stdout,
