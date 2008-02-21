@@ -1435,12 +1435,27 @@
 ;; exprs
 (define (compile-quotable obj env) (push-const (compile-constant obj)))
 
-(define (fetch-heap-var-pointer slotnum)
-  (comment "fetching heap var pointer " (number->string slotnum))
-  ;; below %ebp is return address, %esp, and saved %ebp; so the first
-  ;; heap var slot is at ebp - 16, and the next one is at ebp - 20.
-  (dup)
-  (mov (offset ebp (- -16 (quadruple slotnum))) tos))
+;; XXX move this
+(define (memo1-asm proc)
+  (let ((results '()))
+    (lambda (arg)
+      (let ((cached (assq arg results)))
+        (if cached (begin (asm-display (cadr cached)) (caddr cached))
+            (begin
+              (push-assembly-diversion)
+              (let ((result (proc arg)))
+                (let ((output (pop-diverted-assembly)))
+                  (set! results (cons (list arg output result) results))
+                  (asm-display output)
+                  result))))))))
+
+(define fetch-heap-var-pointer 
+ (memo1-asm (lambda (slotnum)
+           (comment "fetching heap var pointer " (number->string slotnum))
+           ;; below %ebp is return address, %esp, and saved %ebp; so the first
+           ;; heap var slot is at ebp - 16, and the next one is at ebp - 20.
+           (dup)
+           (mov (offset ebp (- -16 (quadruple slotnum))) tos))))
 
 (define-error-routine "not_heap_var" "heap-var indirection to non-heap-var")
 (add-to-header (lambda ()
