@@ -42,8 +42,9 @@ of Scheme per second, which is not fast in absolute terms (on the same
 hardware, gas assembles the resulting 50&nbsp;000-line assembly file
 in just over half a second, which is about 100&nbsp;000 lines of
 assembly per second) but seems to be faster than a lot of Scheme
-compilers.  I imagine that it would run faster if compiled with Ikarus
-or Stalin, but I haven't tried Ikarus and can't get Stalin to
+compilers.  I imagine that it would run faster if compiled with <a
+href="http://www.cs.indiana.edu/~aghuloum/ikarus/">Ikarus</a> or
+Stalin, but my CPU is too old to run Ikarus, and I can't get Stalin to
 work.</li>
 
 <li><b>Portable.</b> Last time I checked, it could compile itself
@@ -180,6 +181,14 @@ Bicicleta.  So I thought I'd pick a language that other people knew a
 lot about writing compilers for and that wasn't too hairy, write a
 compiler for it, and then use what I'd learned to write the Bicicleta
 compiler.</p>
+
+<p>I decided to call it "Ur-Scheme" because it's not quite a Scheme,
+with all the missing parts mentioned above; it's more like something
+that could grow into a Scheme.  I was inspired by <a
+href="http://urjtag.sourceforge.net/book/_urjtag.html#_the_name_urjtag"
+>UrJTAG</a>, but of course the echo of "<a
+href="http://uqm.sf.net/">Ur-Quan Masters" (one of my favorite
+games)</a> was a plus as well.</p>
 
 <p>It took me about 18 days from the time I started on the project to
 the time that the compiler could actually compile itself, which was a
