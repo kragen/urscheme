@@ -1099,14 +1099,22 @@
              (mov (const eof-value) tos)
              (label "read_char_return")))  
 
-;; XXX this isn't terribly good --- it doesn't bother to say "error: "
-;; or append a newline, let alone representing the other args or
-;; providing a way to handle the error programmatically.
-(define-global-procedure 'error '()
+;; We don't have ports, but we do have a special procedure to print
+;; strings on stderr!
+(define-global-procedure 'display-stderr 1
   (lambda () (get-procedure-arg 0)
-             (comment "get car --- first arg")
-             (mov (offset tos 4) tos)
-             (jmp "report_error")))
+             (extract-string)
+             (comment "fd 2: stderr")
+             (mov (const "2") ebx)
+             (write_2)))
+;; System call to exit the program.
+(define-global-procedure 'exit 1
+  (lambda () (get-procedure-arg 0)
+             (ensure-integer)
+             (scheme-to-native-integer tos)
+             (mov tos ebx)
+             (mov (const "1") eax)      ; __NR_exit
+             (syscall)))
 
 ;;; Integers
 (define (tagshift str) (list (number->string str) "<<2"))
@@ -1837,6 +1845,7 @@
 
 (define standard-library 
   '(
+    ;; basics
     (define (1+ x) (+ x 1))
     (define (1- x) (- x 1))
     (define (list . args) args)         ; standard
@@ -1864,6 +1873,7 @@
     (define (cdadr val) (cdr (cadr val)))
     (define (cadar val) (car (cdar val)))
     (define (not x) (if x #f #t))       ; standard
+
 
     ;; string manipulation
     (define (string-append-3 length s2 buf idx)
@@ -1916,6 +1926,7 @@
       (or (= idx (string-length a))
           (and (char=? (string-ref a idx) (string-ref b idx))
                (string=?-2 a b (1+ idx)))))
+
 
     ;; type tests
     (define (null? x) (eq? x '()))
@@ -1988,6 +1999,14 @@
     (define (10* x) (+ (8* x) (2* x)))
     (define (2* x) (+ x x))
     (define (8* x) (2* (2* (2* x))))
+
+
+    ;; etc.
+    (define (error . args)
+      (display-stderr "error: ")
+      (for-each display-stderr args)
+      (display-stderr "\n")
+      (exit 1))
 ))
 
 ;;; Main Program
