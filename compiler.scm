@@ -1593,7 +1593,7 @@
                 (push-closure proclabel artifacts env))))))))
 
 (define (compile-begin rands env tail?)
-  (cond ((null? rands) (push-const "31")) ; XXX do something reasonable
+  (cond ((null? rands) (push-const nil-value))
         ((null? (cdr rands)) (compile-expr (car rands) env tail?))
         ;; hey, we can avoid discarding the results from
         ;; intermediate expressions if we're at the top level of a
