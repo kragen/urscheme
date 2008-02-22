@@ -1484,7 +1484,9 @@
     (ret)))
 ;; It should be impossible for a user program to cause this check to
 ;; fail, but it did help me track down a few compiler bugs early on.
-(define (ensure-heap-var) (call "ensure_heap_var"))
+(define (ensure-heap-var) 
+  ; (call "ensure_heap_var")
+  #f)
 
 (define (fetch-heap-var slotnum)
   (fetch-heap-var-pointer slotnum)
