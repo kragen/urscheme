@@ -329,23 +329,9 @@
 ;; same variable, or just somebody naming a variable "k".  In this
 ;; case, we simply decline to set the label-prefix.
 
-(define (stringlist->string stringlist) 
-  (list->string (stringlist->string-2 stringlist 0)))
-(define (stringlist->string-2 stringlist idx)
-  (if (null? stringlist) '()
-      (if (= idx (string-length (car stringlist)))
-          (stringlist->string-2 (cdr stringlist) 0)
-          (cons (string-ref (car stringlist) idx)
-                (stringlist->string-2 stringlist (1+ idx))))))
-;; XXX boy, that would be a lot nicer imperatively
-;; buf = stringbuf(apply(+, map(string-length, stringlist)))
-;; idxo = 0
-;; for string in stringlist:
-;;     for char in string: buf[idxo++] = char
-
 (define (set-label-prefix new-prefix) 
   (let ((new-label-prefix
-         (stringlist->string 
+         (asm-flatten
           (cons "_"
                 (escape (symbol->string new-prefix) 0 
                         ;; XXX incomplete list
