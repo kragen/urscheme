@@ -2,7 +2,9 @@
 set -e
 # clean up in case of early failure exit
 trap 'rm -f runscheme.s runscheme.out' EXIT
-mzscheme -r compiler.scm < "${1?usage: $0 foo.scm}" > runscheme.s
+: ${urscheme:=./urscheme-compiler}
+# can also use e.g. mzscheme -r compiler.scm; see Makefile for other options
+$urscheme < "${1?usage: $0 foo.scm}" > runscheme.s
 gcc -nostdlib runscheme.s -o runscheme.out
 trap '' EXIT                    # no need to do cleanup any more
 ./runscheme.out
