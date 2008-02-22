@@ -269,8 +269,8 @@
 (define asm-push (onearg "push")) (define asm-pop (onearg "pop"))
 (define jmp (onearg "jmp"))       (define jnz (onearg "jnz"))
 (define je (onearg "je"))         (define jz je)
-(define jnb (onearg "jnb"))       (define jg (onearg "jg"))
-(define js (onearg "js"))         (define jl (onearg "jl"))
+(define jnb (onearg "jnb"))       (define jl (onearg "jl"))
+(define js (onearg "js"))  
 (define call (onearg "call"))     (define int (onearg "int"))
 (define inc (onearg "inc"))       (define dec (onearg "dec"))
 (define idiv (onearg "idiv"))
@@ -1315,8 +1315,8 @@
     (ensure-integer)
     (cmp tos nos)
     (pop)
-    (jg "return_false")
-    (jmp "return_true")))
+    (jl "return_true")
+    (jmp "return_false")))
 
 ;;; Booleans and other misc. types
 (define enum-tag "2")
