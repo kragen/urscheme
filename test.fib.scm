@@ -1,5 +1,5 @@
 ;;; A dumb fibonacci test --- the first recursive code ever compiled.
-;; At least, by this compiler.
+;; At least, by the Ur-Scheme compiler.
 
 ;; This used to display "+" and "*" depending on which case you fell
 ;; into, which produced an interesting pattern of
