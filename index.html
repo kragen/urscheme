@@ -184,12 +184,13 @@ date.</p>
 
 <h2>Bugs</h2>
 
-<p>Output is unbuffered, which makes it slow.</p>
+<p>Output is unbuffered, which accounts for a third of its
+run-time.</p>
 
 <p>I still don't have a garbage collector, and programs crash when
 they run out of memory.</p>
 
-<h2>Influences</h2>
+<h2>Influences and Inspirations</h2>
 <p><b>Abdulaziz Ghuloum</b>'s paper, <a
 href="http://scheme2006.cs.uchicago.edu/11-ghuloum.pdf">An Incremental
 Approach to Compiler Construction</a>, was an enjoyable read and
@@ -427,7 +428,10 @@ does full dynamic type checking at run-time.  I imagine that if you
 wanted to get performance only 2 or 3 or 4 times worse than C compiled
 with GCC (which is not exactly a gold standard itself, these days)
 then you'd need to start hauling out the hairy techniques.  But it
-already beats the pants off all the <i>interpreters</i> I can find.
+already beats the pants off all the <i>interpreters</i> I can find,
+and at least for itself, it generates faster code than the three
+well-known Scheme compilers I've tried on it (mzc, Gambit-C, and
+Chicken.)  (I suspect that Stalin and Ikarus would do better...)
 </p>
 
 </li>
