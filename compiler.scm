@@ -656,11 +656,12 @@
 (define (captured-vars expr)
     (if (not (pair? expr)) '()
         (case (car expr)
-          ((lambda)    (free-vars-lambda (cadr expr) (cddr expr)))
-          ((if %begin) (all-captured-vars (cdr expr)))
-          ((quote)    '())
-          ((set!)      (captured-vars (caddr expr))) ; redundant
-          (else        (all-captured-vars expr)))))
+          ((lambda)     (free-vars-lambda (cadr expr) (cddr expr)))
+          ((%if %begin %ifeq %ifnull)
+                        (all-captured-vars (cdr expr)))
+          ((quote)      '())
+          ((set!)       (captured-vars (caddr expr))) ; redundant
+          (else         (all-captured-vars expr)))))
 
 ;; Returns true if var is captured by a lambda inside any of exprs.
 (define (all-captured-vars exprs) 
@@ -681,12 +682,13 @@
   (cond ((symbol? expr) (list expr))
         ((not (pair? expr)) '())
         (else (case (car expr)
-                ((lambda)    (free-vars-lambda (cadr expr) (cddr expr)))
-                ((if %begin) (all-free-vars (cdr expr)))
-                ((quote)     '())
-                ((set!)      (add-if-not-present (cadr expr) 
-                                                 (free-vars (caddr expr))))
-                (else        (all-free-vars expr))))))
+                ((lambda)     (free-vars-lambda (cadr expr) (cddr expr)))
+                ((%if %begin %ifeq %ifnull)
+                              (all-free-vars (cdr expr)))
+                ((quote)      '())
+                ((set!)       (add-if-not-present (cadr expr) 
+                                                  (free-vars (caddr expr))))
+                (else         (all-free-vars expr))))))
 ;; Returns vars that occur free inside of any of exprs.
 (define (all-free-vars exprs) (if (null? exprs) '()
                                   (set-union (free-vars (car exprs))
@@ -781,11 +783,11 @@
 (assert-set-equal (free-vars sample-quoted-expr) '(foo bar))
 (assert-set-equal (captured-vars sample-quoted-expr) '())
 
-(define sample-if-expr '(if a b c))
+(define sample-if-expr '(%if a b c))
 (assert-set-equal (free-vars sample-if-expr) '(a b c))
 (assert-set-equal (captured-vars sample-if-expr) '())
 
-(define sample-begin-expr '(if a b c))
+(define sample-begin-expr '(%begin a b c))
 (assert-set-equal (free-vars sample-begin-expr) '(a b c))
 (assert-set-equal (captured-vars sample-begin-expr) '())
 
@@ -1356,11 +1358,6 @@
     (je "return_true")
     (jmp "return_false")))
 
-(define (jump-if-false label)
-  (cmp (const false-value) tos)
-  (pop)
-  (je label))
-
 (define (inline-null rands env)
   (let ((false-label (new-label)))
     (let ((true-label (new-label)))
@@ -1656,21 +1653,77 @@
                     (compile-discarding (car rands) env))
                 (compile-begin (cdr rands) env tail?)))))
 
+; (define (compile-if rands env tail?)
+;   (if (not (= (length rands) 3))
+;       (error "if arguments length " (length rands) " != 3")
+;       (let ((cond (car rands)) (then (cadr rands)) (else (caddr rands))
+;             (falselabel (new-label)))
+;         ;; Nested let so that output doesn't depend on argument
+;         ;; evaluation order.
+;         (let ((endlabel (new-label)))
+;           (compile-expr cond env #f)
+;           (jump-if-false falselabel)
+;           (compile-expr then env tail?)
+;           (jmp endlabel)
+;           (label falselabel)
+;           (compile-expr else env tail?)
+;           (label endlabel)))))
+
+(define (compile-conditional jump-if-false then else env tail?)
+  (let ((falselabel (new-label)))
+    ;; Nested let so that output doesn't depend on argument
+    ;; evaluation order.
+    (let ((endlabel (new-label)))
+      (jump-if-false falselabel)
+      (compile-expr then env tail?)
+      (jmp endlabel)
+      (label falselabel)
+      (compile-expr else env tail?)
+      (label endlabel))))
+
 (define (compile-if rands env tail?)
-  (if (not (= (length rands) 3))
-      (error "if arguments length " (length rands) " != 3")
-      (let ((cond (car rands)) (then (cadr rands)) (else (caddr rands))
-            (falselabel (new-label)))
-        ;; Nested let so that output doesn't depend on argument
-        ;; evaluation order.
-        (let ((endlabel (new-label)))
-          (compile-expr cond env #f)
-          (jump-if-false falselabel)
-          (compile-expr then env tail?)
-          (jmp endlabel)
-          (label falselabel)
-          (compile-expr else env tail?)
-          (label endlabel)))))
+  (let ((cond (car rands)) (then (cadr rands)) (else (caddr rands)))
+    (comment "%if")
+    (compile-conditional (lambda (falselabel)
+                           (compile-expr cond env #f)
+                           (cmp (const false-value) tos)
+                           (pop)
+                           (je falselabel))
+                         then
+                         else
+                         env
+                         tail?)))
+
+(define (compile-ifnull rands env tail?)
+  (let ((cond (car rands)) (then (cadr rands)) (else (caddr rands)))
+    (comment "%ifnull")
+    (compile-conditional (lambda (falselabel)
+                           (compile-expr (car rands) env #f)
+                           (cmp (const nil-value) tos)
+                           (pop)
+                           (jnz falselabel))
+                         then
+                         else
+                         env
+                         tail?)))
+
+(define (compile-ifeq rands env tail?)
+  (let ((a (car rands))
+        (b (cadr rands))
+        (then (caddr rands))
+        (else (cadddr rands)))
+    (comment "%ifeq")
+    (compile-conditional (lambda (falselabel)
+                           (compile-expr (car rands) env #f)
+                           (compile-expr (cadr rands) env #f)
+                           (cmp tos nos)
+                           (pop) (pop)
+                           (jnz falselabel))
+                         then
+                         else
+                         env
+                         tail?)))
+                         
 
 
 ;; if, lambda, quote, and set! are the standard Scheme set of
@@ -1680,7 +1733,7 @@
 (define (compile-combination rator rands env tail?)
   (case rator
     ((%begin) (compile-begin rands env tail?))
-    ((if)     (compile-if rands env tail?))
+    ((%if)    (compile-if rands env tail?))
     ((lambda) (compile-lambda rands env tail?))
     ((quote)  (assert-equal 1 (length rands))
               (compile-quotable (car rands) env))
@@ -1690,6 +1743,8 @@
     ((-)      (integer-sub rands env))
     ((null?)  (inline-null rands env))
     ((eq?)    (inline-eq rands env))
+    ((%ifnull)(compile-ifnull rands env tail?))
+    ((%ifeq)  (compile-ifeq rands env tail?))
     (else     (let ((nargs (compile-args rands env)))
                 (comment "get the procedure")
                 (compile-expr rator env #f)
@@ -1784,6 +1839,18 @@
           ((= 1 (length args)) (car args))
           (else (list 'if (car args) (cons 'and (cdr args)) #f)))))
 
+(define-ur-macro 'if
+  (lambda (args)
+    (cond ((= 2 (length args)) (list 'if (car args) (cadr args) #f))
+          ((not (= 3 (length args))) (error "if needs 2 or 3 args"))
+          ((not (pair? (car args))) (cons '%if args))
+          ((eq? (caar args) 'eq?) 
+           (list '%ifeq (cadar args) (caddar args) (cadr args) (caddr args)))
+          ((eq? (caar args) 'null?)
+           (list '%ifnull (cadar args) (cadr args) (caddr args)))
+          (else
+           (cons '%if args)))))
+
 ;; Expand all macros in expr, recursively.
 (define (totally-macroexpand expr)
   (cond ((relevant-macro-definition expr) 
@@ -1800,19 +1867,23 @@
 
 ;; tests for macros
 (assert-equal (totally-macroexpand 'foo) 'foo)
-(assert-equal (totally-macroexpand '(if a b c)) '(if a b c))
+(assert-equal (totally-macroexpand '(foo a b c)) '(foo a b c))
 (assert (relevant-macro-definition '(begin a b c)) "no begin defn")
 (assert-equal (totally-macroexpand '(begin a b c)) '(%begin a b c))
+(assert-equal (totally-macroexpand '(if a b c)) '(%if a b c))
+(assert-equal (totally-macroexpand '(if (a) b c)) '(%if (a) b c))
+(assert-equal (totally-macroexpand '(if (a) b)) '(%if (a) b #f))
+(assert-equal (totally-macroexpand '(if (null? a) b c)) '(%ifnull a b c))
 (assert-equal (totally-macroexpand '(cond ((eq? x 3) 4 '(cond 3)) 
                                           ((eq? x 4) 8)
                                           (else 6 7)))
-              '(if (eq? x 3) (%begin 4 '(cond 3))
-                   (if (eq? x 4) (%begin 8)
+              '(%ifeq x 3 (%begin 4 '(cond 3))
+                   (%ifeq x 4 (%begin 8)
                        (%begin 6 7))))
 (assert-equal (totally-macroexpand '(let () a b c)) '((lambda () a b c)))
 (assert-equal (totally-macroexpand '(let ((a 1) (b 2)) a b c))
               '((lambda (a b) a b c) 1 2))
-(assert-equal (totally-macroexpand '(and a b c)) '(if a (if b c #f) #f))
+(assert-equal (totally-macroexpand '(and a b c)) '(%if a (%if b c #f) #f))
 (assert-equal (totally-macroexpand '(or a b c))
               (totally-macroexpand
                '(let ((or-internal-argument a)) 
@@ -2046,6 +2117,8 @@
     (define (caadr val) (car (cadr val)))
     (define (cdadr val) (cdr (cadr val)))
     (define (cadar val) (car (cdar val)))
+    (define (caddar val) (caddr (car val)))
+    (define (cadddr val) (caddr (cdr val)))
     (define (not x) (if x #f #t))       ; standard
 
 
