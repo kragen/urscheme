@@ -1044,6 +1044,12 @@
     (get-procedure-arg 0)
     (if-not-right-magic-jump symbol-magic "return_false")
     (jmp "return_true")))
+(add-to-header (lambda () (label "ensure_symbol")
+                          (if-not-right-magic-jump symbol-magic "not_symbol")
+                          (ret)))
+(define-error-routine "not_symbol" "not a symbol")
+(define (ensure-symbol) (call "ensure_symbol"))
+
 (define interned-symbol-list '())
 (define (intern symbol)
   (interning symbol interned-symbol-list))
@@ -1074,12 +1080,6 @@
   (section ".data")
   (label "symbol_table")
   (compile-word last-pointer))
-
-(add-to-header (lambda () (label "ensure_symbol")
-                          (if-not-right-magic-jump symbol-magic "not_symbol")
-                          (ret)))
-(define-error-routine "not_symbol" "not a symbol")
-(define (ensure-symbol) (call "ensure_symbol"))
 
 (define (inline-symbol->string nargs)
   (assert-equal 1 nargs)
