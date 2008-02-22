@@ -1610,7 +1610,7 @@
                     (compile-discarding (car rands) env))
                 (compile-begin (cdr rands) env tail?)))))
 
-(define (compile-conditional jump-if-false then else env tail?)
+(define (compile-conditional jump-if-false then else-expr env tail?)
   (let ((falselabel (new-label)))
     ;; Nested let so that output doesn't depend on argument
     ;; evaluation order.
@@ -1619,32 +1619,32 @@
       (compile-expr then env tail?)
       (jmp endlabel)
       (label falselabel)
-      (compile-expr else env tail?)
+      (compile-expr else-expr env tail?)
       (label endlabel))))
 
 (define (compile-if rands env tail?)
-  (let ((cond (car rands)) (then (cadr rands)) (else (caddr rands)))
+  (let ((cond-expr (car rands)) (then (cadr rands)) (else-expr (caddr rands)))
     (comment "%if")
     (compile-conditional (lambda (falselabel)
-                           (compile-expr cond env #f)
+                           (compile-expr cond-expr env #f)
                            (cmp (const false-value) tos)
                            (pop)
                            (je falselabel))
                          then
-                         else
+                         else-expr
                          env
                          tail?)))
 
 (define (compile-ifnull rands env tail?)
-  (let ((cond (car rands)) (then (cadr rands)) (else (caddr rands)))
+  (let ((cond-expr (car rands)) (then (cadr rands)) (else-expr (caddr rands)))
     (comment "%ifnull")
     (compile-conditional (lambda (falselabel)
-                           (compile-expr (car rands) env #f)
+                           (compile-expr cond-expr env #f)
                            (cmp (const nil-value) tos)
                            (pop)
                            (jnz falselabel))
                          then
-                         else
+                         else-expr
                          env
                          tail?)))
 
@@ -1652,7 +1652,7 @@
   (let ((a (car rands))
         (b (cadr rands))
         (then (caddr rands))
-        (else (cadddr rands)))
+        (else-expr (cadddr rands)))
     (comment "%ifeq")
     (compile-conditional (lambda (falselabel)
                            (compile-expr (car rands) env #f)
@@ -1661,7 +1661,7 @@
                            (pop) (pop)
                            (jnz falselabel))
                          then
-                         else
+                         else-expr
                          env
                          tail?)))
                          
