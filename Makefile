@@ -43,7 +43,8 @@ tmp.s: compiler.scm test.crufty.scm
 	diff -u $@.ref.old $@.ref ||:
 clean:
 	rm -f a.out tmp.s $(listing) tmp.s.ref tmp.s.ref.old \
-		urscheme-compiler compiler.s runscheme.s compiler.s.stage2
+		urscheme-compiler compiler.s runscheme.s compiler.s.stage2 \
+		compiler.c compiler_c compiler.gambit.s
 slowtests: chmodding
 	./runtests
 	./test-read-char
@@ -57,3 +58,8 @@ chmodding:
 stage2-test: urscheme-compiler compiler.s compiler.scm
 	time ./urscheme-compiler < compiler.scm > compiler.s.stage2
 	diff -u compiler.s compiler.s.stage2
+gambit-test: compiler.s
+	time gsc -link compiler.scm
+	time $(CC) compiler.c compiler_.c -lgambc -o gambit-compiler
+	time ./gambit-compiler < compiler.scm > compiler.gambit.s
+	diff -u compiler.s compiler.gambit.s
