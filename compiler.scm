@@ -1345,6 +1345,21 @@
   (pop)
   (je label))
 
+(define (inline-null rands env tail?)
+  (let ((false-label (new-label)))
+    (let ((true-label (new-label)))
+      (comment "null? operand")
+      (assert-equal 1 (compile-args rands env))
+      (cmp (const nil-value) tos)
+      ;; You know what's really awesome?  CMOV doesn't permit
+      ;; immediate operands or memory stores.
+      (jz true-label)
+      (mov (const false-value) tos)
+      (jmp false-label)
+      (label true-label)
+      (mov (const true-value) tos)
+      (label false-label))))
+
 ;; Emit code to push a boolean in place of the top two stack items.
 ;; It will be #t if they are equal, #f if they are not.
 (define (target-eq?)
@@ -1657,6 +1672,7 @@
               (compile-set (car rands) (cadr rands) env))
     ((+)      (integer-add rands env tail?))
     ((-)      (integer-sub rands env tail?))
+    ((null?)  (inline-null rands env tail?))
     (else     (let ((nargs (compile-args rands env)))
                 (comment "get the procedure")
                 (compile-expr rator env #f)
