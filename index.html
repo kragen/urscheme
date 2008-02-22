@@ -1,5 +1,6 @@
 <html><head><title>Ur-Scheme: A self-hosting compiler for a subset of R5RS Scheme to x86 asm</title>
 <link rel="stylesheet" href="../../style.css" />
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
 </head><body>
 <h1>Ur-Scheme: A self-hosting compiler for a subset of R5RS Scheme to x86 asm</h1>
 
@@ -22,11 +23,11 @@ the compiler to compile itself and run some unit tests are
 included.</li>
 
 <li><b>Small.</b> The implementation is about <a
-href="compiler.scm.html">1400 lines of Scheme</a>, plus 700 lines of
+href="compiler.scm.html">1600 lines of Scheme</a>, plus 700 lines of
 comments and blank lines.  Compiled with itself on x86 Linux and
-stripped, the executable is 128kiB.  On my 700MHz laptop from the
+stripped, the executable is 134kiB.  On my 700MHz laptop from the
 previous millennium, compiling it from scratch with MzScheme and gas
-takes under ten seconds.</li>
+takes just under 12 seconds.</li>
 
 <li><b>Safe.</b> Programs compiled with it do not crash or corrupt
 their memory unless there is a bug in the compiler (er, except if they
@@ -34,24 +35,26 @@ run out of stack or heap).  All types and array indices are
 dynamically checked at run-time.</li>
 
 <li><b>Reasonably fast.</b> It <b>generates reasonably fast code</b>
-&mdash; when compiled with itself, it runs 35% faster than when it's
-compiled with Chicken, and faster than when it's interpreted by any of
-Guile, MzScheme, SCM, Elk, or Chicken's interpreter.  It also <b>runs
-reasonably fast</b>; on my laptop, it compiles about a thousand lines
-of Scheme per second, which is not fast in absolute terms (on the same
-hardware, gas assembles the resulting 50&nbsp;000-line assembly file
-in just over half a second, which is about 100&nbsp;000 lines of
-assembly per second) but seems to be faster than a lot of Scheme
-compilers.  I imagine that it would run faster if compiled with <a
+&mdash; when compiled with itself, it runs 2½ times faster (in user
+CPU time) than when it's compiled with Chicken, and faster than when
+it's interpreted by any of Guile, MzScheme, SCM, Elk, or Chicken's
+interpreter.  It also <b>runs reasonably fast</b>; on my laptop, it
+compiles about 1000 lines of Scheme per user CPU second, which is not
+fast in absolute terms (on the same hardware, gas assembles the
+resulting 66&nbsp;000-line assembly file in just over half a second,
+which is about 100&nbsp;000 lines of assembly per second) but seems to
+be faster than a lot of Scheme compilers.  I imagine that it would run
+faster if compiled with <a
 href="http://www.cs.indiana.edu/~aghuloum/ikarus/">Ikarus</a> or
 Stalin, but my CPU is too old to run Ikarus, and I can't get Stalin to
-work.</li>
+compile it successfully.</li>
 
 <li><b>Portable.</b> Last time I checked, it could compile itself
-successfully in Guile, MzScheme (PLT Scheme), SCM, Elk, and Chicken,
-although not Bigloo, Stalin, RScheme, or TinyScheme.  Retargeting it
-to a different processor wouldn't be a huge pain (after all, it's only
-1400 lines of code) but wouldn't be that trivial either.</li>
+successfully when compiled by Guile, MzScheme (PLT Scheme), SCM, Elk,
+or Chicken, although not Bigloo, Stalin, RScheme, or TinyScheme.
+Retargeting it to a different processor wouldn't be a huge pain (after
+all, it's only 1600 lines of code) but wouldn't be that trivial
+either.</li>
 
 <li><b>Unit-tested.</b> It comes with a fairly comprehensive set of
 unit tests, and additionally, it compiles itself well enough that the
@@ -80,7 +83,7 @@ tarball of Ur-Scheme version 0</a></b>.</p>
 
 <li> The following are missing: macros, eval, quasiquotation,
      first-class continuations, vectors, numerical constants with
-     radix prefixes, ports, two-argument "if", "let*", "letrec",
+     radix prefixes, ports, "let*", "letrec",
      non-top-level defines ("internal definitions"), "do", promises,
      non-integer numbers, bignums, load, apply,
      case-insensitivity, multiple-value returns. </li>
@@ -102,8 +105,8 @@ tarball of Ur-Scheme version 0</a></b>.</p>
 
 <li> Integer arithmetic silently overflows. </li>
 
-<li> Most arithmetic operators are omitted; only +, -, quotient, and
-     remainder are present. </li>
+<li> Most arithmetic operators are omitted; only 1+, 1-, +, -,
+     quotient, and remainder are present. </li>
 
 <li> Very many standard library procedures are missing.  Only the
      following 55 procedures are actually present: <tt>procedure? 
@@ -165,8 +168,6 @@ tarball of Ur-Scheme version 0</a></b>.</p>
 
 <p>I still don't have a garbage collector, and programs crash when
 they run out of memory.</p>
-
-<p>+ and - aren't first-class procedures.</p>
 
 <h2>Origins</h2>
 
@@ -260,30 +261,29 @@ storage for all of the arguments of the outer procedure, and if you
 were slightly more ambitious, you could even optimize away the
 procedure call entirely.</li>
 
-<li> A number of the built-in procedures, especially some of the most
-common ones, are rather small and would benefit from <b>inlining</b>.
+<li> Although it does some <b>inlining</b> now, it could do more.
 Also, the existing inlining would benefit from a preliminary scanning
 pass to see which <b>globals are never mutated</b> and can therefore
-be inlined safely without breaking Scheme's semantics.  This could
-also remove the type-check, the two fetches, and the computed call
-instruction, on the vast majority of procedure calls, and the
+be inlined safely without breaking Scheme's semantics.  Such a scan
+could also remove the type-check, the two fetches, and the computed
+call instruction, on the vast majority of procedure calls, and the
 argument-count check in the vast majority of procedure prologues.</li>
 
-<li> Especially <b>conditional expressions</b> could benefit from
-inlining into their parent <tt>if</tt>.  Something like half of the
-conditional expressions in the compiler are either <tt>(if (null? ...)
-...)</tt> or <tt>(if (eq? ...) ...)</tt> or their inverses, and in
-both cases the actual test is a single machine instruction; even the
-call is six instructions, and is followed by two instructions to turn
-the result-in-a-register back to a flag you can jump on.  The
-implementation of <tt>case</tt> is particularly inefficient because it
-actually calls <tt>memv</tt>.</li>
+<li> Especially <b>conditional expressions</b> could benefit from some
+more inlining and integration with their parent <tt>if</tt>; currently
+only <tt>null?</tt>, <tt>eq?</tt>, and <tt>not</tt> have this special
+handling.  (Although that covers about half of the conditionals in the
+compiler.)  The procedure-call-and-return-and-test overhead totals
+about 18 instructions.  The implementation of <tt>case</tt> is
+particularly inefficient because it actually calls <tt>memv</tt>.</li>
 
 <li> A little bit of <b>peephole optimization</b> usually goes a long
 way, but I'm not sure it would in this case; we could get a little bit
 of dead-code removal (e.g. procedure epilogues preceded by an
-unconditional jump) and there's the occasional <tt>pop %eax; push %eax;
-movl foo, %eax</tt> sequence.
+unconditional jump, as in the very common case of a tail call) and 
+there's the occasional <tt>pop %eax; push %eax;
+movl foo, %eax</tt> sequence.  But overall I don't think there's much
+of an advantage yet.
 </li>
 
 <li> The <b>procedure prologues and epilogues</b> are pretty large,
@@ -360,9 +360,6 @@ probably help a lot with programs like compilers that use
 example, improved error-reporting, a profiler, an FFI, and access to
 files and sockets would be handy.</p>
 
-<p>Another direction is to <b>make it faster</b>.  Its assembly output
-is largely comprised of fixed sequences of instructions stuck
-together, but those instructions are recreated through many layers of
-calling every time.</p>
+<p>Another direction is to <b>make it run faster</b>. </p>
 
 </body></html>
