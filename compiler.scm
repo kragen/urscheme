@@ -906,6 +906,7 @@
              (comment "now pop and return the address")
              (pop)))
 
+;; pops both index and bound
 (define (check-array-bounds)
   (comment "verify that tagged %eax is in [0, untagged NOS)")
   (ensure-integer)
@@ -964,6 +965,12 @@
     (asm-pop ebx)
     (movzbl (indirect (index-register tos ebx 1)) tos)
     (native-to-scheme-character tos)))
+
+;; I was going to write an assembly version of string-blit here, but
+;; with the four necessary bounds checks, it ended up being 33
+;; relatively error-prone lines of code.  Since the Scheme version is
+;; only four lines of code and is needed anyway for bootstrapping,
+;; I'll just stick with that for the time being.
 
 (define (inline-string-length nargs)
   (assert-equal 1 nargs)
