@@ -176,7 +176,7 @@
 
 ;; copies "len" chars from "src" starting at "srcidx" to "dest"
 ;; starting at "destidx"
-(define (string-blit src srcidx len dest destidx)
+(define (string-blit src srcidx len dest destidx) ; duplicated in stdlib
   (if (= len 0) #f 
       (begin (string-set! dest destidx (string-ref src srcidx))
              (string-blit src (1+ srcidx) (1- len) dest (1+ destidx)))))
@@ -2082,24 +2082,19 @@
     (define (string-length x) (string-length x)) ; uses magic inlining; standard
     (define (symbol->string x)         ; uses magic inlining; standard
       (symbol->string x))
-    (define (string-append-3 length s2 buf idx)
-      (if (= idx (string-length buf)) buf
-          (begin
-            (string-set! buf idx (string-ref s2 (- idx length)))
-            (string-append-3 length s2 buf (1+ idx)))))
-    (define (string-append-2 s1 s2 buf idx)
-      (if (= idx (string-length s1)) 
-          (string-append-3 (string-length s1) s2 buf idx)
-          (begin
-            (string-set! buf idx (string-ref s1 idx))
-            (string-append-2 s1 s2 buf (1+ idx)))))
     ;; XXX we could get rid of this if we weren't using it for creating error msgs
     ;; (and now, again, number->string)
-    ;; XXX use string-blit
     (define (string-append s1 s2)       ; standard
-      (string-append-2 s1 s2 (make-string (+ (string-length s1) 
-                                             (string-length s2)))
-                       0))
+      (let ((buf (make-string (+ (string-length s1) (string-length s2)))))
+        (string-blit s1 0 (string-length s1) buf 0)
+        (string-blit s2 0 (string-length s2) buf (string-length s1))
+        buf))
+    ;; copies "len" chars from "src" starting at "srcidx" to "dest"
+    ;; starting at "destidx"
+    (define (string-blit src srcidx len dest destidx)
+      (if (= len 0) #f 
+          (begin (string-set! dest destidx (string-ref src srcidx))
+                 (string-blit src (1+ srcidx) (1- len) dest (1+ destidx)))))
 
 
     ;; chars
