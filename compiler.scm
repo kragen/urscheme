@@ -162,6 +162,8 @@
 (define (char->string char)             ; duplicated in stdlib
   (let ((buf (make-string 1))) (string-set! buf 0 char) buf))
 
+(define (assert x why) (if (not x) (error "surprise! error" why) '()))
+
 ;; Boy, it sure causes a lot of hassle that Scheme has different types
 ;; for strings and chars.
 
@@ -615,7 +617,6 @@
                             (add-if-not-present (car b) (set-union (cdr b) a))))
 (define (set-intersect a b) (filter (lambda (x) (memq x b)) a))
 
-(define (assert x why) (if (not x) (error "surprise! error" why) '()))
 (assert (set-equal '() '()) "empty set equality")
 (assert (set-equal '(a) '(a)) "set equality with one item")
 (assert (not (set-equal '(a) '(b))) "set inequality with one item")
