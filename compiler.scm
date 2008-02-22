@@ -2068,13 +2068,13 @@
     (define (cdar val) (cdr (car val)))
     (define (cadr val) (car (cdr val)))
     (define (cddr val) (cdr (cdr val)))
-    (define (caddr val) (car (cddr val)))
-    (define (caadr val) (car (cadr val)))
-    (define (cdadr val) (cdr (cadr val)))
-    (define (cadar val) (car (cdar val)))
-    (define (caddar val) (caddr (car val)))
-    (define (cadddr val) (caddr (cdr val)))
-    (define (caaadr val) (car (caadr val)))
+    (define (caddr val) (car (cdr (cdr val))))
+    (define (caadr val) (car (car (cdr val))))
+    (define (cdadr val) (cdr (car (cdr val))))
+    (define (cadar val) (car (cdr (car val))))
+    (define (caddar val) (car (cdr (cdr (car val)))))
+    (define (cadddr val) (car (cdr (cdr (cdr val)))))
+    (define (caaadr val) (car (car (car (cdr val)))))
     (define (not x) (if x #f #t))       ; standard
 
 
