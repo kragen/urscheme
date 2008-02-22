@@ -1081,10 +1081,10 @@
 (define-error-routine "not_symbol" "not a symbol")
 (define (ensure-symbol) (call "ensure_symbol"))
 
-(define-global-procedure 'symbol->string 1
-  (lambda () (get-procedure-arg 0)
-             (ensure-symbol)
-             (mov (offset tos 4) tos)))
+(define (inline-symbol->string nargs)
+  (assert-equal 1 nargs)
+  (ensure-symbol)
+  (mov (offset tos 4) tos))
 
 ;; XXX maybe this could use the normal string=?, or vice versa?
 (define-global-procedure 'string->symbol 1
@@ -1663,6 +1663,7 @@
       ((integer->char) (inline-integer->char nargs))
       ((char->integer) (inline-char->integer nargs))
       ((string-length) (inline-string-length nargs))
+      ((symbol->string) (inline-symbol->string nargs))
       (else (error "don't know how to inline" rator)))))
 
 ;; if, lambda, quote, and set! are the standard Scheme set of
@@ -1678,7 +1679,8 @@
               (compile-quotable (car rands) env))
     ((set!)   (assert-equal 2 (length rands))
               (compile-set (car rands) (cadr rands) env))
-    ((+ - 1+ 1- car cdr integer->char char->integer string-length) 
+    ((+ - 1+ 1- car cdr integer->char char->integer string-length 
+      symbol->string)
               (inline-primitive rator rands env))
     ((%ifnull)(compile-ifnull rands env tail?))
     ((%ifeq)  (compile-ifeq rands env tail?))
@@ -2080,6 +2082,8 @@
 
     ;; string manipulation
     (define (string-length x) (string-length x)) ; uses magic inlining; standard
+    (define (symbol->string x)         ; uses magic inlining; standard
+      (symbol->string x))
     (define (string-append-3 length s2 buf idx)
       (if (= idx (string-length buf)) buf
           (begin
