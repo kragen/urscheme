@@ -1790,12 +1790,16 @@
     (cond ((= 2 (length args)) (list 'if (car args) (cadr args) #f))
           ((not (= 3 (length args))) (error "if needs 2 or 3 args"))
           ((not (pair? (car args))) (cons '%if args))
-          ((eq? (caar args) 'eq?) 
-           (list '%ifeq (cadar args) (caddar args) (cadr args) (caddr args)))
-          ((eq? (caar args) 'null?)
-           (list '%ifnull (cadar args) (cadr args) (caddr args)))
           (else
-           (cons '%if args)))))
+           (case (caar args)
+             ((eq?)
+              (list '%ifeq (cadar args) (caddar args) (cadr args) (caddr args)))
+             ((null?)
+              (list '%ifnull (cadar args) (cadr args) (caddr args)))
+             ((not)
+              (list 'if (cadar args) (caddr args) (cadr args)))
+             (else
+              (cons '%if args)))))))
 
 ;; Expand all macros in expr, recursively.
 (define (totally-macroexpand expr)
@@ -1819,6 +1823,7 @@
 (assert-equal (totally-macroexpand '(if a b c)) '(%if a b c))
 (assert-equal (totally-macroexpand '(if (a) b c)) '(%if (a) b c))
 (assert-equal (totally-macroexpand '(if (a) b)) '(%if (a) b #f))
+(assert-equal (totally-macroexpand '(if (not a) b c)) '(%if a c b))
 (assert-equal (totally-macroexpand '(if (null? a) b c)) '(%ifnull a b c))
 (assert-equal (totally-macroexpand '(cond ((eq? x 3) 4 '(cond 3)) 
                                           ((eq? x 4) 8)
