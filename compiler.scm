@@ -2203,7 +2203,7 @@
 
     ;; Converts a string of digits into a number.
     (define (string->number str)
-      (if (string=? str "") (error "string->number of empty string")
+      (if (= (string-length str) 0) (error "string->number of empty string")
           (case (string-ref str 0)
             (( #\+ )      (string->number-2 str 1 0))
             (( #\- ) (- 0 (string->number-2 str 1 0)))
