@@ -2176,16 +2176,14 @@
 
     (define (string-digit digit) 
       (char->string (string-ref "0123456789" digit)))
-    (define (number->string-2 num tail)
-      (if (= num 0) tail
-          (number->string-2 (quotient num 10)
-                            (string-append (string-digit (remainder num 10)) 
-                                           tail))))
+    (define (number->string-2 num)
+      (if (< num 10) (string-digit num)
+          (string-append (number->string-2 (quotient num 10))
+                         (string-digit (remainder num 10)))))
     ;; Converts a number into a string of digits.
     (define (number->string num)        ; standard
-      (cond ((= num 0) "0")
-            ((< num 0) (string-append "-" (number->string-2 (- 0 num) "")))
-            (else (number->string-2 num ""))))
+      (if (< num 0) (string-append "-" (number->string-2 (- 0 num)))
+          (number->string-2 num)))
 
     ;; Converts a string of digits into a number.
     (define (string->number str)
