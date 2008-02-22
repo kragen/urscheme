@@ -1160,27 +1160,6 @@
              (write_2)
              (mov (const nil-value) tos)))
 
-(define-global-procedure 'eq? 2 
-  (lambda () (get-procedure-arg 0)
-             (get-procedure-arg 1)
-             (target-eq?)))
-
-(define (inline-eq rands env)
-  (let ((false-label (new-label)))
-    (let ((true-label (new-label)))
-      (comment "eq? operands")
-      (assert-equal 2 (compile-args rands env))
-      (cmp nos tos)
-      ;; You know what's really awesome?  CMOV doesn't permit
-      ;; immediate operands or memory stores.
-      (jz true-label)
-      (mov (const false-value) tos)
-      (jmp false-label)
-      (label true-label)
-      (mov (const true-value) tos)
-      (label false-label))))
-
-
 (define-global-procedure 'current-input-port 0
   (lambda () (comment "We don't have ports right now, so return nil")
              (push-const nil-value)))
@@ -1372,22 +1351,6 @@
       (label true-label)
       (mov (const true-value) tos)
       (label false-label))))
-
-;; Emit code to push a boolean in place of the top two stack items.
-;; It will be #t if they are equal, #f if they are not.
-(define (target-eq?)
-  (let ((label1 (new-label)))
-    ;; Nested let so output doesn't depend on argument evaluation
-    ;; order.
-    (let ((label2 (new-label)))
-      (asm-pop ebx)
-      (cmp ebx tos)
-      (je label1)
-      (mov (const false-value) tos)
-      (jmp label2)
-      (label label1)
-      (mov (const true-value) tos)
-      (label label2))))
 
 ;;; Characters (chars).
 ;; These are unboxed and use "enum-tag" (2).
@@ -1742,7 +1705,6 @@
     ((+)      (integer-add rands env))
     ((-)      (integer-sub rands env))
     ((null?)  (inline-null rands env))
-    ((eq?)    (inline-eq rands env))
     ((%ifnull)(compile-ifnull rands env tail?))
     ((%ifeq)  (compile-ifeq rands env tail?))
     (else     (let ((nargs (compile-args rands env)))
@@ -2155,6 +2117,7 @@
                                      (char-between? #\a x #\z)))
 
     ;; equality
+    (define (eq? a b) (if (eq? a b) #t #f)) ; uses magic inlining
     (define = eq?)
     ;; because chars are unboxed, char=? is eq?
     (define char=? eq?)
