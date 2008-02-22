@@ -1791,7 +1791,7 @@
           ((not (pair? (car args))) (cons '%if args))
           (else
            (case (caar args)
-             ((eq?)
+             ((eq? eqv? =)
               (list '%ifeq (cadar args) (caddar args) (cadr args) (caddr args)))
              ((null?)
               (list '%ifnull (cadar args) (cadr args) (caddr args)))
@@ -1830,6 +1830,8 @@
               '(%ifeq x 3 (%begin 4 '(cond 3))
                    (%ifeq x 4 (%begin 8)
                        (%begin 6 7))))
+(assert-equal (totally-macroexpand '(if (= x 0) 1 (if (eqv? x #\f) 2 3)))
+                                   '(%ifeq x 0 1 (%ifeq x #\f 2 3)))
 (assert-equal (totally-macroexpand '(let () a b c)) '((lambda () a b c)))
 (assert-equal (totally-macroexpand '(let ((a 1) (b 2)) a b c))
               '((lambda (a b) a b c) 1 2))
