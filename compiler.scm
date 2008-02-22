@@ -697,7 +697,6 @@
   (compile-heap-args-2 heap-args heap-slots-used env))
 (define (compile-heap-args-2 heap-args heap-slots-used env)
   (if (null? heap-args) env
-      ;; XXX compile-var doesn't need a tail? argument!
       (let ((var (car heap-args)))
         (begin 
           (comment "move arg from stack to heap: " (symbol->string var))
@@ -913,7 +912,7 @@
              (comment "now pop and return the address")
              (pop)))
 
-(define (check-array-bounds )
+(define (check-array-bounds)
   (comment "verify that tagged %eax is in [0, untagged NOS)")
   (ensure-integer)
 
@@ -1849,6 +1848,7 @@
                   (jump-if-false falselabel)
                   ) (car rands) (cadr rands) (caddr rands) 
                     (new-label) (new-label)))
+
 
 ;;; Top-level compilation with macro-expansion.
 
