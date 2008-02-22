@@ -1278,6 +1278,16 @@
   (sub tos nos)
   (pop)
   (inc tos))                            ; fix up tag
+(define (inline-1+ rands env)
+  (comment "1+")
+  (assert-equal 1 (compile-args rands env))
+  (ensure-integer)
+  (add (const (tagshift 1)) tos))
+(define (inline-1- rands env)
+  (comment "1-")
+  (assert-equal 1 (compile-args rands env))
+  (ensure-integer)
+  (add (const (tagshift -1)) tos))
 
 ;; Emit code to convert a native integer to a tagged integer.
 (define (native-to-scheme-integer reg) (sal reg) (sal reg) (inc reg))
@@ -1677,6 +1687,8 @@
               (compile-set (car rands) (cadr rands) env))
     ((+)      (integer-add rands env))
     ((-)      (integer-sub rands env))
+    ((1+)     (inline-1+ rands env))
+    ((1-)     (inline-1- rands env))
     ((car)    (inline-car rands env))
     ((cdr)    (inline-cdr rands env))
     ((%ifnull)(compile-ifnull rands env tail?))
@@ -2036,8 +2048,8 @@
     (define (- a b) (- a b)) ; uses magic inlining; subset of standard
     (define (car x) (car x))           ; uses magic inlining; standard
     (define (cdr x) (cdr x))           ; uses magic inlining; standard
-    (define (1+ x) (+ x 1))
-    (define (1- x) (- x 1))
+    (define (1+ x) (1+ x))              ; uses magic inlining
+    (define (1- x) (1- x))              ; uses magic inlining
     (define (list . args) args)         ; standard
     (define (length list)               ; standard
       (if (null? list) 0 (1+ (length (cdr list)))))
