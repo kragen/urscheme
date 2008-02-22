@@ -1002,16 +1002,18 @@
                           (if-not-right-magic-jump cons-magic "not_cons")
                           (ret)))
 (define-error-routine "not_cons" "not a cons")
-(define-global-procedure 'car 1
-  (lambda ()
-    (get-procedure-arg 0)
-    (ensure-cons)
-    (mov (offset tos 4) tos)))
-(define-global-procedure 'cdr 1
-  (lambda ()
-    (get-procedure-arg 0)
-    (ensure-cons)
-    (mov (offset tos 8) tos)))
+
+(define (inline-car rands env)
+  (comment "inlined car")
+  (assert-equal 1 (compile-args rands env))
+  (ensure-cons)
+  (mov (offset tos 4) tos))
+(define (inline-cdr rands env)
+  (comment "inlined cdr")
+  (assert-equal 1 (compile-args rands env))
+  (ensure-cons)
+  (mov (offset tos 8) tos))
+
 ;; We define a label here before the procedure prologue so that other
 ;; asm routines can call cons
 (add-to-header (lambda () (text) (label "cons")))
@@ -1675,6 +1677,8 @@
               (compile-set (car rands) (cadr rands) env))
     ((+)      (integer-add rands env))
     ((-)      (integer-sub rands env))
+    ((car)    (inline-car rands env))
+    ((cdr)    (inline-cdr rands env))
     ((%ifnull)(compile-ifnull rands env tail?))
     ((%ifeq)  (compile-ifeq rands env tail?))
     (else     (let ((nargs (compile-args rands env)))
@@ -2030,6 +2034,8 @@
     ;; basics
     (define (+ a b) (+ a b)) ; uses magic inlining; subset of standard
     (define (- a b) (- a b)) ; uses magic inlining; subset of standard
+    (define (car x) (car x))           ; uses magic inlining; standard
+    (define (cdr x) (cdr x))           ; uses magic inlining; standard
     (define (1+ x) (+ x 1))
     (define (1- x) (- x 1))
     (define (list . args) args)         ; standard
