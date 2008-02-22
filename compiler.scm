@@ -230,6 +230,19 @@
                   (asm-display output)
                   result))))))))
 
+;; Memoize a zero-argument assembly-generating routine.
+(define (memo0-asm proc)
+  (lambda ()
+    (let ((output #f) (result #f))
+      (cond (output (asm-display output) result)
+            (else   (push-assembly-diversion) 
+                    (let ((nresult (proc)))
+                      (set! output (pop-diverted-assembly))
+                      (set! result nresult)
+                      (asm-display output)
+                      result))))))
+
+
 ;; XXX move this
 (define (string-blit src srcidx len dest destidx)
   (if (= len 0) #f 
@@ -535,11 +548,12 @@
 
           (cmp (const (number->string nargs)) edx)
           (jnz "argument_count_wrong"))))))
-(define (compile-procedure-epilogue)
-  (comment "procedure epilogue")
-  (comment "get return address")
-  (pop-stack-frame edx)
-  (jmp (absolute edx)))
+(define compile-procedure-epilogue
+  (memo0-asm (lambda ()
+    (comment "procedure epilogue")
+    (comment "get return address")
+    (pop-stack-frame edx)
+    (jmp (absolute edx)))))
 
 (define (pop-stack-frame return-address-register)
   (mov (offset ebp -4) return-address-register)
@@ -815,25 +829,27 @@
   (add (const "3") reg)
   (asm-and (const "~3") reg))
 
-(define (emit-malloc)
-  (comment "code to allocate memory; untagged number of bytes in %eax")
-  (align4 eax)
-  (mov (indirect "arena_pointer") ebx)
-  (add ebx eax)
-  (mov eax (indirect "arena_pointer"))
-  (mov ebx eax)
-  (comment "now %eax points to newly allocated memory"))
+(define emit-malloc
+  (memo0-asm (lambda ()
+    (comment "code to allocate memory; untagged number of bytes in %eax")
+    (align4 eax)
+    (mov (indirect "arena_pointer") ebx)
+    (add ebx eax)
+    (mov eax (indirect "arena_pointer"))
+    (mov ebx eax)
+    (comment "now %eax points to newly allocated memory"))))
 
-(define (emit-malloc-n n)
-  (assert-equal (remainder n 4) 0)
-  (let ((ns (number->string n)))
-    (comment "allocate bytes:" ns)
-    (asm-push tos)
-    (mov (indirect "arena_pointer") tos)
-    (mov tos ebx)
-    (add (const ns) ebx)
-    (mov ebx (indirect "arena_pointer"))
-    (comment "now %eax points to newly allocated memory")))
+(define emit-malloc-n 
+  (memo1-asm (lambda (n)
+    (assert-equal (remainder n 4) 0)
+    (let ((ns (number->string n)))
+      (comment "allocate bytes:" ns)
+      (asm-push tos)
+      (mov (indirect "arena_pointer") tos)
+      (mov tos ebx)
+      (add (const ns) ebx)
+      (mov ebx (indirect "arena_pointer"))
+      (comment "now %eax points to newly allocated memory")))))
 
 
 ;; XXX still need to implement deallocation and a GC
