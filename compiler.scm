@@ -1758,7 +1758,10 @@
           ;; XXX here we unwarrantedly assume there's nothing after an
           ;; else clause
           ((eq? (caadr args) 'else) (cons 'begin (cdadr args)))
-          (else (list 'if (list 'memv (car args) (list 'quote (caadr args)))
+          (else (list 'if 
+                      (if (= (length (caadr args)) 1)
+                          (list 'eqv? (car args) (list 'quote (caaadr args)))
+                          (list 'memv (car args) (list 'quote (caadr args))))
                       (cons 'begin (cdadr args))
                       (cons 'case (cons (car args) (cddr args))))))))
 
@@ -1835,6 +1838,9 @@
                       (let ((or-internal-argument b))
                         (if or-internal-argument or-internal-argument
                             c))))))
+(assert-equal (totally-macroexpand '(case x ((y) z) (else xxx)))
+              '(%ifeq x 'y (%begin z) (%begin xxx)))
+
 ;; This test ensures we don't try to macro-expand lambda argument
 ;; lists.
 (assert-equal (totally-macroexpand
@@ -2068,6 +2074,7 @@
     (define (cadar val) (car (cdar val)))
     (define (caddar val) (caddr (car val)))
     (define (cadddr val) (caddr (cdr val)))
+    (define (caaadr val) (car (caadr val)))
     (define (not x) (if x #f #t))       ; standard
 
 
