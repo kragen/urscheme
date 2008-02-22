@@ -1506,7 +1506,7 @@
 
 (define (fetch-heap-var slotnum)
   (fetch-heap-var-pointer slotnum)
-  (comment "now fetching current value from the heap")
+  (comment "fetch current value from the heap")
   (ensure-heap-var)
   (mov (offset tos 4) tos))
 
@@ -1691,9 +1691,9 @@
     ((%ifnull)(compile-ifnull rands env tail?))
     ((%ifeq)  (compile-ifeq rands env tail?))
     (else     (let ((nargs (compile-args rands env)))
-                (comment "get the procedure")
+                (comment "get procedure")
                 (compile-expr rator env #f)
-                (comment "now apply the procedure")
+                (comment "apply procedure")
                 (if tail? (compile-tail-apply nargs)
                     (compile-apply nargs))))))
 
