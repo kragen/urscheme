@@ -593,9 +593,10 @@
         (compile-procedure-labeled procedure-value-label nargs body)))))
 
 ;; Emit code to fetch the Nth argument of the innermost procedure.
-(define (get-procedure-arg n) 
-  (asm-push tos)
-  (mov (offset ebp (quadruple n)) tos))
+(define get-procedure-arg 
+  (memo1-asm (lambda (n) 
+    (asm-push tos)
+    (mov (offset ebp (quadruple n)) tos))))
 
 ;; Emit code to mutate it.
 (define (set-procedure-arg n)
@@ -1522,12 +1523,13 @@
   (ensure-heap-var)
   (mov (offset tos 4) tos))
 
-(define (set-heap-var slotnum)
-  (fetch-heap-var-pointer slotnum)
-  (ensure-heap-var)
-  (mov nos ebx)
-  (mov ebx (offset tos 4))
-  (pop))
+(define set-heap-var 
+  (memo1-asm (lambda (slotnum)
+    (fetch-heap-var-pointer slotnum)
+    (ensure-heap-var)
+    (mov nos ebx)
+    (mov ebx (offset tos 4))
+    (pop))))
 
 ;; needs more cases for things other than stack variables?
 ;; XXX move globals here?
