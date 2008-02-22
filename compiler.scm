@@ -1,4 +1,4 @@
-;;; Ur-Scheme: A self-hosting compiler for a subset of R5RS Scheme to x86 asm
+;;; Ur-Scheme: A GPL self-hosting compiler for a subset of R5RS to fast x86 asm
 ;; Copyright (C) 2008  Kragen Javier Sitaker (2008-01-03 through 22)
 
 ;;     This program is free software: you can redistribute it and/or modify
@@ -111,7 +111,7 @@
 ;; - vectors
 ;; - some of the language syntax ` , ,@
 ;; - do
-;; - let, let*, letrec
+;; - let*, letrec
 ;; - delay, force
 ;; - internal definitions
 ;; - most of the library procedures for handling lists, characters
