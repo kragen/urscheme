@@ -1950,8 +1950,6 @@
   (let ((atom (parse-atom-2 s (s))))
     (if (parsed-number? atom) (string->number (list->string atom))
         (string->symbol (list->string atom)))))
-(define (char-numeric? char)            ; XXX standard
-  (if (string-idx "0123456789" char) #t #f))
 (define (parsed-number? lst)
   (cond ((null? lst) #f)
         ((char-numeric? (car lst)) (all-numeric? (cdr lst)))
@@ -2112,6 +2110,7 @@
     (define (char-between? a b c) (and (char<=? a b) (char<=? b c)))
     (define (char-alphabetic? x) (or (char-between? #\A x #\Z) 
                                      (char-between? #\a x #\z)))
+    (define (char-numeric? char) (char-between? #\0 char #\9)) ; standard
 
     ;; equality
     (define (eq? a b) (if (eq? a b) #t #f)) ; uses magic inlining
