@@ -2226,7 +2226,9 @@
     (define (newline) (display "\n"))
     (define (error . args)
       (display-stderr "error: ")
-      (for-each display-stderr args)
+      (for-each (lambda (arg) 
+                  (wthunk arg display-stderr)
+                  (display-stderr " ")) args)
       (display-stderr "\n")
       (exit 1))
     (define (escape-char char dangerous escapes) ; duplicated in stdlib
