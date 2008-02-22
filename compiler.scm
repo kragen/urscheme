@@ -180,7 +180,6 @@
 ;; arbitrarily nested list structure
 (define assembly-diversions #f)
 (define diverted-assembly '())
-(define (asm-newline) (asm-display "\n"))
 (define (asm-display stuff)
   (if assembly-diversions (set! diverted-assembly (cons stuff diverted-assembly))
       (display stuff)))
@@ -192,7 +191,7 @@
     (set! assembly-diversions #f)
     (set! diverted-assembly '())
     result))
-(define (emit . stuff) (asm-display (asm-flatten stuff)) (asm-newline))
+(define (emit . stuff) (asm-display (asm-flatten (cons stuff "\n"))))
 (define (asm-flatten stuff)
   (let ((buf (make-string (asm-flatten-size stuff))))
     (asm-flatten-inner buf 0 stuff)
