@@ -73,11 +73,12 @@
 ;; - make read accessible to programs compiled with the compiler
 ;;   somehow
 ;; - garbage collection
-;; - maybe output buffering; compiled with itself, it uses less than
-;;   half the user CPU that it needs under MzScheme to compile itself
-;;   a second time, but because of its gigantic number of system
-;;   calls, takes 60% longer to run.  (It even takes 35% less user
-;;   time than when it's compiled with Chicken!)
+;; - maybe output buffering; compiled with itself, it takes 1.3 user
+;;   seconds to compile itself, but another 0.6 system seconds because
+;;   it makes almost 50 000 system calls, all but 91 of which are
+;;   writes to stdout.  So it would compile itself 50% faster with
+;;   output buffering.  But segfaults would be harder to diagnose.
+;; - fixing (error ...) to print stuff out nicely.
 
 ;; There were a bunch of parts of standard Scheme that I implemented
 ;; at the top of the compiler, which was a little bit silly --- any
