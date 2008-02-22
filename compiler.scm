@@ -1163,6 +1163,22 @@
              (get-procedure-arg 1)
              (target-eq?)))
 
+(define (inline-eq rands env)
+  (let ((false-label (new-label)))
+    (let ((true-label (new-label)))
+      (comment "eq? operands")
+      (assert-equal 2 (compile-args rands env))
+      (cmp nos tos)
+      ;; You know what's really awesome?  CMOV doesn't permit
+      ;; immediate operands or memory stores.
+      (jz true-label)
+      (mov (const false-value) tos)
+      (jmp false-label)
+      (label true-label)
+      (mov (const true-value) tos)
+      (label false-label))))
+
+
 (define-global-procedure 'current-input-port 0
   (lambda () (comment "We don't have ports right now, so return nil")
              (push-const nil-value)))
@@ -1259,7 +1275,7 @@
                                 (add ebx tos)
                                 (dec tos)) ; fix up tag
 
-(define (integer-add rands env tail?)
+(define (integer-add rands env)
   (comment "integer add operands")
   (assert-equal 2 (compile-args rands env))
   (comment "now execute integer add")
@@ -1267,7 +1283,7 @@
   (swap)
   (ensure-integer)
   (emit-integer-addition))
-(define (integer-sub rands env tail?)
+(define (integer-sub rands env)
   (comment "integer subtract operands")
   (assert-equal 2 (compile-args rands env))
   (comment "now execute integer subtract")
@@ -1345,7 +1361,7 @@
   (pop)
   (je label))
 
-(define (inline-null rands env tail?)
+(define (inline-null rands env)
   (let ((false-label (new-label)))
     (let ((true-label (new-label)))
       (comment "null? operand")
@@ -1670,9 +1686,10 @@
               (compile-quotable (car rands) env))
     ((set!)   (assert-equal 2 (length rands))
               (compile-set (car rands) (cadr rands) env))
-    ((+)      (integer-add rands env tail?))
-    ((-)      (integer-sub rands env tail?))
-    ((null?)  (inline-null rands env tail?))
+    ((+)      (integer-add rands env))
+    ((-)      (integer-sub rands env))
+    ((null?)  (inline-null rands env))
+    ((eq?)    (inline-eq rands env))
     (else     (let ((nargs (compile-args rands env)))
                 (comment "get the procedure")
                 (compile-expr rator env #f)
