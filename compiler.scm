@@ -2091,6 +2091,8 @@
 (define standard-library 
   '(
     ;; basics
+    (define (+ a b) (+ a b)) ; uses magic inlining; subset of standard
+    (define (- a b) (- a b)) ; uses magic inlining; subset of standard
     (define (1+ x) (+ x 1))
     (define (1- x) (- x 1))
     (define (list . args) args)         ; standard
