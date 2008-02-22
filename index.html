@@ -1,39 +1,53 @@
-<html><head><title>Ur-Scheme: A self-hosting compiler for a subset of R5RS Scheme to x86 asm</title>
+<html><head>
+<title>Ur-Scheme: A GPL self-hosting compiler from a subset of 
+R5RS Scheme to fast x86 asm</title>
 <link rel="stylesheet" href="../../style.css" />
 <meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
-    <style type="text/css">
-    <!--
-      .comment {
-        /* font-lock-comment-face */
-        color: #b22222;
-      }
-      .function-name {
-        /* font-lock-function-name-face */
-        color: #0000ff;
-      }
-      .keyword {
-        /* font-lock-keyword-face */
-        color: #a020f0;
-      }
-      .py-builtins {
-        /* py-builtins-face */
-        color: #a020f0;
-      }
-    -->
-    </style>
+<style type="text/css">
+.comment     { /* font-lock-comment-face */ color: #b22222; }
+.function-name { /* font-lock-function-name-face */ color: #0000ff; }
+.keyword     { /* font-lock-keyword-face */ color: #a020f0; }
+.py-builtins {       /* py-builtins-face */ color: #a020f0; }
+</style>
 </head><body>
-<h1>Ur-Scheme: A self-hosting compiler for a subset of R5RS Scheme to x86 asm</h1>
+<h1>Ur-Scheme: A GPL self-hosting compiler from a subset of 
+R5RS Scheme to fast x86 asm</h1>
 
-<p>Ur-Scheme is a compiler from a small subset of R5RS Scheme to x86
+<p>Ur-Scheme is a compiler from a small subset of 
+<a href="http://schemers.org/Documents/Standards/R5RS/">R5RS
+Scheme</a> to Intel x86
 assembly language.  It can compile itself.  It is free software,
 licensed under the GNU GPLv3+.  It might be useful as a base for a
 more practical implementation (or a more compact one), or it might be
-enjoyable to read, but it probably isn't that useful in its current
+enjoyable to read (particularly since the entire development history
+is browsable using darcs), but it probably isn't that useful in its current
 form.</p>
 
 <p>Ur-Scheme is:</p>
 
 <ul>
+
+<li><b>Reasonably fast.</b> It <b>generates reasonably fast code</b>
+&mdash; when compiled with itself, it runs 2½ times faster (in user
+CPU time) than when it's compiled with <a
+href="http://www.call-with-current-continuation.org/" >Chicken</a>, 1½
+times faster than
+when it's compiled with <a
+href="http://dynamo.iro.umontreal.ca/~gambit/wiki/index.php/Main_Page"
+>Gambit-C</a>, and much faster than when
+it's interpreted by any of <a
+href="http://www.gnu.org/software/guile/guile.html" >Guile</a>, <a
+href="http://plt-scheme.org/" >MzScheme</a>, SCM, Elk, or Chicken's
+interpreter.  It also <b>runs reasonably fast</b>; on my laptop, it
+compiles about 1000 lines of Scheme per user CPU second, which is not
+fast in absolute terms (on the same hardware, gas assembles the
+resulting 66&nbsp;000-line assembly file in just over half a second,
+which is about 100&nbsp;000 lines of assembly per second) but seems to
+be faster than a lot of Scheme compilers.  I imagine that it would run
+faster if compiled with <a
+href="http://www.cs.indiana.edu/~aghuloum/ikarus/">Ikarus</a> or
+Stalin, but my CPU is too old to run Ikarus, and I can't get Stalin to
+compile it successfully.</li>
 
 <li><b>Impractical.</b> It hardly implements anything beyond what's in
 R5RS, and it omits quite a bit of the stuff that is in R5RS; for
@@ -54,24 +68,10 @@ their memory unless there is a bug in the compiler (er, except if they
 run out of stack or heap).  All types and array indices are
 dynamically checked at run-time.</li>
 
-<li><b>Reasonably fast.</b> It <b>generates reasonably fast code</b>
-&mdash; when compiled with itself, it runs 2½ times faster (in user
-CPU time) than when it's compiled with Chicken, and faster than when
-it's interpreted by any of Guile, MzScheme, SCM, Elk, or Chicken's
-interpreter.  It also <b>runs reasonably fast</b>; on my laptop, it
-compiles about 1000 lines of Scheme per user CPU second, which is not
-fast in absolute terms (on the same hardware, gas assembles the
-resulting 66&nbsp;000-line assembly file in just over half a second,
-which is about 100&nbsp;000 lines of assembly per second) but seems to
-be faster than a lot of Scheme compilers.  I imagine that it would run
-faster if compiled with <a
-href="http://www.cs.indiana.edu/~aghuloum/ikarus/">Ikarus</a> or
-Stalin, but my CPU is too old to run Ikarus, and I can't get Stalin to
-compile it successfully.</li>
-
 <li><b>Portable.</b> Last time I checked, it could compile itself
 successfully when compiled by Guile, MzScheme (PLT Scheme), SCM, Elk,
-or Chicken, although not Bigloo, Stalin, RScheme, or TinyScheme.
+Gambit-C, or Chicken, although it doesn't run in Bigloo, 
+Stalin, RScheme, or TinyScheme.
 Retargeting it to a different processor wouldn't be a huge pain (after
 all, it's only 1600 lines of code) but wouldn't be that trivial
 either.</li>
@@ -92,7 +92,8 @@ Darcs to snarf the source repository</b>:</p>
 <pre>darcs get http://pobox.com/~kragen/sw/urscheme/</pre>
 
 <p>Or you can <b><a href="urscheme-0.tar.gz">download the source
-tarball of Ur-Scheme version 0</a></b>.</p>
+tarball of Ur-Scheme version 0</a></b>, which is a bit out of
+date.</p>
 
 <p>If you have MzScheme installed, you can build it by just typing
 "<tt>make</tt>".</p>
@@ -101,7 +102,8 @@ tarball of Ur-Scheme version 0</a></b>.</p>
 
 <ul>
 
-<li> The following are missing: macros, eval, quasiquotation,
+<li> The following are missing: user-defined macros, eval,
+     quasiquotation, 
      first-class continuations, vectors, numerical constants with
      radix prefixes, ports, "let*", "letrec",
      non-top-level defines ("internal definitions"), "do", promises,
@@ -126,7 +128,8 @@ tarball of Ur-Scheme version 0</a></b>.</p>
      quotient, and remainder are present. </li>
 
 <li> Very many standard library procedures are missing.  Only the
-     following 55 procedures are actually present: <tt>procedure? 
+     following 55 procedures were actually present last time I updated
+     this list: <tt>procedure? 
      string?
      make-string string-set! string-ref string-length car cdr cons
      pair? symbol? symbol-&gt;string string-&gt;symbol display newline eq?
@@ -186,7 +189,100 @@ tarball of Ur-Scheme version 0</a></b>.</p>
 <p>I still don't have a garbage collector, and programs crash when
 they run out of memory.</p>
 
-<h2>Origins</h2>
+<h2>Influences</h2>
+<p><b>Abdulaziz Ghuloum</b>'s paper, <a
+href="http://scheme2006.cs.uchicago.edu/11-ghuloum.pdf">An Incremental
+Approach to Compiler Construction</a>, was an enjoyable read and
+inspirational.  Ghuloum explained his objective and approach thus:</p>
+
+<blockquote>
+Compilers are perceived to be magical artifacts, carefully crafted
+by the wizards, and unfathomable by the mere mortals...
+Real-life compilers are too
+complex to serve as an educational tool. And the gap between
+real-life compilers and the educational toy compilers is too wide.
+The novice compiler writer stands puzzled facing an impenetrable
+barrier, "better write an interpreter instead."
+
+<p>The goal of this paper is to break that barrier. We show that
+building a compiler can be as easy as building an interpreter. The
+compiler we construct accepts a large subset of the Scheme 
+programming language and produces assembly code for the Intel-x86
+architecture... The
+development of the compiler is broken into many small 
+incremental steps. Every step yields a fully working compiler for a 
+progressively expanding subset of Scheme. Every compiler step produces
+real assembly code that can be assembled then executed directly
+by the hardware. ...</p>
+
+<p>Compiler construction is not as complex as it is commonly 
+perceived to be. In this paper, we showed that constructing a 
+compiler for a large subset of Scheme that targets a real hardware is
+simple. The basic compiler is achieved by concentrating on the 
+essential aspects of compilation and freeing the compiler from 
+sophisticated analysis and optimization passes. This helps the novice
+compiler writers build the intuition for the inner-workings of 
+compilers without being distracted by details.</p>
+
+</blockquote>
+
+<p>This is the objective and approach with which I started out
+Ur-Scheme, and it turned out to be extremely successful.</p>
+
+<p><a
+href="http://www.iro.umontreal.ca/~boucherd/mslug/meetings/20041020/minutes-en.html"
+>Marc Feeley's 2004 talk on the "<b>90 minute Scheme to C compiler</b>"</a>
+was also quite inspirational, although I didn't use any
+of the techniques he discussed!  It was useful to see that a
+relatively complete Scheme compiler could be written in 800 lines of
+Scheme, and that the performance of the resulting C code wasn't too
+terrible.</p>
+
+<p>In the realm of small self-hosting compilers, <a
+href="http://fabrice.bellard.free.fr/otcc/" ><b>Fabrice
+Bellard's 2002 OTCC</b></a> is near the pinnacle of compactness.  In
+4748
+bytes of code, <tt>otccelf</tt> compiles the subset of C it is written
+in into standalone x86 ELF executables.  What's even more stunning is
+that the original <tt>otcc</tt>, missing the ELF output, is only 3301
+bytes, and Bellard explains that he actually started with a smaller
+subset of C than that!  The extended version, <a
+href="http://fabrice.bellard.free.fr/tcc/" >TCC</a>, was up to 100KiB
+and could compile a Linux kernel from scratch in 10 seconds.</p>
+
+<p>Looking at <b>disassembled code from <a
+href="http://www.jwdt.com/~paysan/bigforth.html">Bernd Paysan's
+bigFORTH</a></b>
+showed me that a code generator could be really very simple.  (The
+bigFORTH web page says, "The compiler generates optimized native code
+for the i386.", but I don't know what meaning of "optimized" Bernd has
+in mind.)  bigFORTH gets <a
+href="http://shootout.alioth.debian.org/gp4/benchmark.php?test=all&lang=bigforth&lang2=gcc"
+>pretty decent performance</a> in my experience, really, much
+better than the <a
+href="http://shootout.alioth.debian.org/gp4sandbox/benchmark.php?test=all&lang=gforth&lang2=gcc"
+>gFORTH threaded-code interpreter</a>.  But it looks like most of the
+bigFORTH primitives simply inline fixed instruction sequences, and no
+register 
+allocation is done.  I figured I could glue together fixed instruction
+sequences too.
+</p>
+
+<p>Once I got started, I learned about <a
+href="http://www.accesscom.com/~darius/hacks/ichbins.tar.gz" >Darius
+Bacon's brilliant seven-page self-hosting "<b>ichbins</b>"
+compiler</a> and read it.
+It's definitely worth a read.</p>
+
+<p>I decided to call it "Ur-Scheme" because it's not quite a Scheme,
+with all the missing parts mentioned above; it's more like something
+that could grow into a Scheme.  I was inspired by <a
+href="http://urjtag.sourceforge.net/book/_urjtag.html#_the_name_urjtag"
+>UrJTAG</a>, but of course the echo of "<a
+href="http://sc2.sf.net/">Ur-Quan Masters" (one of my favorite
+games)</a> was a plus as well.</p>
+
+<h2>Origins and Lessons</h2>
 
 <p>In February 2008, <b>I wanted to write a metacompiler for <a
 href="http://pobox.com/~kragen/sw/bicicleta" 
@@ -197,14 +293,6 @@ Bicicleta.  So I thought I'd pick a language that other people knew a
 lot about writing compilers for and that wasn't too hairy, write a
 compiler for it, and then use what I'd learned to write the Bicicleta
 compiler.</p>
-
-<p>I decided to call it "Ur-Scheme" because it's not quite a Scheme,
-with all the missing parts mentioned above; it's more like something
-that could grow into a Scheme.  I was inspired by <a
-href="http://urjtag.sourceforge.net/book/_urjtag.html#_the_name_urjtag"
->UrJTAG</a>, but of course the echo of "<a
-href="http://uqm.sf.net/">Ur-Quan Masters" (one of my favorite
-games)</a> was a plus as well.</p>
 
 <p>It took me about 18 days from the time I started on the project to
 the time that the compiler could actually compile itself, which was a
@@ -317,12 +405,20 @@ factor of 7.6:
 </pre></blockquote>
 
 <p>GCC outperforms Ur-Scheme on that same benchmark by about a factor
-of 5.  On larger programs, such as the Ur-Scheme compiler itself,
-Ur-Scheme only outperforms MzScheme's interpreter by about another
-factor of 5.</p>
+of 5.</p>
+
+<p>On larger programs, such as the Ur-Scheme compiler itself,
+Ur-Scheme only outperforms MzScheme's interpreter by about a
+factor of 5 (rather than 7 or so), which (if you're keeping track)
+means that Scheme code interpreted in MzScheme is somewhere around
+25-50 times
+slower than C code compiled with GCC.</p>
 
 <p>The literature about writing compilers is full of hairy techniques
-like SSA conversion, higher-order control-flow analysis, type
+like CPS conversion, SSA conversion, <a
+href="ftp://ftp.cs.cmu.edu/afs/cs.cmu.edu/user/shivers/lib/papers/diss.ps.Z"
+>higher-order
+control-flow analysis</a>, type
 inference, automated theorem proving, partial evaluation, escape
 analysis, and so on.  Ur-Scheme doesn't do any of those things.
 (Well, actually, it does do a little bit of escape analysis.)  In
@@ -330,13 +426,59 @@ fact, Ur-Scheme doesn't even do <i>register allocation</i>, and it
 does full dynamic type checking at run-time.  I imagine that if you
 wanted to get performance only 2 or 3 or 4 times worse than C compiled
 with GCC (which is not exactly a gold standard itself, these days)
-then you'd need to start hauling out the hairy techniques.
-
+then you'd need to start hauling out the hairy techniques.  But it
+already beats the pants off all the <i>interpreters</i> I can find.
 </p>
 
 </li>
 
 </ol>
+
+<h2>Interesting Features</h2>
+
+<p>It has a <b>one-level parser</b>, like old versions of Microsoft
+BASIC; there's no separate tokenizer.  I wrote the parser after
+reading the "ichbins" parser, and there is definitely some influence
+visible. </p>
+
+<p>It contains <b>relatively little mutation</b>.  Although almost
+every line of the compiler
+has "side effects" like outputting lines of assembly code,
+there are fairly few locations where the
+compiler's internal state is mutated.  I count 25 calls to
+<tt>set!</tt> and <tt>string-set!</tt>
+in the 1600 lines of code, including the standard library.
+The I/O side effects are similarly centralized
+&mdash; there are three calls to <tt>display</tt>, no calls to
+<tt>newline</tt>, and one call to <tt>read-char</tt> in the whole
+code.  When was the last time you saw a 1600-line C program with only
+25 assignment statements?</p>
+
+<p>To simplify code generation, it follows BigFORTH and colorForth
+by <b>treating the x86 as a stack machine</b>.
+</p>
+
+<p>What little optimization it does is done by <b>optimization
+macros</b> that rewrite certain patterns in the source &mdash; for
+example, <tt>(if (not a) b c)</tt> gets rewritten into <tt>(if a c
+b)</tt>, and <tt>(if (null? x) y z)</tt> is rewritten into a call to a
+special built-in <tt>(%ifnull x y z)</tt>.  As described in R5RS,
+these macros also compile the various Scheme control structures
+(<tt>cond</tt>, <tt>case</tt>, <tt>and</tt>, and so on) into more
+fundamental control structures like <tt>if</tt> and
+<tt>lambda</tt>.</p>
+
+<p>At present, because it compiles one expression at a time, you can
+<b>interactively type code at it</b> and see the compiled assembly
+results.  Unfortunately this isn't very much fun because the generated
+code is so verbose.  Darius discovered this feature.</p>
+
+<p>The assembly code it produces <b>can compile to statically linked,
+standalone executables</b> because it doesn't depend on any external
+libraries &mdash; it just uses the Linux system call interface
+directly.  They can be relatively small; a minimal executable is about
+17KiB, because it includes the whole standard library (not just the
+parts that are used).</p>
 
 <h2>Future Work</h2>
 
@@ -362,7 +504,7 @@ its output code a bit.  For example:
 <li> <b>Lambda-lifting</b> would keep let-expressions from consing
 storage for all of the arguments of the outer procedure, and if you
 were slightly more ambitious, you could even optimize away the
-procedure call entirely.</li>
+procedure call entirely.  That would make them a lot smaller, too.</li>
 
 <li> Although it does some <b>inlining</b> now, it could do more.
 Also, the existing inlining would benefit from a preliminary scanning
