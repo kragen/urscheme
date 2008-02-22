@@ -168,13 +168,6 @@
 ;; Boy, it sure causes a lot of hassle that Scheme has different types
 ;; for strings and chars.
 
-(define (string-idx-2 string char idx)
-  (cond ((= idx (string-length string)) #f)
-        ((char=? (string-ref string idx) char) idx)
-        (else (string-idx-2 string char (1+ idx)))))
-;; returns #f or index into string
-(define (string-idx string char) (string-idx-2 string char 0))
-
 ;; copies "len" chars from "src" starting at "srcidx" to "dest"
 ;; starting at "destidx"
 (define (string-blit src srcidx len dest destidx) ; duplicated in stdlib
@@ -1954,9 +1947,11 @@
 (define (parsed-number? lst)
   (cond ((null? lst) #f)
         ((char-numeric? (car lst)) (all-numeric? (cdr lst)))
-        ((string-idx "+-" (car lst)) (and (not (null? (cdr lst))) 
-                                          (all-numeric? (cdr lst))))
+        ((eqv? #\+ (car lst)) (nonempty-and-all-numeric? (cdr lst)))
+        ((eqv? #\- (car lst)) (nonempty-and-all-numeric? (cdr lst)))
         (else #f)))
+(define (nonempty-and-all-numeric? lst)
+  (and (not (null? lst)) (all-numeric? lst)))
 (define (all-numeric? lst)
   (or (null? lst) (and (char-numeric? (car lst)) (all-numeric? (cdr lst)))))
 (define (parse-atom-2 s c)
