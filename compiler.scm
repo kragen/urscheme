@@ -1252,7 +1252,7 @@
 (define-error-routine "not_an_integer" "not an integer")
 
 (define (ensure-integer) (call "ensure_integer"))
-;; XXX I just added equal? to the required subset of the language
+;; XXX this is the only reason that we need equal?
 (define (assert-equal a b) 
   (if (not (equal? a b)) (error "not equal" (list a b))))
 
