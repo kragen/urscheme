@@ -1,6 +1,26 @@
 <html><head><title>Ur-Scheme: A self-hosting compiler for a subset of R5RS Scheme to x86 asm</title>
 <link rel="stylesheet" href="../../style.css" />
 <meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
+    <style type="text/css">
+    <!--
+      .comment {
+        /* font-lock-comment-face */
+        color: #b22222;
+      }
+      .function-name {
+        /* font-lock-function-name-face */
+        color: #0000ff;
+      }
+      .keyword {
+        /* font-lock-keyword-face */
+        color: #a020f0;
+      }
+      .py-builtins {
+        /* py-builtins-face */
+        color: #a020f0;
+      }
+    -->
+    </style>
 </head><body>
 <h1>Ur-Scheme: A self-hosting compiler for a subset of R5RS Scheme to x86 asm</h1>
 
@@ -195,23 +215,30 @@ I learned:</p>
 
 <ol>
 
-<li><b>Metainterpreters are a better way to bootstrap.</b>
-Interpreters are a lot simpler than compilers, especially if they
-don't have to run fast, and especially if you can write them in a
-language like Scheme that gives you garbage collection and closures
-for free.  The restriction that the compiler had to be correct both in
-R5RS Scheme and in the language that it could compile was really a
-pain.  For example, although I could add new syntactic forms to the
-language that it could compile, and I could add new syntactic forms
-with R5RS macro definitions, I couldn't simplify the compiler by
-adding new syntactic forms, because the compiler can't compile R5RS
-macro definitions.  (There's a portable implementation of R5RS macros
-out there, but it's about twice the size of the entire Ur-Scheme
-compiler.)  Similarly, I was stuck with a bunch of the boneheaded
-design decisions of the Scheme built-in types &mdash; no auto-growing
-mutable containers, separate types for strings and characters, and the
-difficulty of doing any string processing without arithmetic and side
-effects, for example.</li>
+<li><b>Interpreters are a better way to bootstrap than
+metacompilers.</b> Instead of writing a compiler for a subset of
+Scheme in that subset, I should have written an interpreter in
+standard Scheme (or whatever) and a metacompiler in the language
+implemented by the interpreter.  (This is what Darius Bacon did with
+"ichbins".)  Interpreters are a lot simpler than compilers, especially
+if they don't have to run fast, and especially if you can write them
+in a language like Scheme that gives you garbage collection and
+closures for free.  
+
+<p> The restriction that the compiler had to be
+correct both in R5RS Scheme and in the language that it could compile
+was really a pain.  For example, although I could add new syntactic
+forms to the language that it could compile, and I could add new
+syntactic forms with R5RS macro definitions, I couldn't simplify the
+compiler by adding new syntactic forms, because the compiler can't
+compile R5RS macro definitions.  (There's a portable implementation of
+R5RS macros out there, but it's about twice the size of the entire
+Ur-Scheme compiler.)  Similarly, I was stuck with a bunch of the
+boneheaded design decisions of the 
+Scheme built-in types &mdash; for example, no
+auto-growing mutable containers, separate types for strings and
+characters, and the difficulty of doing any string processing without
+arithmetic and side effects.</p> </li>
 
 <li><b>Start with the simplest thing that could possibly work.</b> I
 keep on learning this every year.  In this case, the really expensive
@@ -227,7 +254,86 @@ slow, but I would have gotten done a lot sooner.
 
 <li><b>Tail-recursion makes your code hard to read.</b> More
 traditional control structures, such as explicit loops, are both
-terser and clearer.  This is the largest Scheme program I've written.
+terser and clearer.  This is the largest Scheme program I've written,
+so this is my first time really experiencing this.  Look at this code
+(discarded in favor of something simpler now, thank goodness):
+
+<blockquote><pre>
+(<span class="keyword">define</span> (<span class="function-name">string-append-3</span> length s2 buf idx)
+  (<span class="keyword">if</span> (= idx (string-length buf)) buf
+      (<span class="keyword">begin</span>
+        (string-set! buf idx (string-ref s2 (- idx length)))
+        (string-append-3 length s2 buf (1+ idx)))))
+(<span class="keyword">define</span> (<span class="function-name">string-append-2</span> s1 s2 buf idx)
+  (<span class="keyword">if</span> (= idx (string-length s1))
+      (string-append-3 (string-length s1) s2 buf idx)
+      (<span class="keyword">begin</span>
+        (string-set! buf idx (string-ref s1 idx))
+        (string-append-2 s1 s2 buf (1+ idx)))))
+(<span class="keyword">define</span> (<span class="function-name">string-append</span> s1 s2)       <span class="comment">; standard
+</span>  (string-append-2 s1 s2 (make-string (+ (string-length s1)
+                                         (string-length s2)))
+                   0))
+</pre></blockquote>
+
+<p>That horrible rat's nest is my attempt to straightforwardly
+translate this very straightforward procedural approach, without
+introducing any forward references:</p>
+
+<blockquote><pre>
+<span class="keyword">def</span> <span class="function-name">string_append</span>(s1, s2):
+    buf = make_string(<span class="py-builtins">len</span>(s1) + <span class="py-builtins">len</span>(s2))
+    idx = 0
+    <span class="keyword">while</span> idx != <span class="py-builtins">len</span>(s1):
+        buf[idx] = s1[idx]
+        idx += 1
+    length = <span class="py-builtins">len</span>(s1)
+    <span class="keyword">while</span> idx != <span class="py-builtins">len</span>(buf):
+        buf[idx] = s2[idx - length]
+        idx += 1
+    <span class="keyword">return</span> buf
+</pre></blockquote>
+
+<p>(You wouldn't really want to do that in Python &mdash; I'm just
+explaining what I was thinking.)</p>
+
+<p>Tail-calls are merely "goto with arguments", which means that they
+can be implemented very efficiently, and also means that you can
+easily use them to create unreadable code.</p>
+
+</li>
+
+<li><b>Native-code compilers get OK performance pretty easily.</b> On
+the standard <a href="fib.scm">stupid Fibonacci microbenchmark</a>, on
+my laptop, Ur-Scheme outperforms MzScheme's interpreter by about a
+factor of 7.6:
+
+<blockquote><pre>
+(<span class="keyword">define</span> (<span class="function-name">fib2</span> n) 
+  (<span class="keyword">cond</span> ((= n 0) 1)
+        ((= n 1) 1)
+        (<span class="keyword">else</span> (+ (fib2 (1- n)) 
+                 (fib2 (- n 2))))))
+</pre></blockquote>
+
+<p>GCC outperforms Ur-Scheme on that same benchmark by about a factor
+of 5.  On larger programs, such as the Ur-Scheme compiler itself,
+Ur-Scheme only outperforms MzScheme's interpreter by about another
+factor of 5.</p>
+
+<p>The literature about writing compilers is full of hairy techniques
+like SSA conversion, higher-order control-flow analysis, type
+inference, automated theorem proving, partial evaluation, escape
+analysis, and so on.  Ur-Scheme doesn't do any of those things.
+(Well, actually, it does do a little bit of escape analysis.)  In
+fact, Ur-Scheme doesn't even do <i>register allocation</i>, and it
+does full dynamic type checking at run-time.  I imagine that if you
+wanted to get performance only 2 or 3 or 4 times worse than C compiled
+with GCC (which is not exactly a gold standard itself, these days)
+then you'd need to start hauling out the hairy techniques.
+
+</p>
+
 </li>
 
 </ol>
