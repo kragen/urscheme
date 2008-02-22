@@ -183,10 +183,11 @@
 
 ;; copies "len" chars from "src" starting at "srcidx" to "dest"
 ;; starting at "destidx"
-(define (string-blit src srcidx len dest destidx) ; duplicated in stdlib
+;; XXX needs a !
+(define (string-blit! src srcidx len dest destidx) ; duplicated in stdlib
   (if (= len 0) #f 
       (begin (string-set! dest destidx (string-ref src srcidx))
-             (string-blit src (1+ srcidx) (1- len) dest (1+ destidx)))))
+             (string-blit! src (1+ srcidx) (1- len) dest (1+ destidx)))))
 
 
 ;;; Basic Assembly Language Emission
@@ -225,7 +226,7 @@
                             (asm-flatten-inner buf idx (car stuff))
                             (cdr stuff)))
         ((string? stuff)
-         (string-blit stuff 0 (string-length stuff) buf idx)
+         (string-blit! stuff 0 (string-length stuff) buf idx)
          (+ idx (string-length stuff)))
         (else 
          (error "flattening" stuff))))
@@ -979,7 +980,7 @@
     (movzbl (indirect (index-register tos ebx 1)) tos)
     (native-to-scheme-character tos)))
 
-;; I was going to write an assembly version of string-blit here, but
+;; I was going to write an assembly version of string-blit! here, but
 ;; with the four necessary bounds checks, it ended up being 33
 ;; relatively error-prone lines of code.  Since the Scheme version is
 ;; only four lines of code and is needed anyway for bootstrapping,
@@ -2102,15 +2103,15 @@
     ;; (and now, again, number->string)
     (define (string-append s1 s2)       ; standard
       (let ((buf (make-string (+ (string-length s1) (string-length s2)))))
-        (string-blit s1 0 (string-length s1) buf 0)
-        (string-blit s2 0 (string-length s2) buf (string-length s1))
+        (string-blit! s1 0 (string-length s1) buf 0)
+        (string-blit! s2 0 (string-length s2) buf (string-length s1))
         buf))
     ;; copies "len" chars from "src" starting at "srcidx" to "dest"
     ;; starting at "destidx"
-    (define (string-blit src srcidx len dest destidx)
+    (define (string-blit! src srcidx len dest destidx)
       (if (= len 0) #f 
           (begin (string-set! dest destidx (string-ref src srcidx))
-                 (string-blit src (1+ srcidx) (1- len) dest (1+ destidx)))))
+                 (string-blit! src (1+ srcidx) (1- len) dest (1+ destidx)))))
 
 
     ;; chars
