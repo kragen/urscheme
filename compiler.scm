@@ -1337,21 +1337,6 @@
     (je "return_true")
     (jmp "return_false")))
 
-(define (inline-null rands env)
-  (let ((false-label (new-label)))
-    (let ((true-label (new-label)))
-      (comment "null? operand")
-      (assert-equal 1 (compile-args rands env))
-      (cmp (const nil-value) tos)
-      ;; You know what's really awesome?  CMOV doesn't permit
-      ;; immediate operands or memory stores.
-      (jz true-label)
-      (mov (const false-value) tos)
-      (jmp false-label)
-      (label true-label)
-      (mov (const true-value) tos)
-      (label false-label))))
-
 ;;; Characters (chars).
 ;; These are unboxed and use "enum-tag" (2).
 
@@ -1704,7 +1689,6 @@
               (compile-set (car rands) (cadr rands) env))
     ((+)      (integer-add rands env))
     ((-)      (integer-sub rands env))
-    ((null?)  (inline-null rands env))
     ((%ifnull)(compile-ifnull rands env tail?))
     ((%ifeq)  (compile-ifeq rands env tail?))
     (else     (let ((nargs (compile-args rands env)))
@@ -2142,7 +2126,7 @@
 
 
     ;; type tests
-    (define (null? x) (eq? x '()))
+    (define (null? x) (if (null? x) #t #f)) ; uses magic inlining
     (define (boolean? x) (if (eq? x #t) #t (eq? x #f)))
     ;; we don't have any other kinds of numbers
     (define number? integer?)    
