@@ -971,13 +971,12 @@
     (movzbl (indirect (index-register tos ebx 1)) tos)
     (native-to-scheme-character tos)))
 
-(define-global-procedure 'string-length 1
-  (lambda ()
-    (comment "string-length primitive procedure")
-    (get-procedure-arg 0)
-    (extract-string)
-    (asm-pop ebx)
-    (native-to-scheme-integer tos)))
+(define (inline-string-length nargs)
+  (assert-equal 1 nargs)
+  (comment "string-length inlined primitive")
+  (extract-string)
+  (asm-pop ebx)
+  (native-to-scheme-integer tos))
 
 ;;; conses
 ;; They're 12 bytes: magic number, car, cdr.  That's all, folks.
@@ -1663,6 +1662,7 @@
       ((cdr)    (inline-cdr nargs))
       ((integer->char) (inline-integer->char nargs))
       ((char->integer) (inline-char->integer nargs))
+      ((string-length) (inline-string-length nargs))
       (else (error "don't know how to inline" rator)))))
 
 ;; if, lambda, quote, and set! are the standard Scheme set of
@@ -1678,7 +1678,7 @@
               (compile-quotable (car rands) env))
     ((set!)   (assert-equal 2 (length rands))
               (compile-set (car rands) (cadr rands) env))
-    ((+ - 1+ 1- car cdr integer->char char->integer) 
+    ((+ - 1+ 1- car cdr integer->char char->integer string-length) 
               (inline-primitive rator rands env))
     ((%ifnull)(compile-ifnull rands env tail?))
     ((%ifeq)  (compile-ifeq rands env tail?))
@@ -2079,6 +2079,7 @@
 
 
     ;; string manipulation
+    (define (string-length x) (string-length x)) ; uses magic inlining; standard
     (define (string-append-3 length s2 buf idx)
       (if (= idx (string-length buf)) buf
           (begin
