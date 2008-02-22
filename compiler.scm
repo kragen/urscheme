@@ -1002,14 +1002,14 @@
                           (ret)))
 (define-error-routine "not_cons" "not a cons")
 
-(define (inline-car rands env)
+(define (inline-car nargs)
+  (assert-equal 1 nargs)
   (comment "inlined car")
-  (assert-equal 1 (compile-args rands env))
   (ensure-cons)
   (mov (offset tos 4) tos))
-(define (inline-cdr rands env)
+(define (inline-cdr nargs)
+  (assert-equal 1 nargs)
   (comment "inlined cdr")
-  (assert-equal 1 (compile-args rands env))
   (ensure-cons)
   (mov (offset tos 8) tos))
 
@@ -1255,9 +1255,8 @@
 (define (assert-equal a b) 
   (if (not (equal? a b)) (error "not equal" (list a b))))
 
-(define (integer-add rands env)
-  (comment "integer add operands")
-  (assert-equal 2 (compile-args rands env))
+(define (integer-add nargs)
+  (assert-equal 2 nargs)
   (comment "inlined integer add")
   (ensure-integer)
   (swap)
@@ -1265,9 +1264,8 @@
   (asm-pop ebx)
   (add ebx tos)
   (dec tos))                            ; fix up tag
-(define (integer-sub rands env)
-  (comment "integer subtract operands")
-  (assert-equal 2 (compile-args rands env))
+(define (integer-sub nargs)
+  (assert-equal 2 nargs)
   (comment "inlined integer subtract")
   (ensure-integer)
   (swap)
@@ -1275,14 +1273,13 @@
   (sub tos nos)
   (pop)
   (inc tos))                            ; fix up tag
-(define (inline-1+ rands env)
+(define (inline-1+ nargs)
+  (assert-equal 1 nargs)
   (comment "1+")
-  (assert-equal 1 (compile-args rands env))
   (ensure-integer)
   (add (const (tagshift 1)) tos))
-(define (inline-1- rands env)
-  (comment "1-")
-  (assert-equal 1 (compile-args rands env))
+(define (inline-1- nargs)
+  (assert-equal 1 nargs)
   (ensure-integer)
   (add (const (tagshift -1)) tos))
 
@@ -1669,6 +1666,17 @@
                          
 
 
+(define (inline-primitive rator rands env)
+  (let ((nargs (compile-args rands env)))
+    (case rator
+      ((+)      (integer-add nargs))
+      ((-)      (integer-sub nargs))
+      ((1+)     (inline-1+ nargs))
+      ((1-)     (inline-1- nargs))
+      ((car)    (inline-car nargs))
+      ((cdr)    (inline-cdr nargs))
+      (else (error "don't know how to inline" rator)))))
+
 ;; if, lambda, quote, and set! are the standard Scheme set of
 ;; primitive special forms.
 ;; XXX this is misleadingly named.  Only actual procedure calls are
@@ -1682,12 +1690,7 @@
               (compile-quotable (car rands) env))
     ((set!)   (assert-equal 2 (length rands))
               (compile-set (car rands) (cadr rands) env))
-    ((+)      (integer-add rands env))
-    ((-)      (integer-sub rands env))
-    ((1+)     (inline-1+ rands env))
-    ((1-)     (inline-1- rands env))
-    ((car)    (inline-car rands env))
-    ((cdr)    (inline-cdr rands env))
+    ((+ - 1+ 1- car cdr) (inline-primitive rator rands env))
     ((%ifnull)(compile-ifnull rands env tail?))
     ((%ifeq)  (compile-ifeq rands env tail?))
     (else     (let ((nargs (compile-args rands env)))
