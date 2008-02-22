@@ -1164,6 +1164,7 @@
   (lambda () (comment "We don't have ports right now, so return nil")
              (push-const nil-value)))
 
+;; Buffered byte input from standard input.
 (define-global-procedure 'read-char '()
   (lambda () (comment "We don't care about our args.")
              (comment "(maybe somebody passed us (current-input-port))")
@@ -1601,22 +1602,6 @@
          (begin (if tail? (compile-expr (car rands) env #f)
                     (compile-discarding (car rands) env))
                 (compile-begin (cdr rands) env tail?)))))
-
-; (define (compile-if rands env tail?)
-;   (if (not (= (length rands) 3))
-;       (error "if arguments length " (length rands) " != 3")
-;       (let ((cond (car rands)) (then (cadr rands)) (else (caddr rands))
-;             (falselabel (new-label)))
-;         ;; Nested let so that output doesn't depend on argument
-;         ;; evaluation order.
-;         (let ((endlabel (new-label)))
-;           (compile-expr cond env #f)
-;           (jump-if-false falselabel)
-;           (compile-expr then env tail?)
-;           (jmp endlabel)
-;           (label falselabel)
-;           (compile-expr else env tail?)
-;           (label endlabel)))))
 
 (define (compile-conditional jump-if-false then else env tail?)
   (let ((falselabel (new-label)))
