@@ -792,7 +792,7 @@
 (assert-set-equal (captured-vars sample-begin-expr) '())
 
 ;; In particular, multiple expressions in a lambda body here.
-(assert-set-equal (captured-vars '(begin (if x (lambda (y) (z a) (y c)) d) e))
+(assert-set-equal (captured-vars '(%begin (%if x (lambda (y) (z a) (y c)) d) e))
                   '(z a c))
 
 (assert-set-equal (captured-vars '(lambda x (x y z))) '(y z))
