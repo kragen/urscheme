@@ -5,6 +5,8 @@ set -e
 # But ELK is the fastest of bigloo, guile, mzscheme, SCM, and ELK for
 # this purpose:
 # : ${refscheme:="elk -l"}
+# you can run with urscheme=urscheme-compiler instead
+: ${urscheme:="$refscheme compiler.scm"}
 status='echo ERROR: FAILED'
 trap '/bin/rm -f refscheme.out newcompiler.out runtest.s runtest; $status' EXIT
 ulimit -s 1024         # to make the tailcall test run reasonably fast
@@ -12,7 +14,7 @@ runtest () {
         prog="${1?runtest needs an argument}"
         echo "running $prog"
         $refscheme "$prog" > refscheme.out
-        $refscheme compiler.scm < "$prog" > runtest.s
+        $urscheme < "$prog" > runtest.s
         gcc -nostdlib runtest.s -o runtest
         ./runtest > newcompiler.out
         diff -au refscheme.out newcompiler.out

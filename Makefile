@@ -44,8 +44,11 @@ tmp.s: compiler.scm test.crufty.scm
 clean:
 	rm -f a.out tmp.s $(listing) tmp.s.ref tmp.s.ref.old \
 		urscheme-compiler compiler.s runscheme.s compiler.s.stage2
-tests: chmodding
+slowtests: chmodding
 	./runtests
+	./test-read-char
+tests: chmodding urscheme-compiler
+	urscheme=./urscheme-compiler ./runtests
 	./test-read-char
 summary:
 	egrep '^;;;|^\(' compiler.scm
