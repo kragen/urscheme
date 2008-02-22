@@ -310,10 +310,9 @@
 (define (global-label lbl) (insn ".globl " lbl) (label lbl))
 
 ;; new-label: Allocate a new label (e.g. for a constant) and return it.
-(define constcounters '())
+(define old-label-prefixes '())
 (define constcounter 0)
 (define label-prefix "k")
-(define label-prefix-symbol 'k)
 ;; We set the label prefix (and reset the counter) periodically for
 ;; two reasons.  First, the assembly code is much more readable when
 ;; it says movl (_cdr_2), %eax; call ensure_procedure, rather than
@@ -327,8 +326,8 @@
 ;; However, occasionally we'll get the label-prefix set to the same
 ;; thing twice, at different times.  This can occur because of
 ;; quasi-name-collisions in the user program, duplicate defines of the
-;; same variable, or just somebody naming a variable "k".  So we have
-;; to check each time to find the old constcounter.
+;; same variable, or just somebody naming a variable "k".  In this
+;; case, we simply decline to set the label-prefix.
 
 (define (stringlist->string stringlist) 
   (list->string (stringlist->string-2 stringlist 0)))
@@ -345,20 +344,20 @@
 ;;     for char in string: buf[idxo++] = char
 
 (define (set-label-prefix new-prefix) 
-  ;; save for later
-  (set! constcounters (cons (cons label-prefix-symbol constcounter) 
-                            constcounters))
-  (set! label-prefix (stringlist->string (cons "_"
-     (escape (symbol->string new-prefix) 0 
-             ;; XXX incomplete list
-             '("+"    "-" "="  "?" ">"  "<"  "!"    "*")
-             '("Plus" "_" "Eq" "P" "Gt" "Lt" "Bang" "star")))))
-  (set! label-prefix-symbol (string->symbol label-prefix))
-  (set! constcounter
-        (let ((counterthing (assq label-prefix-symbol constcounters)))
-          (if counterthing (cdr counterthing)
-              0)))
-)
+  (let ((new-label-prefix
+         (stringlist->string 
+          (cons "_"
+                (escape (symbol->string new-prefix) 0 
+                        ;; XXX incomplete list
+                        '("+"    "-" "="  "?" ">"  "<"  "!"    "*")
+                        '("Plus" "_" "Eq" "P" "Gt" "Lt" "Bang" "star"))))))
+    (let ((prefix-symbol (string->symbol new-label-prefix)))
+      (if (not (memq prefix-symbol old-label-prefixes))
+          (begin
+            (set! label-prefix new-label-prefix)
+            (set! old-label-prefixes (cons prefix-symbol old-label-prefixes))
+            (set! constcounter 0))))))
+
 (define (new-label)
   (set! constcounter (1+ constcounter))
   (list label-prefix "_" (number->string constcounter)))
