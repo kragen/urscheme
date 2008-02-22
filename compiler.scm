@@ -32,7 +32,7 @@
 ;; D null?
 ;; D booleans
 ;; D eq?, pair?, null?, symbol?, integer?, boolean?, string?, procedure?, char?
-;; D if (with three arguments)
+;; D if
 ;; D lambda (with fixed numbers of arguments or with a single argument
 ;;   that gets bound to the argument list (lambda <var> <body>)
 ;; D begin
@@ -484,7 +484,7 @@
     (mov (const (number->string nargs)) edx)
     (jmp (absolute ebx)))))
 (define (copy-args basereg nargs i)
-  (if (= nargs i) '()
+  (if (not (= nargs i))
       (begin (asm-push (offset basereg (- 0 (quadruple i))))
              (copy-args basereg nargs (1+ i)))))
 
@@ -742,7 +742,7 @@
   (store-closure-artifacts ebx 12 artifacts env))
 
 (define (store-closure-artifacts reg off artifacts env)
-  (if (null? artifacts) '()
+  (if (not (null? artifacts))
       (begin (get-heap-var (assq (car artifacts) env))
              (mov tos (offset reg off))
              (pop)
@@ -1250,7 +1250,8 @@
 
 (define (ensure-integer) (call "ensure_integer"))
 ;; XXX I just added equal? to the required subset of the language
-(define (assert-equal a b) (if (equal? a b) #t (error "not equal" (list a b))))
+(define (assert-equal a b) 
+  (if (not (equal? a b)) (error "not equal" (list a b))))
 ;; Emit code to add NOS to TOS; assumes they're already tag-checked
 (define (emit-integer-addition) (asm-pop ebx)
                                 (add ebx tos)
@@ -1941,7 +1942,7 @@
                    ((#\space #\newline #\tab) (after-wsp s))
                    (( #\; ) (discard-comment s) (after-wsp s))
                    (else c))))
-(define (discard-comment s) (if (eqv? (s) #\newline) #f (discard-comment s)))
+(define (discard-comment s) (if (not (eqv? (s) #\newline)) (discard-comment s)))
 (define (parse-atom s) 
   (let ((atom (parse-atom-2 s)))
     (if (parsed-number? atom) (string->number (list->string atom))
@@ -2139,7 +2140,7 @@
 
     ;; list utils
     (define (for-each proc list)   ; subset of standard: one list only
-      (if (null? list) #f
+      (if (not (null? list))
           (begin
             (proc (car list))
             (for-each proc (cdr list)))))
@@ -2241,7 +2242,7 @@
              (pr ")"))
             ((pair? x)
              (wthunk (car x) pr) 
-             (if (null? (cdr x)) #f (pr " "))
+             (if (not (null? (cdr x))) (pr " "))
              (wlist (cdr x) pr))
             (else
              (pr ". ")
@@ -2272,7 +2273,7 @@
 
 (define (read-compile-loop)
   (let ((expr (read-expr (current-input-port))))
-    (if (eof-object? expr) #t
+    (if (not (eof-object? expr))
         (begin (compile-toplevel expr)
                (read-compile-loop)))))
 
