@@ -1376,15 +1376,14 @@
 (define (tagged-character char)
   (list enum-tag " + " (number->string (char->integer char)) "<<2"))
 
-;; XXX these sure would be nice to inline :)
-(define-global-procedure 'integer->char 1
-  (lambda () (get-procedure-arg 0)
-             (inc tos)
-             (ensure-character)))
-(define-global-procedure 'char->integer 1
-  (lambda () (get-procedure-arg 0)
-             (ensure-character)
-             (dec tos)))
+(define (inline-integer->char nargs)
+  (assert-equal 1 nargs)
+  (inc tos)
+  (ensure-character))
+(define (inline-char->integer nargs)
+  (assert-equal 1 nargs)
+  (ensure-character)
+  (dec tos))
 
 
 ;;; Global variable handling.
@@ -1662,6 +1661,8 @@
       ((1-)     (inline-1- nargs))
       ((car)    (inline-car nargs))
       ((cdr)    (inline-cdr nargs))
+      ((integer->char) (inline-integer->char nargs))
+      ((char->integer) (inline-char->integer nargs))
       (else (error "don't know how to inline" rator)))))
 
 ;; if, lambda, quote, and set! are the standard Scheme set of
@@ -1677,7 +1678,8 @@
               (compile-quotable (car rands) env))
     ((set!)   (assert-equal 2 (length rands))
               (compile-set (car rands) (cadr rands) env))
-    ((+ - 1+ 1- car cdr) (inline-primitive rator rands env))
+    ((+ - 1+ 1- car cdr integer->char char->integer) 
+              (inline-primitive rator rands env))
     ((%ifnull)(compile-ifnull rands env tail?))
     ((%ifeq)  (compile-ifeq rands env tail?))
     (else     (let ((nargs (compile-args rands env)))
@@ -2151,6 +2153,8 @@
       (if (= n 0) rest
           (string->list-2 string (- n 1)
                           (cons (string-ref string (- n 1)) rest))))
+    (define (integer->char x) (integer->char x)) ; uses magic inlining; standard
+    (define (char->integer x) (char->integer x)) ; uses magic inlining; standard
 
     (define (list->string lst)
       (list->string-2 (make-string (length lst)) lst 0))
