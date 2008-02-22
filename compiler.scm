@@ -174,6 +174,14 @@
 ;; returns #f or index into string
 (define (string-idx string char) (string-idx-2 string char 0))
 
+;; copies "len" chars from "src" starting at "srcidx" to "dest"
+;; starting at "destidx"
+(define (string-blit src srcidx len dest destidx)
+  (if (= len 0) #f 
+      (begin (string-set! dest destidx (string-ref src srcidx))
+             (string-blit src (1+ srcidx) (1- len) dest (1+ destidx)))))
+
+
 ;;; Basic Assembly Language Emission
 
 ;; emit: output a line of assembly by concatenating the strings in an
@@ -240,13 +248,6 @@
                       (set! result nresult)
                       (asm-display output)
                       result))))))
-
-
-;; XXX move this
-(define (string-blit src srcidx len dest destidx)
-  (if (= len 0) #f 
-      (begin (string-set! dest destidx (string-ref src srcidx))
-             (string-blit src (1+ srcidx) (1- len) dest (1+ destidx)))))
 
 ;; Emit an indented instruction
 (define (insn . insn) (emit (cons "        " insn)))
