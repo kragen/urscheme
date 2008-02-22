@@ -1254,23 +1254,21 @@
 ;; XXX I just added equal? to the required subset of the language
 (define (assert-equal a b) 
   (if (not (equal? a b)) (error "not equal" (list a b))))
-;; Emit code to add NOS to TOS; assumes they're already tag-checked
-(define (emit-integer-addition) (asm-pop ebx)
-                                (add ebx tos)
-                                (dec tos)) ; fix up tag
 
 (define (integer-add rands env)
   (comment "integer add operands")
   (assert-equal 2 (compile-args rands env))
-  (comment "now execute integer add")
+  (comment "inlined integer add")
   (ensure-integer)
   (swap)
   (ensure-integer)
-  (emit-integer-addition))
+  (asm-pop ebx)
+  (add ebx tos)
+  (dec tos))                            ; fix up tag
 (define (integer-sub rands env)
   (comment "integer subtract operands")
   (assert-equal 2 (compile-args rands env))
-  (comment "now execute integer subtract")
+  (comment "inlined integer subtract")
   (ensure-integer)
   (swap)
   (ensure-integer)
