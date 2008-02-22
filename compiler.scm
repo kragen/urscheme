@@ -334,9 +334,10 @@
          (asm-flatten
           (cons "_"
                 (escape (symbol->string new-prefix) 0 
-                        ;; XXX incomplete list
-                        '("+"    "-" "="  "?" ">"  "<"  "!"    "*")
-                        '("Plus" "_" "Eq" "P" "Gt" "Lt" "Bang" "star"))))))
+                        '("+"    "-" "="  "?" ">"  "<"  "!"    "*"    "/" 
+                          ":"  "@"  "^"     "~"     "$"      "%"   "&")
+                        '("Plus" "_" "Eq" "P" "Gt" "Lt" "Bang" "Star" "Slash"
+                          "Co" "At" "Caret" "Tilde" "Dollar" "Pct" "And"))))))
     (let ((prefix-symbol (string->symbol new-label-prefix)))
       (if (not (memq prefix-symbol old-label-prefixes))
           (begin
