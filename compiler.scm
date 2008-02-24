@@ -168,6 +168,8 @@
 (define (1+ x) (+ x 1))                 ; duplicated in stdlib
 (define (1- x) (- x 1))                 ; duplicated in stdlib
 
+(define (reduce fn lst init)        
+  (if (null? lst) init (fn (car lst) (reduce fn (cdr lst) init))))
 (define (filter fn lst)  ; this must exist in r5rs but I can't find it
   (if (null? lst) '()
       (let ((first (car lst)) (rest (filter fn (cdr lst))))
@@ -622,9 +624,9 @@
 (define (set-subtract a b) (filter (lambda (x) (not (memq x b))) a))
 (define (set-equal a b) (eq? (set-subtract a b) (set-subtract b a)))
 (define (add-if-not-present obj set) (if (memq obj set) set (cons obj set)))
-(define (set-union a b) (if (null? b) a 
-                            (add-if-not-present (car b) (set-union (cdr b) a))))
+(define (set-union a b) (reduce add-if-not-present a b))
 (define (set-intersect a b) (filter (lambda (x) (memq x b)) a))
+(define (set-union-all sets) (reduce set-union sets '()))
 
 (assert (set-equal '() '()) "empty set equality")
 (assert (set-equal '(a) '(a)) "set equality with one item")
@@ -646,20 +648,16 @@
 (assert-set-equal (set-intersect '(a b c) '(b c d)) '(b c))
 
 
-(define (reduce fn lst init)        
-  (if (null? lst) init (fn (car lst) (reduce fn (cdr lst) init))))
 ;; Returns vars captured by some lambda inside expr, i.e. vars that
 ;; occurs free inside a lambda inside expr.
-(define (captured-vars expr)
-  (reduce set-union (map free-vars (lambdas expr)) '()))
+(define (captured-vars expr) (set-union-all (map free-vars (lambdas expr))))
 (define (lambdas expr)
-  (cond ((not (pair? expr)) '())       ; empty lists and non-lists
+  (cond ((not (pair? expr)) '())       ; non-lists and empty lists
         ;; We don't want the deeper-nested lambdas, just the top-level
         ;; ones.
         ((eq? (car expr) 'lambda) (list expr))
         (else (reduce append (map lambdas expr) '()))))
-(define (all-captured-vars expr)
-  (reduce set-union (map captured-vars expr) '()))
+(define (all-captured-vars expr) (set-union-all (map captured-vars expr)))
 
 ;; Returns a list of the vars that are bound by a particular lambda arg list.
 (define (vars-bound args) (if (symbol? args) (list args) args))
@@ -682,9 +680,7 @@
                                                   (free-vars (caddr expr))))
                 (else         (all-free-vars expr))))))
 ;; Returns vars that occur free inside of any of exprs.
-(define (all-free-vars exprs) (if (null? exprs) '()
-                                  (set-union (free-vars (car exprs))
-                                             (all-free-vars (cdr exprs)))))
+(define (all-free-vars exprs) (set-union-all (map free-vars exprs)))
 
 ;; Returns the free vars of a lambda found somewhere in its lexical
 ;; environment.  This needs access to the lexical environment to
