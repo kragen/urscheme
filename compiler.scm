@@ -673,7 +673,7 @@
         ((not (pair? expr)) '())
         (else (case (car expr)
                 ((lambda)     (free-vars-lambda (cadr expr) (cddr expr)))
-                ((%if %begin %ifeq %ifnull)
+                ((%if %begin %ifeq)
                               (all-free-vars (cdr expr)))
                 ((quote)      '())
                 ((set!)       (add-if-not-present (cadr expr) 
@@ -1629,19 +1629,6 @@
                          env
                          tail?)))
 
-(define (compile-ifnull rands env tail?)
-  (let ((cond-expr (car rands)) (then (cadr rands)) (else-expr (caddr rands)))
-    (comment "%ifnull")
-    (compile-conditional (lambda (falselabel)
-                           (compile-expr cond-expr env #f)
-                           (cmp (const nil-value) tos)
-                           (pop)
-                           (jnz falselabel))
-                         then
-                         else-expr
-                         env
-                         tail?)))
-
 (define (compile-ifeq rands env tail?)
   (let ((a (car rands))
         (b (cadr rands))
@@ -1692,7 +1679,6 @@
     ((+ - 1+ 1- car cdr integer->char char->integer string-length 
       symbol->string)
               (inline-primitive rator rands env))
-    ((%ifnull)(compile-ifnull rands env tail?))
     ((%ifeq)  (compile-ifeq rands env tail?))
     (else     (let ((nargs (compile-args rands env)))
                 (comment "get procedure")
@@ -1801,7 +1787,8 @@
              ((eq? eqv? =)
               (list '%ifeq (cadar args) (caddar args) (cadr args) (caddr args)))
              ((null?)
-              (list '%ifnull (cadar args) (cadr args) (caddr args)))
+              (list '%ifeq (cadar args) (list 'quote '()) 
+                    (cadr args) (caddr args)))
              ((not)
               (list 'if (cadar args) (caddr args) (cadr args)))
              (else
@@ -1830,7 +1817,7 @@
 (assert-equal (totally-macroexpand '(if (a) b c)) '(%if (a) b c))
 (assert-equal (totally-macroexpand '(if (a) b)) '(%if (a) b #f))
 (assert-equal (totally-macroexpand '(if (not a) b c)) '(%if a c b))
-(assert-equal (totally-macroexpand '(if (null? a) b c)) '(%ifnull a b c))
+(assert-equal (totally-macroexpand '(if (null? a) b c)) '(%ifeq a '() b c))
 (assert-equal (totally-macroexpand '(cond ((eq? x 3) 4 '(cond 3)) 
                                           ((eq? x 4) 8)
                                           (else 6 7)))
