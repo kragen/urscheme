@@ -673,7 +673,7 @@
         ((not (pair? expr)) '())
         (else (case (car expr)
                 ((lambda)     (free-vars-lambda (cadr expr) (cddr expr)))
-                ((%if %begin %ifeq)
+                ((%begin %ifeq)
                               (all-free-vars (cdr expr)))
                 ((quote)      '())
                 ((set!)       (add-if-not-present (cadr expr) 
@@ -770,8 +770,8 @@
 (assert-set-equal (free-vars sample-quoted-expr) '(foo bar))
 (assert-set-equal (captured-vars sample-quoted-expr) '())
 
-(define sample-if-expr '(%if a b c))
-(assert-set-equal (free-vars sample-if-expr) '(a b c))
+(define sample-if-expr '(%ifeq a b c d))
+(assert-set-equal (free-vars sample-if-expr) '(a b c d))
 (assert-set-equal (captured-vars sample-if-expr) '())
 
 (define sample-begin-expr '(%begin a b c))
@@ -779,7 +779,8 @@
 (assert-set-equal (captured-vars sample-begin-expr) '())
 
 ;; In particular, multiple expressions in a lambda body here.
-(assert-set-equal (captured-vars '(%begin (%if x (lambda (y) (z a) (y c)) d) e))
+(assert-set-equal (captured-vars 
+                   '(%begin (%ifeq x #f (lambda (y) (z a) (y c)) d) e))
                   '(z a c))
 
 (assert-set-equal (captured-vars '(lambda x (x y z))) '(y z))
@@ -1616,19 +1617,6 @@
       (compile-expr else-expr env tail?)
       (label endlabel))))
 
-(define (compile-if rands env tail?)
-  (let ((cond-expr (car rands)) (then (cadr rands)) (else-expr (caddr rands)))
-    (comment "%if")
-    (compile-conditional (lambda (falselabel)
-                           (compile-expr cond-expr env #f)
-                           (cmp (const false-value) tos)
-                           (pop)
-                           (je falselabel))
-                         then
-                         else-expr
-                         env
-                         tail?)))
-
 (define (compile-ifeq rands env tail?)
   (let ((a (car rands))
         (b (cadr rands))
@@ -1670,7 +1658,6 @@
 (define (compile-combination rator rands env tail?)
   (case rator
     ((%begin) (compile-begin rands env tail?))
-    ((%if)    (compile-if rands env tail?))
     ((lambda) (compile-lambda rands env tail?))
     ((quote)  (assert-equal 1 (length rands))
               (compile-quotable (car rands) env))
@@ -1794,6 +1781,9 @@
              (else
               (cons '%if args)))))))
 
+(define-ur-macro '%if
+  (lambda (args) (list '%ifeq (car args) #f (caddr args) (cadr args))))
+
 ;; Expand all macros in expr, recursively.
 (define (totally-macroexpand expr)
   (cond ((relevant-macro-definition expr) 
@@ -1813,10 +1803,10 @@
 (assert-equal (totally-macroexpand '(foo a b c)) '(foo a b c))
 (assert (relevant-macro-definition '(begin a b c)) "no begin defn")
 (assert-equal (totally-macroexpand '(begin a b c)) '(%begin a b c))
-(assert-equal (totally-macroexpand '(if a b c)) '(%if a b c))
-(assert-equal (totally-macroexpand '(if (a) b c)) '(%if (a) b c))
-(assert-equal (totally-macroexpand '(if (a) b)) '(%if (a) b #f))
-(assert-equal (totally-macroexpand '(if (not a) b c)) '(%if a c b))
+(assert-equal (totally-macroexpand '(if a b c)) '(%ifeq a #f c b))
+(assert-equal (totally-macroexpand '(if (a) b c)) '(%ifeq (a) #f c b))
+(assert-equal (totally-macroexpand '(if (a) b)) '(%ifeq (a) #f #f b))
+(assert-equal (totally-macroexpand '(if (not a) b c)) '(%ifeq a #f b c))
 (assert-equal (totally-macroexpand '(if (null? a) b c)) '(%ifeq a '() b c))
 (assert-equal (totally-macroexpand '(cond ((eq? x 3) 4 '(cond 3)) 
                                           ((eq? x 4) 8)
@@ -1824,12 +1814,13 @@
               '(%ifeq x 3 (%begin 4 '(cond 3))
                    (%ifeq x 4 (%begin 8)
                        (%begin 6 7))))
-(assert-equal (totally-macroexpand '(if (= x 0) 1 (if (eqv? x #\f) 2 3)))
-                                   '(%ifeq x 0 1 (%ifeq x #\f 2 3)))
+(assert-equal (totally-macroexpand '(if (= x 0) 1 (if (eqv? x #\q) 2 3)))
+                                   '(%ifeq x 0 1 (%ifeq x #\q 2 3)))
 (assert-equal (totally-macroexpand '(let () a b c)) '((lambda () a b c)))
 (assert-equal (totally-macroexpand '(let ((a 1) (b 2)) a b c))
               '((lambda (a b) a b c) 1 2))
-(assert-equal (totally-macroexpand '(and a b c)) '(%if a (%if b c #f) #f))
+(assert-equal (totally-macroexpand '(and a b c)) 
+              '(%ifeq a #f #f (%ifeq b #f #f c)))
 (assert-equal (totally-macroexpand '(or a b c))
               (totally-macroexpand
                '(let ((or-internal-argument a)) 
