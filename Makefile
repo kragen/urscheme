@@ -78,3 +78,8 @@ compiler.so: compiler.scm
 mzc-test: compiler.s compiler.so
 	time mzscheme -mve '(load-extension "compiler.so")' < compiler.scm > compiler.mzc.s
 	diff -u compiler.mzc.s compiler.s
+chicken-test: compiler.s
+	time csc compiler.scm
+	mv compiler chicken-compiler
+	time ./chicken-compiler < compiler.scm > compiler.chicken.s
+	diff -u compiler.s compiler.chicken.s
