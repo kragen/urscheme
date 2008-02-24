@@ -1,6 +1,6 @@
 <html><head>
 <title>Ur-Scheme: A GPL self-hosting compiler from a subset of 
-R5RS Scheme to fast x86 asm</title>
+R5RS Scheme to fast Linux x86 asm</title>
 <link rel="stylesheet" href="../../style.css" />
 <meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
 <style type="text/css">
@@ -11,12 +11,12 @@ R5RS Scheme to fast x86 asm</title>
 </style>
 </head><body>
 <h1>Ur-Scheme: A GPL self-hosting compiler from a subset of 
-R5RS Scheme to fast x86 asm</h1>
+R5RS Scheme to fast Linux x86 asm</h1>
 
 <p>Ur-Scheme is a compiler from a small subset of 
 <a href="http://schemers.org/Documents/Standards/R5RS/">R5RS
 Scheme</a> to Intel x86
-assembly language.  It can compile itself.  It is free software,
+assembly language for Linux.  It can compile itself.  It is free software,
 licensed under the GNU GPLv3+.  It might be useful as a base for a
 more practical implementation (or a more compact one), or it might be
 enjoyable to read (particularly since the entire development history
@@ -95,8 +95,10 @@ Darcs to snarf the source repository</b>:</p>
 tarball of Ur-Scheme version 1</a></b>, or <a
 href="urscheme-0.tar.gz">version 0</a> if you like.</p>
 
-<p>If you have MzScheme installed, you can build it by just typing
-"<tt>make</tt>".</p>
+<p>On Linux, if you have MzScheme, GCC, and gas installed, you can
+build it by just typing "<tt>make</tt>".  So far there it only runs on
+Linux, although <a href="README.macos">it looks like a MacOS port
+would be pretty easy.</a></p>
 
 <h2>Limitations</h2>
 

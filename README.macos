@@ -1,0 +1,29 @@
+It doesn't work on MacOS X on x86, but it looks like it shouldn't be
+hard to port.  Here are the problems I know about:
+
+- The MacOS assembler doesn't support the -a flag that gas does to
+  generate a listing file.
+- The MacOS assembler has a different format for .section directives,
+  and no .bss directive.  I don't know if the semantics of sections
+  are the same or not.
+- There seems to be some other syntactic incompatibility in the
+  assembler that I can't figure out; there are about 3500 "junk
+  character valued 95" errors in the file.  This might be spurious.
+  The assembler's error messages have the wrong line numbers, which
+  makes it unnecessarily difficult to track down.
+- To pass arguments to MacOS system calls, according to rumor, you
+  push the parameters on the stack, with the system call number last,
+  rather than putting them in registers; and then you call int $0x80
+  as in Linux.  As documented in /usr/include/sys/syscall.h, the
+  system call numbers for the system calls used by Ur-Scheme are the
+  same as in Linux: 1 for exit(2), 3 for read(2), 4 for write(2).
+  They're probably the same as in 6th Edition Unix from 1976,
+  actually.
+
+It's probably actually more work to find a way to tell the compiler
+whether to generate MacOS or Linux code than to actually make the
+change.
+
+Needless to say, porting to MacOS on any other CPU architecture, such
+as PowerPC, is likely to be rather more of a hassle, since it would
+involve rewriting all of the assembly code.

@@ -385,7 +385,7 @@
   (insn ".align 4")
   (label labelname))
 
-(define (compile-word contents) (insn ".int " contents))
+(define (compile-word contents) (insn ".long " contents))
 
 ;;; Stack Machine Primitives
 ;; As explained earlier, there's an "abstract stack" that includes

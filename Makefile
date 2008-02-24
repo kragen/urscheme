@@ -29,6 +29,8 @@ listing=tmp.s.lst
 # This -nostdlib flag is optional; it just makes a smaller output
 # file.  (It's unusual to have an assembly file that can compile both
 # with and without -nostdlib, but this is one.)
+#asflags = -nostdlib
+# If you're using gas, to generate an assembly listing:
 asflags = -nostdlib -Wa,-adhlns=$(listing)
 all: test tests urscheme-compiler
 urscheme-compiler: compiler.s
