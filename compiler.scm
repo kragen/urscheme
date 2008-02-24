@@ -646,23 +646,20 @@
 (assert-set-equal (set-intersect '(a b c) '(b c d)) '(b c))
 
 
+(define (reduce fn lst init)        
+  (if (null? lst) init (fn (car lst) (reduce fn (cdr lst) init))))
 ;; Returns vars captured by some lambda inside expr, i.e. vars that
 ;; occurs free inside a lambda inside expr.
 (define (captured-vars expr)
-    (if (not (pair? expr)) '()
-        (case (car expr)
-          ((lambda)     (free-vars-lambda (cadr expr) (cddr expr)))
-          ((%if %begin %ifeq %ifnull)
-                        (all-captured-vars (cdr expr)))
-          ((quote)      '())
-          ((set!)       (captured-vars (caddr expr))) ; redundant
-          (else         (all-captured-vars expr)))))
-
-;; Returns true if var is captured by a lambda inside any of exprs.
-(define (all-captured-vars exprs) 
-  (if (null? exprs) '()
-      (set-union (captured-vars (car exprs))
-                 (all-captured-vars (cdr exprs)))))
+  (reduce set-union (map free-vars (lambdas expr)) '()))
+(define (lambdas expr)
+  (cond ((not (pair? expr)) '())       ; empty lists and non-lists
+        ;; We don't want the deeper-nested lambdas, just the top-level
+        ;; ones.
+        ((eq? (car expr) 'lambda) (list expr))
+        (else (reduce append (map lambdas expr) '()))))
+(define (all-captured-vars expr)
+  (reduce set-union (map captured-vars expr) '()))
 
 ;; Returns a list of the vars that are bound by a particular lambda arg list.
 (define (vars-bound args) (if (symbol? args) (list args) args))
@@ -2077,8 +2074,10 @@
             ((eq? obj (car list)) list)
             (else                 (memq obj (cdr list)))))
     (define memv memq)                  ; standard
-    (define (append a b)                ; standard
-      (if (null? a) b (cons (car a) (append (cdr a) b))))
+    (define (reduce fn lst init)        
+      (if (null? lst) init (fn (car lst) (reduce fn (cdr lst) init))))
+    (define (append2 a b) (reduce cons a b))
+    (define (append . args) (reduce append2 args '())) ; standard
 
     ;; identical to standard caar, cdar, etc.
     (define (caar val) (car (car val)))
