@@ -1597,13 +1597,8 @@
 (define (compile-begin rands env tail?)
   (cond ((null? rands) (push-const nil-value))
         ((null? (cdr rands)) (compile-expr (car rands) env tail?))
-        ;; hey, we can avoid discarding the results from
-        ;; intermediate expressions if we're at the top level of a
-        ;; function...
-        (else
-         (begin (if tail? (compile-expr (car rands) env #f)
-                    (compile-discarding (car rands) env))
-                (compile-begin (cdr rands) env tail?)))))
+        (else (begin (compile-discarding (car rands) env)
+                     (compile-begin (cdr rands) env tail?)))))
 
 (define (compile-conditional jump-if-false then else-expr env tail?)
   (let ((falselabel (new-label)))
