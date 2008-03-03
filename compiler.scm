@@ -840,7 +840,9 @@
       (comment "now %eax points to newly allocated memory")))))
 
 
-;; XXX still need to implement deallocation and a GC
+;; XXX still need to implement deallocation and a GC (see README.gc)
+
+(add-to-header (lambda () (compile-global-variable "stack_bottom" "0")))
 
 
 ;;; Strings (on the target)
@@ -2239,6 +2241,7 @@
 ;;; Main Program
 
 (define (compile-program body)
+  (mov esp (indirect "stack_bottom"))
   (stuff-to-put-in-the-header)
 
   (global-label "_start")             ; allow compiling with -nostdlib
@@ -2254,6 +2257,7 @@
   (mov (const "1") eax)             ; __NR_exit
   (mov (const "0") ebx)             ; exit code
   (syscall)
+
   (emit-symbols)
   (assert-no-undefined-global-variables))
 
