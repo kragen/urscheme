@@ -283,7 +283,10 @@ that could grow into a Scheme.  I was inspired by <a
 href="http://urjtag.sourceforge.net/book/_urjtag.html#_the_name_urjtag"
 >UrJTAG</a>, but of course the echo of "<a
 href="http://sc2.sf.net/">Ur-Quan Masters" (one of my favorite
-games)</a> was a plus as well.</p>
+games)</a> was a plus as well.  Also, the ancient capital of Sumer was
+Ur of the Chaldees (אור כשדים in Hebrew), and it's an Unoriginal
+Reimplementation of Scheme.  (Thanks to Ben Goetter for that.)  Or at
+least some of it.</p>
 
 <h2>Origins and Lessons</h2>
 
@@ -397,7 +400,7 @@ easily use them to create unreadable code.</p>
 <li><b>Native-code compilers get OK performance pretty easily.</b> On
 the standard <a href="fib.scm">stupid Fibonacci microbenchmark</a>, on
 my laptop, Ur-Scheme outperforms MzScheme's interpreter by about a
-factor of 7.6:
+factor of 7.6 (excluding time to compile and assemble):
 
 <blockquote><pre>
 (<span class="keyword">define</span> (<span class="function-name">fib2</span> n) 
