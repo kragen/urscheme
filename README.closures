@@ -1,4 +1,8 @@
-So, closures.
+These were the notes I took before I implemented closures in
+Ur-Scheme.  They have not been updated to reflect how closures
+currently work in Ur-Scheme.
+
+
 
 The Lua 5.0 paper says:
 

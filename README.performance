@@ -1,0 +1,38 @@
+Ur-Scheme runs faster, at least when compiling itself, when compiled
+with Ur-Scheme than when compiled with MzScheme's mzc, Chicken, or
+Gambit-C.  This does not necessarily mean that Ur-Scheme is faster
+than these other implementations, even on the subset of the Scheme
+language that it supports.  As Richard Gabriel writes in Performance
+and Evaluation of Lisp Systems:
+
+
+     There is a range of methodologies for determining the speed of an
+     implementation. . .. Finally, real (naturally occurring) code can
+     be used for the benchmarks.
+
+     Unfortunately, each of these representative methodologies has
+     problems. . . . Finally, the real-code methodology, while
+     accurately measuring a particular implementation [Namely, the
+     implementation on which the program was developed] is not
+     necessarily accurate when comparing implementations. For example,
+     programmers, knowing the performance profile of their machine and
+     implementation, will typically bias their style of programming on
+     that piece of code. Hence, had an expert on another system
+     attempted to program the same algorithms, a different program
+     might have resulted.
+
+I think that is very likely the case here.  
+
+For example, many parts of Ur-Scheme avoid closure creation and usage
+(which are expensive in Ur-Scheme) because it is slow; and all of its
+arithmetic is on small integers, i.e. fixnums.  (I think Deutsch and
+Schiffman's paper on JIT compilation points out that it's probably a
+good idea in general to assume that arithmetic will be on fixnums
+until proven otherwise, but a Scheme that takes that approach will
+fare poorly on e.g. floating-point FFT benchmarks.  Since Ur-Scheme
+doesn't have bignums, flonums, or actually any other kind of number
+other than fixnums, the choice was easy.)
+
+As another example, Ur-Scheme is written in a mostly-purely-functional
+fashion, so it allocates memory pretty fast.  So it would probably
+perform badly on a Scheme system with a mark-and-sweep collector.

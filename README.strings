@@ -1,0 +1,24 @@
+When run on "urscheme-compiler", strings(1) generates a lot of false
+hits that start with "$XXu".  $ is 0x24, which I think is an operand
+byte (not sure whether it's ModR/M or SIB; my grasp of the x86
+instruction set is weak) meaning (%esp); X is "pop %eax", which of
+course occurs quite frequently.  Another ASCII character that occurs
+fairly frequently is "P" or 0x50, which is "push %eax".  Amusingly,
+this means that "XP", which occurs occasionally, is worthless and
+could be optimized out by a peephole optimizer.  (Steve Yegge would be
+delighted.)  "u" is 0x75, which means "jnz".
+
+So "$XXu" is "..., (%esp); pop %eax; pop %eax; jnz ...", which happens
+to be part of the code generated at the moment by %ifeq: "cmpl %eax,
+(%esp); pop %eax; pop %eax; jnz ...".
+
+Another printable character that appears frequently is "E", 0x45.  I
+don't know what it means, but it's an operand byte that usually shows
+up in the middle of things like "movl 0(%ebp), %eax".
+
+"S" is 0x53, which means "push %ebx"; it's often followed by "push
+%ebp", 0x55, "U", in procedure prologues.  "[SS" occurs in the
+variadic procedure prologue; "[" is 0x5b, "pop %ebx".
+
+Procedure epilogues don't have a lot of printable characters in them:
+8b55fc8b65f8b6df4ffe2.  In a hex dump, this looks like ".U..e..m...".

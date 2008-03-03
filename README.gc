@@ -1,0 +1,206 @@
+Ur-Scheme doesn't have a garbage collector yet.  In case you want to
+implement one, here are some notes on the thoughts I'd had so far
+about garbage collection.  Probably the actual garbage collector will
+be much smaller than this.
+
+Heap Overflow Checking
+----------------------
+
+One of the things needed for garbage collection is heap overflow
+checking on every malloc, with a conditional branch to the garbage
+collector.
+
+Right now, memory allocation is inlined.  Here's an example memory
+allocation of 12 bytes:
+
+ 412              	        # allocate bytes:12
+ 413 0272 50       	        push %eax
+ 414 0273 A1040000 	        movl (arena_pointer), %eax
+ 414      00
+ 415 0278 83050400 	        add $12, (arena_pointer)
+ 415      00000C
+ 416              	        # now %eax points to newly allocated memory
+
+And here's an allocation (the only one actually) of an arbitrary
+number of bytes, which is 8 plus a tagged integer in %eax:
+
+ 199              	        # we need 8 bytes more than the string length
+ 200 0116 D1F8     	        sar %eax
+ 201 0118 D1F8     	        sar %eax
+ 202 011a 83C008   	        add $8, %eax
+ 203 011d 83C003   	        add $3, %eax
+ 204 0120 83E0FC   	        and $~3, %eax
+ 205 0123 8B1D0400 	        movl (arena_pointer), %ebx
+ 205      0000
+ 206 0129 01050400 	        add %eax, (arena_pointer)
+ 206      0000
+ 207 012f 89D8     	        movl %ebx, %eax
+
+I was thinking that procedure-call overhead on modern CPUs might be
+high enough that doing these out-of-line would be slow.  But of course
+running the latter code in place of the former would also be painful.
+
+x86 doesn't have a conditional CALL instruction.  So you need a
+conditional jump around a call instruction, so the heap-overflow check
+looks something like this:
+
+        cmp %eax, (arena_end)
+        jbe dont_gc
+        call garbage_collector
+dont_gc:
+
+But you can't have multiple labels "dont_gc".  Either you can use a
+different label each time, which means you can't memoize the
+allocation sequence as it is now done, or you can use gas's "1f" local
+label syntax, which would be an obstacle to portability to non-gas
+assemblers.
+
+The alternative is that I could un-inline the memory allocation ---
+saying "mov $12, %ecx; call malloc" in place of the first sequence
+above --- and just use a single conditional jump in the allocator,
+since the return address is already on the stack.
+
+So, either:
+- un-inline memory allocation and use conditional jump;
+- use local labels;
+- allocate a new label for every allocation.
+
+Additionally, un-inlining would imply using a generic
+memory-allocation routine even in cases where the size is known,
+rather than one specialized for the known sizes.
+
+GC strategy
+-----------
+
+Because the compiler is written in an almost purely functional style,
+it tends to create a lot of very short-lived garbage very quickly, and
+only a tiny amount of data is long-lived.  So it would probably run
+fastest with a copying collector.  Abdulaziz Ghuloum reports that,
+when compiled with Ikarus, on his 2GHz Core Duo, it compiles itself in
+450ms, allocating 19 megabytes, and taking 4ms in the garbage
+collector (with a 4MB nursery).  And it should do well with a
+generational collector, because mutation is rare (except, erm, for the
+parser's input character buffer (!)) and almost all of the mutation is
+to store things permanently.
+
+I suspect a Cheney two-finger collector is probably the simplest
+collector that could work.
+
+If generational collection got implemented, there would be a
+nursery-size performance tradeoff.  With a nursery of 14MB or more, no
+collection would ever need to happen when the compiler compiles
+itself.  With a smaller nursery, a few short-lived objects would
+survive each nursery collection and clutter up the older generation;
+this effect is more serious as nurseries get smaller.  But if the
+nursery is smaller than a cache, then allocation out of the nursery
+will rarely cause cache misses on that cache.  My current CPU has a
+unified L2 cache of 256KiB and a L1 D-cache of 16KiB, so nursery sizes
+in the neighborhood of 128KiB or 8KiB would improve locality in these
+two caches.
+
+Constants
+---------
+
+Some Scheme values are constants, from the .rodata section, rather
+than heap-allocated values.  Constants cannot be mutated and therefore
+cannot point to anything created after the program starts, such as
+heap-allocated data, so scanning them is unnecessary.  Copying them is
+also unnecessary.  I think that distinguishing them from heap items
+will require pointer comparisons.
+
+Scanning the Stack
+------------------
+
+The stack contains both Scheme values and non-Scheme values, so
+treating it as a mere array of words is likely to be difficult.  It
+should be tractable if treated as mostly a linked list of stack frames
+whose head is in %ebp and whose tail is the value 0x610ba1, which %ebp
+is initialized to in "main" or "_start".
+
+The structure of each stack frame is:
+
+                                .
++--------------+                :
+| caller stuff | <------------\ |
++--------------+              | |
+| argument N   |              | |
++--------------+              | |
+| argument N-1 |              | |
+.   .          .              | |
+:   :          :              | |
+| argument 3   |              | |
++--------------+              | |
+| argument 2   |              | |
++--------------+              | |
+| argument 1   |              | |
++--------------+              | |
+| argument 0   | <---- %ebp   | |
++--------------+              | |
+| caller %eip  |              | |
++--------------+              | |
+| caller %esp  | -------------/ |
++--------------+                |
+| caller %ebp  | ---------------/
++--------------+
+| heap var 0   |
++--------------+
+| heap var 1   |
+.   .           .
+:   :           :
+| temp val 0   |
++--------------+
+| temp val 1   |
++--------------+
+| temp val 2   |
++--------------+
+| temp val 3   | <----- %esp
++--------------+
+
+Normally everything on the stack except for saved %eip, %esp, and %ebp
+values will be a run-time tagged value; it's just that you have to
+follow the %ebp chain to find out where those are.
+
+(An alternative approach might be pointer comparisons: saved %eips
+will point into the .text section, not the heap, and saved %esps and
+%ebps will point into the stack, not the heap.  As explained above,
+you need pointer comparisons to figure out which pointers point to
+constants anyway.)
+
+Run-time tagged values are either Scheme values or heap vars.  The
+heap vars can be treated by the GC as if they were Scheme values
+--- they're aligned pointers that point to heap-allocated cells with
+magic numbers, just as Scheme values are.  So even though they can't
+appear as the value of a variable in a Scheme program, they don't add
+any extra complexity to the GC.
+
+Some assembly-language primitives, such as "display" and
+"string->symbol", will push things that are not Scheme values on the
+stack.  I don't know if any of them currently try to allocate memory
+while in this state, but if so, they will have to be changed.
+
+Similarly, some assembly-language primitives will store Scheme values
+in other registers that are not part of the stack.  I don't know if
+there are any cases where the only reference to a Scheme value is in a
+register.  None of the primitives currently call set-procedure-arg, so
+values passed in as arguments are safe; it's only values that might
+have been created during the execution of the primitive that are
+potentially in danger.
+
+Writing a GC in Scheme
+----------------------
+
+If you can write the GC in Scheme, it will be a lot shorter and
+probably easier to debug.  You'll need at least pointer comparison,
+pointer increment, and pointer fetch primitive operations, and you'll
+need to write the GC so that it doesn't allocate any memory on the
+heap.
+
+Currently the things that allocate memory on the heap are:
+- primitives that obviously do so: make-string, cons, string->symbol
+- entering functions that create closures (including closures
+  implicitly created by let-expressions, including let-expressions
+  implicitly created by "or" and "case")
+- actually creating the closures (this is probably irrelevant since
+  you can't do it without entering the function first)
+- invoking variadic functions (including list, append, and error) with
+  any arguments.  (It's safe to invoke them with no arguments!)

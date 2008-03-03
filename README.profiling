@@ -1,0 +1,85 @@
+I don't yet have a profiler for Ur-Scheme.  These are my notes about
+how to write one.
+
+RDPMC and RDTSC
+---------------
+
+The x86 has RDPMC and RDTSC instructions, which could be useful for
+profiling.
+
+RDPMC reads the performance-monitoring counter specified by ECX into
+EDX:EAX.  "P6" processors like my CPU have both a "Valid PMC Index
+Range" and a "General-purpose Counters" of "0, 1".
+
+    "The performance-monitoring counters are event counters that can
+    be programmed to count events such as the number of instructions
+    decoded, number of interrupts received, or number of cache
+    loads. Appendix A, "Performance Monitoring Events," in the Intel®
+    64 and IA-32 Architectures Software Developer's Manual, Volume 3B,
+    lists the events that can be counted for various processors in the
+    Intel 64 and IA-32 architecture families."
+
+That manual (Intel document 253669) also contains a "performance
+monitoring overview" section.
+
+RDTSC reads the current value of the processor's time-stamp counter (a
+64-bit MSR) into EDX:EAX.  It counts the number of CPU cycles.  Linux
+doesn't seem to save and restore this (64-bit) counter on process
+switch.  (I don't even know if that's possible.)  
+
+Sources of Measurement Error with RDTSC
+---------------------------------------
+
+A simple printf loop in C with a call to a tiny assembly routine
+("rdtsc: rdtsc; ret") gets timings of 521-567 clock cycles >99% of the
+time, but then:
+
+>1000 cycles: 256 times out of 100 000
+>2000 cycles: 146 times out of 100 000
+>5000 cycles: 137 times out of 100 000
+>10000 ccles: 132 times out of 100 000
+>20000 ccles: 123 times out of 100 000
+>50000 cycles: 38 times out of 100 000
+>100k cycles:  24 times out of 100 000
+>200k cycles:  22 times out of 100 000
+>500k cycles:  11 times out of 100 000
+>1M   cycles:   1 time out of 100 000 (1 187 426 clock cyles)
+
+The total of 68 532 669 cycles was somewhere around 0.1 seconds.  So
+it seems that somewhere around 1000-2500 times a second, there's some
+kind of interruption that could cause a measurement error; that the
+measurement errors are mostly on the order of 1000 cycles or on the
+order of 20000-50000 cycles, but of course they can be arbitrarily
+large; that about 18% of this little program's run-time was in these
+interruptions, mostly in the top 12 (8.5 million cycles out of 68
+million).  So I'm not quite sure how to get useful profiling results
+out of this.
+
+I wrote an assembly program that just calls RDTSC in a tight loop, ten
+million times.  This takes 0.688 seconds of user CPU time, so it is
+taking 70ns to do each iteration of the loop.  With two RDTSC
+instructions in the loop, it took 1.460 seconds, and with three it
+took 2.184 seconds, so >95% the 70ns is attributable to RDTSC and not
+the loop.  So RDTSC on my machine is probably only useful for
+measuring things that take a long time compared to 70ns, say 700ns or
+a microsecond or more.  Unfortunately, on the same CPU, Ur-Scheme
+function call and return takes only about 250ns or so, so if I put a
+RDTSC on every function entry and exit, a large part of the time it
+would measure would be the run-time of RDTSC instructions in other
+routines.
+
+There are rumors that the CPUs of SMP machines, which includes
+essentially all new PCs, have desynchronized TSC counters.  That would
+make RDTSC less useful.  Douglas Schmidt's ACE's High_Res_Timer.h
+says:
+
+ * Another problem arises with multiprocessor computers, there
+ * are reports that the different RDTSC's are not always kept
+ * in sync.
+
+Etc
+---
+
+I haven't penetrated enough into the "Intel® 64 and IA-32
+Architectures Software Developer's Manual, Volume 3B" to be able to
+figure out if RDPMC is potentially useful on my machine.
