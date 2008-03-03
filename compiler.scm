@@ -968,7 +968,7 @@
     (get-procedure-arg 1)
     (check-array-bounds)
     (get-procedure-arg 1)
-    (scheme-to-native-character tos)
+    (scheme-to-native-integer tos)
     (comment "get base address of string data from stack")
     (asm-pop ebx)
     (movzbl (indirect (index-register tos ebx 1)) tos)
