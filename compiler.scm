@@ -1114,6 +1114,7 @@
     (comment "fetch string pointer")
     (lea (offset edx 8) esi)
     (mov nos edi)
+    (comment "compare strings at [esi:esi+ecx] and [edi:edi+ecx]")
     (repe-cmpsb)
     (jnz "wrong_symbol_thanks_for_playing")
     (comment "found the right symbol")
@@ -2043,9 +2044,11 @@
             ((eq? obj (car list)) list)
             (else                 (memq obj (cdr list)))))
     (define memv memq)                  ; standard
+    ;; XXX rename to fold-right (SRFI-1)
     (define (reduce fn lst init)        
       (if (null? lst) init (fn (car lst) (reduce fn (cdr lst) init))))
     (define (append2 a b) (reduce cons a b))
+    ;; XXX add (concatenate list-of-lists) SRFI-1
     (define (append . args) (reduce append2 args '())) ; standard
 
     ;; identical to standard caar, cdar, etc.
@@ -2134,6 +2137,7 @@
       (if (null? list) '() (cons (proc (car list)) (map proc (cdr list)))))
 
     (define (reverse lst) (reverse-plus '() lst))
+    ;; XXX rename and exchange arguments: append-reverse, SRFI-1
     (define (reverse-plus tail lst) 
       (if (null? lst) tail (reverse-plus (cons (car lst) tail) (cdr lst))))
 
