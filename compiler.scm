@@ -87,8 +87,9 @@
 ;;   somehow
 ;; - garbage collection
 ;; - maybe output buffering; compiled with itself, it takes 1.3 user
-;;   seconds to compile itself, but another 0.6 system seconds because
-;;   it makes almost 50 000 system calls, all but 91 of which are
+;;   seconds to compile itself to assembly, but 
+;;   another 0.6 system seconds because it makes 
+;;   almost 50 000 system calls, all but 91 of which are
 ;;   writes to stdout.  So it would compile itself 50% faster with
 ;;   output buffering.  But segfaults would be harder to diagnose.
 ;; - fixing (error ...) to print stuff out nicely.
