@@ -1,6 +1,10 @@
 ;;; First interpreter from Steele and Sussman's "Art of the Interpreter"
 ;; (AIM-453) translated into modern Scheme.
 
+;; Unfortunately it won't run in Ur-Scheme yet because Ur-Scheme
+;; doesn't export "read" to programs compiled with it (because I
+;; haven't yet figured out how to do the regression tests nicely).
+
 ;;; Figure 1, p.8 (ninth page)
 
 (define (driver)
