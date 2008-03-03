@@ -825,8 +825,7 @@
     (comment "code to allocate memory; untagged number of bytes in %eax")
     (align4 eax)
     (mov (indirect "arena_pointer") ebx)
-    (add ebx eax)
-    (mov eax (indirect "arena_pointer"))
+    (add eax (indirect "arena_pointer"))
     (mov ebx eax)
     (comment "now %eax points to newly allocated memory"))))
 
@@ -834,12 +833,10 @@
   (memo1-asm (lambda (n)
     (assert-equal (remainder n 4) 0)
     (let ((ns (number->string n)))
-      (comment "allocate bytes:" ns)
+      (comment "allocate bytes: " ns)
       (asm-push tos)
       (mov (indirect "arena_pointer") tos)
-      (mov tos ebx)
-      (add (const ns) ebx)
-      (mov ebx (indirect "arena_pointer"))
+      (add (const ns) (indirect "arena_pointer"))
       (comment "now %eax points to newly allocated memory")))))
 
 
