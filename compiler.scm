@@ -1,5 +1,6 @@
 ;;; Ur-Scheme: A GPL self-hosting compiler for a subset of R5RS to fast x86 asm
-;; Copyright (C) 2008  Kragen Javier Sitaker (2008-01-03 through 22)
+;; Copyright (C) 2008  Kragen Javier Sitaker (2008-01-03 through 24)
+;; (although I made a few more modifications in the following weeks)
 
 ;;     This program is free software: you can redistribute it and/or modify
 ;;     it under the terms of the GNU General Public License as published by
@@ -443,7 +444,7 @@
   (jmp "return_false"))
 
 
-;;; Procedure calls.
+;;; Procedure values and procedure calls.
 ;; Procedure values are at least 12 bytes:
 ;; - 4 bytes: procedure magic number 0xca11ab1e
 ;; - 4 bytes: pointer to procedure machine code
@@ -457,11 +458,10 @@
 ;; saves %ebp and pops their own arguments off the stack.  The
 ;; prologue points %ebp at the arguments.  Return value goes in %eax.
 (define procedure-magic "0xca11ab1e")
-(add-to-header (lambda ()
-      (label "ensure_procedure")
-      (if-not-right-magic-jump procedure-magic "not_procedure")
-      (ret)))
-(define (ensure-procedure) (call "ensure_procedure"))
+
+;; Emit code for a procedure application, after the code to push the
+;; arguments has already been emitted.  Note that this contains a
+;; forward reference to ensure-procedure.
 (define compile-apply 
   (memo1-asm (lambda (nargs)
     (ensure-procedure)
@@ -557,7 +557,6 @@
   (mov (offset ebp -8) esp)
   (mov (offset ebp -12) ebp))
 
-(define-error-routine "not_procedure" "not a procedure")
 (define-error-routine "argument_count_wrong" "wrong number of arguments")
 
 ;; Compiles a procedure into the text segment at a given label.
@@ -590,22 +589,64 @@
         (define-global-variable symbolname procedure-value-label)
         (compile-procedure-labeled procedure-value-label nargs body)))))
 
+
+;; Emit code to jump to e.g. an error handler if the magic doesn't
+;; match.  Used for procedure?, ensure_procedure, and similar things
+;; for other data types.
+(define (if-not-right-magic-jump magic destlabel)
+  (comment "test whether %eax has magic: " magic)
+  (comment "first, ensure that it's a pointer, not something unboxed")
+  (test (const "3") tos)              ; test low two bits
+  (jnz destlabel)
+  (comment "now, test its magic number")
+  (cmp (const magic) (indirect tos))
+  (jnz destlabel))
+
+;; Generic "ensure-whatever" routine based on magic numbers.
+;; The emitted assembly routine exits with an error if the magic
+;; number is wrong.
+(define (call-ensure-magic-routine magic routine-label errmsg)
+  (let ((errlabel (new-label)))
+    (define-error-routine errlabel errmsg)
+    (add-to-header (lambda ()
+        (label routine-label)
+        (if-not-right-magic-jump magic errlabel)
+        (ret))))
+  (lambda () (call routine-label)))
+
+(add-to-header 
+ (lambda ()
+   (label "return_true")
+   (mov (const true-value) tos)
+   (compile-procedure-epilogue)
+   (label "return_false")
+   (mov (const false-value) tos)
+   (compile-procedure-epilogue)))
+
+(define (define-magic-check-primitive name magic)
+  (define-global-procedure name 1
+    (lambda ()
+      (get-procedure-arg 0)
+      (if-not-right-magic-jump magic "return_false")
+      (jmp "return_true"))))
+
+(define-magic-check-primitive 'procedure? procedure-magic)
+
+(define ensure-procedure
+  (call-ensure-magic-routine procedure-magic 
+                             "ensure_procedure"
+                             "not a procedure"))
+
+
 ;; Emit code to fetch the Nth argument of the innermost procedure.
 (define get-procedure-arg 
   (memo1-asm (lambda (n) 
     (asm-push tos)
     (mov (offset ebp (quadruple n)) tos))))
 
-;; Emit code to mutate it.
+;; Emit code to mutate that same Nth argument.
 (define (set-procedure-arg n)
   (mov tos (offset ebp (quadruple n))))
-
-(define-global-procedure 'procedure? 1
-  (lambda () 
-    (get-procedure-arg 0)
-    (if-not-right-magic-jump procedure-magic "return_false")
-    (jmp "return_true")))
-
 
 ;;; Closures and closure handling.
 ;; If a particular variable is captured by some nested
@@ -852,6 +893,11 @@
 ;; - N bytes of string data.
 (define string-magic "0xbabb1e")
 
+(define-magic-check-primitive 'string? string-magic)
+;; ensure-string: emit code to ensure that %eax is a string
+(define ensure-string
+  (call-ensure-magic-routine string-magic "ensure_string" "not a string"))
+
 (define (constant-string-2 contents labelname)
   (rodatum labelname)
   (compile-word string-magic)
@@ -861,29 +907,6 @@
   labelname)
 ;; constant-string: Emit code to represent a constant string.
 (define (constant-string contents) (constant-string-2 contents (new-label)))
-
-(define (if-not-right-magic-jump magic destlabel)
-  (comment "test whether %eax has magic: " magic)
-  (comment "first, ensure that it's a pointer, not something unboxed")
-  (test (const "3") tos)              ; test low two bits
-  (jnz destlabel)
-  (comment "now, test its magic number")
-  (cmp (const magic) (indirect tos))
-  (jnz destlabel))
-
-(define-error-routine "notstring" "not a string")
-(add-to-header (lambda ()
-    (label "ensure_string")
-    (if-not-right-magic-jump string-magic "notstring")
-    (ret)))
-;; Emit code to ensure that %eax is a string
-(define (ensure-string) (call "ensure_string"))
-
-(define-global-procedure 'string? 1
-  (lambda ()
-    (get-procedure-arg 0)
-    (if-not-right-magic-jump string-magic "return_false")
-    (jmp "return_true")))
 
 ;; Emit code to pull the string pointer and count out of a string
 ;; being pointed to and push them on the abstract stack
@@ -989,13 +1012,11 @@
 
 ;;; conses
 ;; They're 12 bytes: magic number, car, cdr.  That's all, folks.
-
 (define cons-magic "0x2ce11ed")
-(define (ensure-cons) (call "ensure_cons"))
-(add-to-header (lambda () (label "ensure_cons")
-                          (if-not-right-magic-jump cons-magic "not_cons")
-                          (ret)))
-(define-error-routine "not_cons" "not a cons")
+
+(define-magic-check-primitive 'pair? cons-magic)
+(define ensure-cons
+  (call-ensure-magic-routine cons-magic "ensure_cons" "not a cons"))
 
 (define (inline-car nargs)
   (assert-equal 1 nargs)
@@ -1030,34 +1051,14 @@
   (compile-word cdr-contents)
   (text))
 
-(define-global-procedure 'pair? 1
-  (lambda ()
-    (get-procedure-arg 0)
-    (if-not-right-magic-jump cons-magic "return_false")
-    (jmp "return_true")))
-(add-to-header 
- (lambda ()
-   (label "return_true")
-   (mov (const true-value) tos)
-   (compile-procedure-epilogue)
-   (label "return_false")
-   (mov (const false-value) tos)
-   (compile-procedure-epilogue)))
 
 ;;; Symbols.
 ;; In-memory structures with magic number "0x1abe1" (for now.)
 (define symbol-magic "0x1abe1")
-;; XXX refactor these if-not-right-magic-jump predicates
-(define-global-procedure 'symbol? 1
-  (lambda ()
-    (get-procedure-arg 0)
-    (if-not-right-magic-jump symbol-magic "return_false")
-    (jmp "return_true")))
-(add-to-header (lambda () (label "ensure_symbol")
-                          (if-not-right-magic-jump symbol-magic "not_symbol")
-                          (ret)))
-(define-error-routine "not_symbol" "not a symbol")
-(define (ensure-symbol) (call "ensure_symbol"))
+
+(define-magic-check-primitive 'symbol? symbol-magic)
+(define ensure-symbol
+  (call-ensure-magic-routine symbol-magic "ensure_symbol" "not a symbol"))
 
 (define interned-symbol-list '())
 (define (intern symbol)
@@ -1487,16 +1488,13 @@
            (dup)
            (mov (offset ebp (- -16 (quadruple slotnum))) tos))))
 
-(define-error-routine "not_heap_var" "heap-var indirection to non-heap-var")
-(add-to-header (lambda ()
-    (label "ensure_heap_var")
-    (if-not-right-magic-jump heap-var-magic "not_heap_var")
-    (ret)))
 ;; It should be impossible for a user program to cause this check to
 ;; fail, but it did help me track down a few compiler bugs early on.
-(define (ensure-heap-var) 
-  ; (call "ensure_heap_var")
-  #f)
+(define (ensure-heap-var) #f)
+; (define ensure-heap-var
+;   (call-ensure-magic-routine heap-var-magic
+;                              "ensure_heap_var" 
+;                              "heap-var indirection to non-heap-var"))
 
 (define (fetch-heap-var slotnum)
   (fetch-heap-var-pointer slotnum)
