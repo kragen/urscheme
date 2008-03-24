@@ -790,18 +790,18 @@
 (define sample-closure-expression    
   '(lambda (a b)
      (lambda (c d)
-       (lambda (e f) (+ e f c a)))))
+       (lambda (e f) (foo e f c a)))))
 
-(assert-set-equal (free-vars sample-closure-expression) '(+))
-(assert-set-equal (captured-vars sample-closure-expression) '(+))
+(assert-set-equal (free-vars sample-closure-expression) '(foo))
+(assert-set-equal (captured-vars sample-closure-expression) '(foo))
 
 (define sample-inner-lambda-1 (caddr sample-closure-expression))
-(assert-set-equal (free-vars sample-inner-lambda-1) '(a +))
-(assert-set-equal (captured-vars sample-inner-lambda-1) '(a +))
+(assert-set-equal (free-vars sample-inner-lambda-1) '(a foo))
+(assert-set-equal (captured-vars sample-inner-lambda-1) '(a foo))
 
 (define sample-inner-lambda-2 (caddr sample-inner-lambda-1))
-(assert-set-equal (free-vars sample-inner-lambda-2) '(a c +))
-(assert-set-equal (captured-vars sample-inner-lambda-2) '(a c +))
+(assert-set-equal (free-vars sample-inner-lambda-2) '(a c foo))
+(assert-set-equal (captured-vars sample-inner-lambda-2) '(a c foo))
 (assert-set-equal (artifacts '(e f) (caddr sample-inner-lambda-2)
                              '((c whatever) (d whatever)
                                (a whatever) (b whatever)))
