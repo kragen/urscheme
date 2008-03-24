@@ -846,6 +846,7 @@
 (assert-set-equal '(a b) (free-vars '(set! a b)))
 (assert-set-equal '() (captured-vars '(set! a b)))
 
+
 ;;; Memory management.
 
 (add-to-header
@@ -882,6 +883,7 @@
 
 
 ;; XXX still need to implement deallocation and a GC (see README.gc)
+
 
 (add-to-header (lambda () (compile-global-variable "stack_bottom" "0")))
 
@@ -1627,8 +1629,6 @@
                          else-expr
                          env
                          tail?)))
-                         
-
 
 (define (inline-primitive rator rands env)
   (let ((nargs (compile-args rands env)))
