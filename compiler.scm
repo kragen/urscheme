@@ -282,7 +282,7 @@
 (define jmp (onearg "jmp"))       (define jnz (onearg "jnz"))
 (define je (onearg "je"))         (define jz je)
 (define jnb (onearg "jnb"))       (define jl (onearg "jl"))
-(define js (onearg "js"))  
+(define js (onearg "js"))         (define ja (onearg "ja"))
 (define call (onearg "call"))     (define int (onearg "int"))
 (define inc (onearg "inc"))       (define dec (onearg "dec"))
 (define idiv (onearg "idiv"))
@@ -854,6 +854,7 @@
    (insn ".bss")
    (label "the_arena")
    (insn ".space 128*1048576")          ; no GC yet!
+   (label "end_arena")
    (compile-global-variable "arena_pointer" "the_arena")))
 
 ;; Emit code to bump a pointer in a register up, if necessary, to be
@@ -879,6 +880,8 @@
       (asm-push tos)
       (mov (indirect "arena_pointer") tos)
       (add (const ns) (indirect "arena_pointer"))
+      (cmp (const "end_arena") (indirect "arena_pointer"))
+      (ja "arena_full")
       (comment "now %eax points to newly allocated memory")))))
 
 
@@ -962,6 +965,7 @@
   (pop) (pop))
 
 (define-error-routine "index_out_of_bounds" "array index out of bounds")
+(define-error-routine "arena_full" "the arena is full")
 
 (define-global-procedure 'string-set! 3
   (lambda () 
