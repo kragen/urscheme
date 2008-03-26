@@ -869,6 +869,8 @@
     (align4 eax)
     (mov (indirect "arena_pointer") ebx)
     (add eax (indirect "arena_pointer"))
+    (cmp (const "end_arena") (indirect "arena_pointer"))
+    (ja "arena_full")
     (mov ebx eax)
     (comment "now %eax points to newly allocated memory"))))
 
