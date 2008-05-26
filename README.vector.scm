@@ -40,53 +40,16 @@
   (mov (offset tos 4) tos))
 (define (extract-vector) (ensure-vector) (extract-array))
 
+;; extract-vector total: -5 lines +5 lines
+
 (define ensure-vector 
   (call-ensure-magic-routine vector-magic "ensure_vector" "not a vector"))
-(define (call-ensure-magic-routine magic routine-label errmsg)
-  (let ((errlabel (new-label)))
-    (define-error-routine errlabel errmsg)
-    (add-to-header (lambda ()
-        (label routine-label)
-        (if-not-right-magic-jump magic errlabel)
-        (ret))))
-  (lambda () (call routine-label)))
-;; and then we can eliminate this:
-; (define-error-routine "notstring" "not a string")
-; (add-to-header (lambda ()
-;     (label "ensure_string")
-;     (if-not-right-magic-jump string-magic "notstring")
-;     (ret)))
-; ;; Emit code to ensure that %eax is a string
-; (define (ensure-string) (call "ensure_string"))
-;; in favor of this:
-(define ensure-string 
-  (call-ensure-magic-routine string-magic "ensure_string" "not a string"))
 
-;; ensure-vector total: +12 lines, -6 lines
-;; But also we can save 4 lines each on ensure-procedure, ensure-cons,
-;; ensure-symbol, and ensure-heap-var, so -16 lines more.
+;; ensure-vector total: +2 lines
 
-;; Also we would like this
 (define-magic-check-primitive 'vector? vector-magic)
-;; implemented as follows
-(define (define-magic-check-primitive name magic)
-  (define-global-procedure name 1
-    (lambda ()
-      (get-procedure-arg 0)
-      (if-not-right-magic-jump magic "return_false")
-      (jmp "return_true"))))
-;; which allows us to replace this:
-; (define-global-procedure 'string? 1
-;   (lambda ()
-;     (get-procedure-arg 0)
-;     (if-not-right-magic-jump string-magic "return_false")
-;     (jmp "return_true")))
-;; with this:
-(define-magic-check-primitive 'string? string-magic)
 
-;; vector? total: +8 -5
-;; But this also simplifies procedure?, pair?, and symbol? by 4 lines
-;; each :)
+;; vector? total: +1
 
 ;; So then we just need vector-ref and vector-set! primitives, and
 ;; support in wthunk.
@@ -194,13 +157,13 @@
 ;; Complexity costs:
 ;; vector-set: -5, +16
 ;; vector-ref: +22, -13 lines
-;; vector?: +8 -5 -12
-;; ensure-vector: +12 -6 -16
+;; vector?: +1
+;; ensure-vector: +2
 ;; extract-vector: +5 -5
 ;; make-vector: +16
 ;; vector-length: +4
 ;; wthunk support..+5
-;; total: +88 -62 lines, or net +26 lines.
+;; total: +66 -23 lines, or net +43 lines.
 
 ;;; Crazy idea
 ;; How much would the compiler really suffer from storing strings as

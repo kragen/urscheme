@@ -35,4 +35,74 @@ other than fixnums, the choice was easy.)
 
 As another example, Ur-Scheme is written in a mostly-purely-functional
 fashion, so it allocates memory pretty fast.  So it would probably
-perform badly on a Scheme system with a mark-and-sweep collector.
+perform badly on a Scheme system with a traditional mark-and-sweep
+collector.
+
+It probably ought to run a lot faster than it does, by one or more
+orders of magnitude.
+
+Specific Performance Thingies
+-----------------------------
+
+Two current bottlenecks are:
+1. line-at-a-time output, and
+2. string blitting on output.
+
+Output is not buffered, with the consequence that when the compiler
+compiles its output file (1.8 megabytes, 66000 instructions) it does
+so with around 40 000 system calls, almost all of which are
+single-line write(2) calls.  The unbuffered nature of output
+simplifies the code and is convenient for debugging (you know what the
+program had tried to output before it crashed) but sucks for
+performance.  I know it's a performance bottleneck because time(1)
+consistently reports that about a third of the program's run time is
+"system time", i.e. spent in the kernel.  If I merely make a copy of
+the file with time dd ibs=1024k obs=36 < compiler.s > foo.tmp, dd
+takes a comparable amount of "system time" to do the same thing.
+
+If I comment out the call to "display", the system time drops
+essentially to zero, the user time does not change, and the program
+produces no output.
+
+In order to avoid making things even worse, output is coalesced into
+lines before being handed to the write(2) system call.  A procedure
+called "asm-flatten" takes care of this; its inner loop is the
+string-blit! procedure, which copies bytes ("characters") from one
+string to another.  Commenting out the call to string-blit! reduces
+the user time from 1.072 1.104 1.088 1.080 CPU seconds (in four
+trials) to 0.780 0.664 0.708 0.760 CPU seconds.  That's from a median
+of 1.084 to a median of 0.734 user CPU seconds, or about a one-third
+run-time reduction.
+
+Those two bottlenecks apparently account for half of the program's run
+time.
+
+The other things I suspect to be bottlenecks are:
+3. parsing, because it involves several function calls per input
+   character, and
+4. closure analysis, because it repeatedly reanalyzes the same
+   expressions.
+
+I tried removing the parsing by pasting the entire compiler into the
+standard library prologue, and then removing the part of the compiler
+that reads and parses input.  This makes a compiler that compiles
+exactly the same program, except that the comment "# (end of standard
+library prologue)" is in a different place, and it doesn't parse
+input; it relies on the compiler that compiled it to have parsed its
+input.  This takes 0.896 0.936 0.928 0.876 seconds, with a median of
+0.912, down from 1.084 --- a 15% improvement only.  (Although it would
+presumably be a 30% improvement if the first two bottlenecks were
+removed.)
+
+So removing the above three bottlenecks should speed the compiler up
+by about a factor of three, while making it somewhat longer.
+
+I don't have an equally useful way to remove closure analysis to see
+if it's a real problem.
+
+The other thing is
+5. procedure call and return is slow and verbose.
+
+A little bit of whole-program optimization should fix that.  See
+index.html.
+

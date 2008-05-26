@@ -226,7 +226,7 @@ allocate_heap_variable:
         pop 4(%eax)
         ret
 
-Then at procedure exit time, all the heap-varible pointers must be
+Then at procedure exit time, all the heap-variable pointers must be
 popped off, but that's going to be handled by restoring %esp, so it
 doesn't take any extra instructions.
 
