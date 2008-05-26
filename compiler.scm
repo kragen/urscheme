@@ -189,7 +189,7 @@
 ;; starting at "destidx"
 ;; XXX needs a !
 (define (string-blit! src srcidx len dest destidx) ; duplicated in stdlib
-  (if (= len 0) #f 
+  (if (not (= len 0))
       (begin (string-set! dest destidx (string-ref src srcidx))
              (string-blit! src (1+ srcidx) (1- len) dest (1+ destidx)))))
 
@@ -1785,6 +1785,7 @@
   (lambda (args) (list '%ifeq (car args) #f (caddr args) (cadr args))))
 
 ;; Expand all macros in expr, recursively.
+;; XXX rename to macroexpand-all
 (define (totally-macroexpand expr)
   (cond ((relevant-macro-definition expr) 
          (totally-macroexpand (macroexpand-1 expr)))
@@ -2084,7 +2085,7 @@
     ;; copies "len" chars from "src" starting at "srcidx" to "dest"
     ;; starting at "destidx"
     (define (string-blit! src srcidx len dest destidx)
-      (if (= len 0) #f 
+      (if (not (= len 0))
           (begin (string-set! dest destidx (string-ref src srcidx))
                  (string-blit! src (1+ srcidx) (1- len) dest (1+ destidx)))))
 
