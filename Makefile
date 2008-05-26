@@ -31,7 +31,7 @@ listing=tmp.s.lst
 # with and without -nostdlib, but this is one.)
 #asflags = -nostdlib
 # If you're using gas, to generate an assembly listing:
-asflags = -nostdlib -Wa,-adhlns=$(listing)
+asflags = -nostdlib -m32 -Wa,-adhlns=$(listing)
 all: test tests urscheme-compiler
 urscheme-compiler: compiler.s
 	time $(CC) $(asflags) $< -o $@

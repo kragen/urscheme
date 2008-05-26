@@ -5,6 +5,6 @@ trap 'rm -f runscheme.s runscheme.out' EXIT
 : ${urscheme:=./urscheme-compiler}
 # can also use e.g. mzscheme -r compiler.scm; see Makefile for other options
 $urscheme < "${1?usage: $0 foo.scm}" > runscheme.s
-gcc -nostdlib runscheme.s -o runscheme.out
+gcc -m32 -nostdlib runscheme.s -o runscheme.out
 trap '' EXIT                    # no need to do cleanup any more
 ./runscheme.out

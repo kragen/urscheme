@@ -15,7 +15,7 @@ runtest () {
         echo "running $prog"
         $refscheme "$prog" > refscheme.out
         $urscheme < "$prog" > runtest.s
-        gcc -nostdlib runtest.s -o runtest
+        gcc -m32 -nostdlib runtest.s -o runtest
         ./runtest > newcompiler.out
         diff -au refscheme.out newcompiler.out
 }
