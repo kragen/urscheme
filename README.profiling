@@ -1,5 +1,49 @@
-I don't yet have a profiler for Ur-Scheme.  These are my notes about
-how to write one.
+I don’t yet have a separate profiler for Ur-Scheme; however,
+Cachegrind now sort of works.
+
+Cachegrind
+==========
+
+If you aren’t familiar with Cachegrind
+--------------------------------------
+
+Run your program under cachegrind; if your normal command-line is
+`myprogram < baz > quux`, then you can run `valgrind --tool=cachegrind
+myprogram < baz > quux`.  This produces some general reporting
+information on stderr and more detailed information in a file called
+cachegrind.out.*pid*, which you can inspect with e.g. `kcachegrind` by
+running `kcachegrind cachegrind.out.*pid*`.
+
+Ur-Scheme and Cachegrind
+------------------------
+
+Ur-Scheme adds a minimal amount of symbol information to its output
+files so that Cachegrind can produce slightly useful per-function
+output.  The labels in the assembly output file will usually, but not
+always, have some vague connection to the function names in the Scheme
+source, adjusted to be valid assembly-language symbol names.
+
+Typically they will end in `_3` when they are what you’d expect;
+function names ending in some other number might be anonymous
+functions or functions whose desired symbol names conflicted with
+something already defined.  For example, if you redefine something in
+the standard library, or if you define something twice, or if you
+define functions named both “foo?” and “fooP”, then you will get a
+function that’s just named after whatever came immediately before it.
+
+I haven’t tried adding line-number information yet for three reasons:
+
+* I don’t know anything about debugging information 
+* Ur-Scheme doesn’t track line-number information from the source file
+* R5RS Scheme programs don’t have a way to take command-line
+  arguments, so Ur-Scheme takes input on stdin, so it doesn’t know the
+  name of the input file.
+
+A lot of the run time (25% when profiling compiling the compiler with
+itself) is still in "(unknown)", so I still have some work to do.
+
+Notes about how to write a profiler
+===================================
 
 RDPMC and RDTSC
 ---------------

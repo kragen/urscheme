@@ -106,3 +106,35 @@ The other thing is
 A little bit of whole-program optimization should fix that.  See
 index.html.
 
+cachegrind output
+-----------------
+
+`cachegrind` says that the compiler takes 666 068 500 instructions to
+compile itself.  That’s almost 300 000 instructions per input line and
+10 000 instructions per output line.  This, rather than any cache
+effect, is responsible for the poor performance.
+
+About 25% of its cycle estimation is in “(unknown)”, but a lot of the
+rest seems to be inefficient output. 13% is in `_assert_10`, which is
+actually `string-blit!`, 9% is in `_string_setBang_3`, which is
+`string-set!`; 7% is in `_string_ref_3`, which is `string-ref`,
+presumably mostly inside `string-blit!`; then another 6% in
+`_asm_flatten_inner_3` and 5% in `_asm_flatten_size_3`.  So about 40%
+of the runtime is in that little part of the output.
+
+The other function that’s high up there is `string->symbol`, with 8%
+of the runtime; presumably it is slow because it is walking this huge
+list of symbols every time we see an input symbol, which happens about
+6700 times in the compilation of the compiler.  Actually 82% of L1
+data read misses and 29% of L2 data read misses are from
+`string->symbol`.  `memq` and `assq` are also high on the list, at
+about 3% each, for similar reasons.
+
+So the #1 problem (according to `cachegrind`, which doesn’t measure
+system calls) is the point I listed as “2.” above: string blitting on
+output.  The #2 problem is one I didn't even list above --- linear
+lists for the two lists of interned symbols (the built-in one for
+`string->symbol` and the apparently two in the compiler for assigning
+labels to global variables) and old label prefixes.  Of course
+cachegrind won't be able to see problem “5.” above, since it's spread
+across all functions.

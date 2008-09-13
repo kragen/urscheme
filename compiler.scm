@@ -562,11 +562,13 @@
 ;; Compiles a procedure into the text segment at a given label.
 (define (compile-procedure bodylabel nargs body)
   (text)
+  (insn ".type " bodylabel ", @function") ; necessary for cachegrind
   (label bodylabel)
   (compile-procedure-prologue nargs)
   (body)
-  (compile-procedure-epilogue))      ; maybe we should just centralize
+  (compile-procedure-epilogue)       ; maybe we should just centralize
                                      ; that and jump to it? :)
+  (insn ".size " bodylabel ", .-" bodylabel)) ; necessary for cachegrind
 
 ;; Define a built-in procedure so we can refer to it by label and
 ;; push-const that label and expect to get a procedure value.
