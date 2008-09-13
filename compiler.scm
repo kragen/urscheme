@@ -537,6 +537,7 @@
     (if (null? nargs) (compile-variadic-prologue)
         (begin
           (comment "compute desired %esp on return in %ebx and push it")
+          (comment "the extra offset of 4 skips over the return address")
           (lea (offset (index-register esp edx 4) 4) ebx)
           (asm-push ebx)
 
