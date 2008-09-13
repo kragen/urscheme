@@ -12,7 +12,7 @@ Run your program under cachegrind; if your normal command-line is
 myprogram < baz > quux`.  This produces some general reporting
 information on stderr and more detailed information in a file called
 cachegrind.out.*pid*, which you can inspect with e.g. `kcachegrind` by
-running `kcachegrind cachegrind.out.*pid*`.
+running `kcachegrind cachegrind.out.`*pid*.
 
 Ur-Scheme and Cachegrind
 ------------------------
@@ -28,7 +28,7 @@ function names ending in some other number might be anonymous
 functions or functions whose desired symbol names conflicted with
 something already defined.  For example, if you redefine something in
 the standard library, or if you define something twice, or if you
-define functions named both “foo?” and “fooP”, then you will get a
+define functions named both `foo?` and `fooP`, then you will get a
 function that’s just named after whatever came immediately before it.
 
 I haven’t tried adding line-number information yet for three reasons:
@@ -40,7 +40,7 @@ I haven’t tried adding line-number information yet for three reasons:
   name of the input file.
 
 A lot of the run time (25% when profiling compiling the compiler with
-itself) is still in "(unknown)", so I still have some work to do.
+itself) is still in “(unknown)”, so I still have some work to do.
 
 Notes about how to write a profiler
 ===================================
@@ -55,13 +55,13 @@ RDPMC reads the performance-monitoring counter specified by ECX into
 EDX:EAX.  “P6” processors like my CPU have both a “Valid PMC Index
 Range” and a “General-purpose Counters” of “0, 1”.
 
-    “The performance-monitoring counters are event counters that can
-    be programmed to count events such as the number of instructions
-    decoded, number of interrupts received, or number of cache
-    loads. Appendix A, “Performance Monitoring Events,” in the Intel®
-    64 and IA-32 Architectures Software Developer’s Manual, Volume 3B,
-    lists the events that can be counted for various processors in the
-    Intel 64 and IA-32 architecture families.”
+> “The performance-monitoring counters are event counters that can
+> be programmed to count events such as the number of instructions
+> decoded, number of interrupts received, or number of cache
+> loads. Appendix A, “Performance Monitoring Events,” in the Intel®
+> 64 and IA-32 Architectures Software Developer’s Manual, Volume 3B,
+> lists the events that can be counted for various processors in the
+> Intel 64 and IA-32 architecture families.”
 
 That manual (Intel document 253669) also contains a “performance
 monitoring overview” section.
@@ -78,16 +78,16 @@ A simple printf loop in C with a call to a tiny assembly routine
 (“rdtsc: rdtsc; ret”) gets timings of 521-567 clock cycles >99% of the
 time, but then:
 
->1000 cycles: 256 times out of 100 000
->2000 cycles: 146 times out of 100 000
->5000 cycles: 137 times out of 100 000
->10000 ccles: 132 times out of 100 000
->20000 ccles: 123 times out of 100 000
->50000 cycles: 38 times out of 100 000
->100k cycles:  24 times out of 100 000
->200k cycles:  22 times out of 100 000
->500k cycles:  11 times out of 100 000
->1M   cycles:   1 time out of 100 000 (1 187 426 clock cyles)
+    >1000 cycles: 256 times out of 100 000
+    >2000 cycles: 146 times out of 100 000
+    >5000 cycles: 137 times out of 100 000
+    >10000 ccles: 132 times out of 100 000
+    >20000 ccles: 123 times out of 100 000
+    >50000 cycles: 38 times out of 100 000
+    >100k cycles:  24 times out of 100 000
+    >200k cycles:  22 times out of 100 000
+    >500k cycles:  11 times out of 100 000
+    >1M   cycles:   1 time out of 100 000 (1 187 426 clock cyles)
 
 The total of 68 532 669 cycles was somewhere around 0.1 seconds.  So
 it seems that somewhere around 1000-2500 times a second, there’s some
@@ -114,12 +114,12 @@ routines.
 
 There are rumors that the CPUs of SMP machines, which includes
 essentially all new PCs, have desynchronized TSC counters.  That would
-make RDTSC less useful.  Douglas Schmidt’s ACE’s High_Res_Timer.h
+make RDTSC less useful.  Douglas Schmidt’s ACE’s `High_Res_Timer.h`
 says:
 
- * Another problem arises with multiprocessor computers, there
- * are reports that the different RDTSC’s are not always kept
- * in sync.
+     * Another problem arises with multiprocessor computers, there
+     * are reports that the different RDTSC’s are not always kept
+     * in sync.
 
 Etc
 ---
