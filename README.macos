@@ -27,3 +27,12 @@ change.
 Needless to say, porting to MacOS on any other CPU architecture, such
 as PowerPC, is likely to be rather more of a hassle, since it would
 involve rewriting all of the assembly code.
+
+01:07 <@matthew> xentrac: I got urscheme to compile on OS X, though I haven't gotten it to run successfully yet.  
+01:08 <@matthew> Seems the big changes were:  ".section .bss"/".bss" is ".data", and ".section .rodata" is ".const_data".  
+                 And .weak doesn't seem to exist and the start symbol is "start", not "_start".  
+01:08 <@matthew> Those changes made it compile  
+01:09 <@matthew> though it doesn't run correctly  
+02:29 <@xentrac> matthew: awesome  
+02:29 <@xentrac> the .bss change is going to suck  
+02:30 <@xentrac> because it means you'll get a 10 meg executable instead of a 150k one  
