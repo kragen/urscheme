@@ -1,7 +1,9 @@
 #!/bin/sh
 set -e
-# I like MzScheme for its diagnostics:
-: ${refscheme:="mzscheme -r"}
+# I like MzScheme for its diagnostics, but I’ve stopped depending on
+# it because it keeps changing:
+# : ${refscheme:="mzscheme -r"}
+: ${refscheme="guile -s"}
 # But ELK is the fastest of bigloo, guile, mzscheme, SCM, and ELK for
 # this purpose:
 # : ${refscheme:="elk -l"}

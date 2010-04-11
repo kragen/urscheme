@@ -1,6 +1,8 @@
 # Use any of these:
-#scheme = guile -s
-scheme = mzscheme -M errortrace -r
+scheme = guile -s
+#scheme = mzscheme -M errortrace -r
+# what was -M errortrace for? anyway, mzscheme doesn’t work any more...
+#scheme = mzscheme -r
 # SCM gives nice stack traces:
 #scheme = scm -f
 # Bigloo produces lots of warnings but used to work, but it demands
